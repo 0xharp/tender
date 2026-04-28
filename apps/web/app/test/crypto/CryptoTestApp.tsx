@@ -1,6 +1,7 @@
 'use client';
 
 import { useSelectedWalletAccount, useSignMessage } from '@solana/react';
+import type { UiWalletAccount } from '@wallet-standard/react';
 import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -20,7 +21,7 @@ function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-function hexLine(label: string, bytes: Uint8Array, max = 64) {
+function HexLine({ label, bytes, max = 64 }: { label: string; bytes: Uint8Array; max?: number }) {
   const hex = bytesToHex(bytes);
   const display = hex.length > max ? `${hex.slice(0, max)}…` : hex;
   return (
@@ -45,10 +46,54 @@ const SAMPLE_PLAINTEXT = JSON.stringify(
 
 export function CryptoTestApp() {
   const [account] = useSelectedWalletAccount();
-  // useSignMessage requires a real account; it's only called after the user clicks
-  // "Sign + derive" which gates on `account` being set. The fake-account path is
-  // never invoked at runtime.
-  const signMessage = useSignMessage(account ?? ({} as never));
+
+  return (
+    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-12">
+      <header className="flex flex-col gap-2">
+        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+          dev / sealed-bid round-trip
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight">/test/crypto</h1>
+        <p className="text-sm text-muted-foreground">
+          End-to-end demo of buyer keypair derivation + ECIES sealed-bid encrypt/decrypt. Real
+          wallet signature, real cryptography — no mocks.
+        </p>
+      </header>
+
+      <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+        <h2 className="text-sm font-semibold">1. Connect wallet</h2>
+        <WalletPicker />
+      </section>
+
+      {account ? (
+        <ConnectedFlow account={account} />
+      ) : (
+        <DisconnectedPlaceholder />
+      )}
+
+      <footer className="text-xs text-muted-foreground">
+        Network panel proof: this page makes ZERO requests to any LLM, encryption service, or
+        backend. All cryptography runs on this device. Wallet signing is the only external call,
+        and it stays inside your wallet extension.
+      </footer>
+    </main>
+  );
+}
+
+function DisconnectedPlaceholder() {
+  return (
+    <section className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+      Connect a wallet above to enable steps 2–4.
+    </section>
+  );
+}
+
+/**
+ * Inner component mounted only when an account is selected. This is what makes
+ * `useSignMessage(account)` safe — the hook never sees an undefined account.
+ */
+function ConnectedFlow({ account }: { account: UiWalletAccount }) {
+  const signMessage = useSignMessage(account);
 
   const [nonceHex, setNonceHex] = useState('00112233aabbccdd');
   const [bidPlaintext, setBidPlaintext] = useState(SAMPLE_PLAINTEXT);
@@ -74,7 +119,7 @@ export function CryptoTestApp() {
   }, [nonceHex]);
 
   async function runDerive() {
-    if (!account || !nonceBytes) return;
+    if (!nonceBytes) return;
     setBusy(true);
     setError(null);
     try {
@@ -116,23 +161,7 @@ export function CryptoTestApp() {
   }
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-12">
-      <header className="flex flex-col gap-2">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          dev / sealed-bid round-trip
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">/test/crypto</h1>
-        <p className="text-sm text-muted-foreground">
-          End-to-end demo of buyer keypair derivation + ECIES sealed-bid encrypt/decrypt. Real
-          wallet signature, real cryptography — no mocks.
-        </p>
-      </header>
-
-      <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold">1. Connect wallet</h2>
-        <WalletPicker />
-      </section>
-
+    <>
       <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
         <h2 className="text-sm font-semibold">2. Derive RFP keypair from wallet signature</h2>
         <label className="flex flex-col gap-1 text-sm">
@@ -148,21 +177,17 @@ export function CryptoTestApp() {
             <span className="text-xs text-destructive">Need exactly 16 hex chars (8 bytes).</span>
           )}
         </label>
-        <Button
-          onClick={runDerive}
-          disabled={!account || !nonceBytes || busy}
-          className="self-start"
-        >
+        <Button onClick={runDerive} disabled={!nonceBytes || busy} className="self-start">
           {busy ? 'Signing…' : 'Sign + derive keypair'}
         </Button>
-        {signature && hexLine('signature (ed25519)', signature)}
+        {signature && <HexLine label="signature (ed25519)" bytes={signature} />}
         {keypair && (
           <div className="flex flex-col gap-1 rounded border border-dashed border-border p-3">
-            {hexLine('x25519 priv', keypair.priv)}
-            {hexLine('x25519 pub', keypair.pub)}
+            <HexLine label="x25519 priv" bytes={keypair.priv} />
+            <HexLine label="x25519 pub" bytes={keypair.pub} />
             <p className="mt-1 text-xs text-muted-foreground">
-              Determinism check: re-running this step with the same wallet + same nonce will produce
-              byte-identical keys.
+              Determinism check: re-running this step with the same wallet + same nonce will
+              produce byte-identical keys.
             </p>
           </div>
         )}
@@ -184,8 +209,8 @@ export function CryptoTestApp() {
         </Button>
         {sealed && (
           <div className="flex flex-col gap-1 rounded border border-dashed border-border p-3">
-            {hexLine('ephemeralPub', sealed.ephemeralPub)}
-            {hexLine('blob', sealed.blob, 96)}
+            <HexLine label="ephemeralPub" bytes={sealed.ephemeralPub} />
+            <HexLine label="blob" bytes={sealed.blob} max={96} />
             <div className="font-mono text-xs">
               <span className="text-muted-foreground">commit_hash:</span>{' '}
               <span className="break-all">{commitHashHex(sealed.blob)}</span>
@@ -219,12 +244,6 @@ export function CryptoTestApp() {
           {error}
         </div>
       )}
-
-      <footer className="text-xs text-muted-foreground">
-        Network panel proof: this page makes ZERO requests to any LLM, encryption service, or
-        backend. All cryptography runs on this device. Wallet signing is the only external call, and
-        it stays inside your wallet extension.
-      </footer>
-    </main>
+    </>
   );
 }

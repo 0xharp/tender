@@ -29,11 +29,27 @@ describe('deriveSeedMessage', () => {
     expect(() => deriveSeedMessage(new Uint8Array(9))).toThrow(/rfp_nonce/);
   });
 
-  it('produces "tender-rfp-key-v1" || nonce', () => {
+  it('produces a human-readable message containing the domain banner and nonce hex', () => {
     const msg = deriveSeedMessage(nonce(0x1234));
-    const prefix = dec.decode(msg.slice(0, 17));
-    expect(prefix).toBe('tender-rfp-key-v1');
-    expect(msg.byteLength).toBe(17 + RFP_NONCE_BYTES);
+    const text = dec.decode(msg);
+    expect(text).toMatch(/^Tender — derive sealed-bid encryption keypair \(tender-rfp-key-v1\)/);
+    expect(text).toContain('This is NOT a transaction');
+    expect(text).toContain('RFP nonce: 0x0000000000001234');
+  });
+
+  it('is byte-deterministic for the same nonce', () => {
+    const a = deriveSeedMessage(nonce(7));
+    const b = deriveSeedMessage(nonce(7));
+    expect(a).toEqual(b);
+  });
+
+  it('does not start with a byte that wallets misread as a transaction prefix', () => {
+    // Phantom and others reject signMessage when the bytes look transaction-shaped.
+    // Our message should start with ASCII 'T' (0x54) — not 0x80 (versioned tx flag),
+    // and should be far longer than a single short tx, so the heuristic clears it.
+    const msg = deriveSeedMessage(nonce(0));
+    expect(msg[0]).toBe(0x54);
+    expect(msg.byteLength).toBeGreaterThan(64);
   });
 });
 
