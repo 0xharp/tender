@@ -18,7 +18,8 @@
       "**/coverage",
       "**/*.gguf",
       "**/*.onnx",
-      ".local-docs/**"
+      ".local-docs/**",
+      "**/generated/**"
     ]
   },
   "formatter": {
