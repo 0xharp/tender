@@ -2,6 +2,7 @@
 .local-docs/
 .superstack/
 *.internal.md
+tweets/
 
 # IDE
 .idea/
