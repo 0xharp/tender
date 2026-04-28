@@ -41,3 +41,12 @@ pub struct BidWithdrawn {
     pub provider: Pubkey,
     pub withdrawn_at: i64,
 }
+
+#[event]
+pub struct BidSelected {
+    pub rfp: Pubkey,
+    pub bid: Pubkey,
+    pub buyer: Pubkey,
+    pub provider: Pubkey,
+    pub selected_at: i64,
+}

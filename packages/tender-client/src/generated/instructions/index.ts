@@ -9,4 +9,5 @@
 export * from "./commitBid";
 export * from "./rfpCloseBidding";
 export * from "./rfpCreate";
+export * from "./selectBid";
 export * from "./withdrawBid";

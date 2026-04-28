@@ -130,6 +130,27 @@ fn withdraw_bid(svm: &mut LiteSVM, rfp: Pubkey, provider: &Keypair) {
     svm.send_transaction(tx).expect("withdraw_bid should succeed");
 }
 
+fn select_bid(svm: &mut LiteSVM, buyer: &Keypair, rfp: Pubkey, provider: Pubkey) -> bool {
+    let (bid, _) = bid_pda(&rfp, &provider);
+    let ix = Instruction {
+        program_id: tender::ID,
+        accounts: tender::accounts::SelectBid {
+            buyer: buyer.pubkey(),
+            rfp,
+            bid,
+        }
+        .to_account_metas(None),
+        data: tender::instruction::SelectBid {}.data(),
+    };
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&buyer.pubkey()),
+        &[buyer],
+        svm.latest_blockhash(),
+    );
+    svm.send_transaction(tx).is_ok()
+}
+
 fn close_bidding(svm: &mut LiteSVM, rfp: Pubkey, signer: &Keypair) -> bool {
     let ix = Instruction {
         program_id: tender::ID,
@@ -274,4 +295,79 @@ fn close_bidding_anyone_signer() {
         "non-buyer signer must be allowed to close"
     );
     assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Reveal);
+}
+
+// -----------------------------------------------------------------------------
+// select_bid: state machine + authorization
+// -----------------------------------------------------------------------------
+
+fn rfp_in_reveal(svm: &mut LiteSVM, buyer: &Keypair) -> (Pubkey, Keypair) {
+    let rfp = create_rfp(svm, buyer, [9u8; 8]);
+    let provider = fund(svm);
+    commit_bid(svm, rfp, &provider, 1);
+    set_clock(svm, T0 + 86_400 + 1);
+    assert!(close_bidding(svm, rfp, buyer));
+    assert_eq!(read_rfp(svm, rfp).status, RfpStatus::Reveal);
+    (rfp, provider)
+}
+
+#[test]
+fn select_bid_happy_path_sets_winner_and_awarded_status() {
+    let (mut svm, buyer) = fresh_svm();
+    let (rfp, provider) = rfp_in_reveal(&mut svm, &buyer);
+
+    assert!(select_bid(&mut svm, &buyer, rfp, provider.pubkey()));
+
+    let state = read_rfp(&svm, rfp);
+    assert_eq!(state.status, RfpStatus::Awarded);
+    assert_eq!(state.winner, Some(provider.pubkey()));
+}
+
+#[test]
+fn select_bid_rejected_before_reveal() {
+    let (mut svm, buyer) = fresh_svm();
+    let rfp = create_rfp(&mut svm, &buyer, [10u8; 8]);
+    let provider = fund(&mut svm);
+    commit_bid(&mut svm, rfp, &provider, 1);
+    // status is still Open, not Reveal
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Open);
+    assert!(!select_bid(&mut svm, &buyer, rfp, provider.pubkey()));
+    assert_eq!(read_rfp(&svm, rfp).winner, None);
+}
+
+#[test]
+fn select_bid_rejected_for_non_buyer() {
+    let (mut svm, buyer) = fresh_svm();
+    let (rfp, provider) = rfp_in_reveal(&mut svm, &buyer);
+    let intruder = fund(&mut svm);
+
+    assert!(
+        !select_bid(&mut svm, &intruder, rfp, provider.pubkey()),
+        "non-buyer signer must not be able to select winner"
+    );
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Reveal);
+    assert_eq!(read_rfp(&svm, rfp).winner, None);
+}
+
+#[test]
+fn select_bid_rejected_after_reveal_window_expires() {
+    let (mut svm, buyer) = fresh_svm();
+    let (rfp, provider) = rfp_in_reveal(&mut svm, &buyer);
+
+    // jump past reveal_close_at
+    set_clock(&mut svm, T0 + 86_400 * 3 + 1);
+    assert!(
+        !select_bid(&mut svm, &buyer, rfp, provider.pubkey()),
+        "select must fail past reveal_close_at"
+    );
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Reveal);
+}
+
+#[test]
+fn select_bid_idempotent_blocked_by_status_check() {
+    let (mut svm, buyer) = fresh_svm();
+    let (rfp, provider) = rfp_in_reveal(&mut svm, &buyer);
+    assert!(select_bid(&mut svm, &buyer, rfp, provider.pubkey()));
+    // second select fails because status is now Awarded, not Reveal
+    assert!(!select_bid(&mut svm, &buyer, rfp, provider.pubkey()));
 }

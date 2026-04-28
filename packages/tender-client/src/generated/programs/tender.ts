@@ -44,18 +44,22 @@ import {
   getCommitBidInstructionAsync,
   getRfpCloseBiddingInstruction,
   getRfpCreateInstruction,
+  getSelectBidInstruction,
   getWithdrawBidInstructionAsync,
   parseCommitBidInstruction,
   parseRfpCloseBiddingInstruction,
   parseRfpCreateInstruction,
+  parseSelectBidInstruction,
   parseWithdrawBidInstruction,
   type CommitBidAsyncInput,
   type ParsedCommitBidInstruction,
   type ParsedRfpCloseBiddingInstruction,
   type ParsedRfpCreateInstruction,
+  type ParsedSelectBidInstruction,
   type ParsedWithdrawBidInstruction,
   type RfpCloseBiddingInput,
   type RfpCreateInput,
+  type SelectBidInput,
   type WithdrawBidAsyncInput,
 } from "../instructions";
 import { findBidPda } from "../pdas";
@@ -104,6 +108,7 @@ export enum TenderInstruction {
   CommitBid,
   RfpCloseBidding,
   RfpCreate,
+  SelectBid,
   WithdrawBid,
 }
 
@@ -148,6 +153,17 @@ export function identifyTenderInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([237, 159, 214, 70, 104, 96, 28, 70]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.SelectBid;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([110, 53, 157, 195, 147, 100, 110, 73]),
       ),
       0,
@@ -173,6 +189,9 @@ export type ParsedTenderInstruction<
   | ({
       instructionType: TenderInstruction.RfpCreate;
     } & ParsedRfpCreateInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.SelectBid;
+    } & ParsedSelectBidInstruction<TProgram>)
   | ({
       instructionType: TenderInstruction.WithdrawBid;
     } & ParsedWithdrawBidInstruction<TProgram>);
@@ -201,6 +220,13 @@ export function parseTenderInstruction<TProgram extends string>(
       return {
         instructionType: TenderInstruction.RfpCreate,
         ...parseRfpCreateInstruction(instruction),
+      };
+    }
+    case TenderInstruction.SelectBid: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.SelectBid,
+        ...parseSelectBidInstruction(instruction),
       };
     }
     case TenderInstruction.WithdrawBid: {
@@ -242,6 +268,9 @@ export type TenderPluginInstructions = {
   rfpCreate: (
     input: RfpCreateInput,
   ) => ReturnType<typeof getRfpCreateInstruction> & SelfPlanAndSendFunctions;
+  selectBid: (
+    input: SelectBidInput,
+  ) => ReturnType<typeof getSelectBidInstruction> & SelfPlanAndSendFunctions;
   withdrawBid: (
     input: WithdrawBidAsyncInput,
   ) => ReturnType<typeof getWithdrawBidInstructionAsync> &
@@ -279,6 +308,8 @@ export function tenderProgram() {
             ),
           rfpCreate: (input) =>
             addSelfPlanAndSendFunctions(client, getRfpCreateInstruction(input)),
+          selectBid: (input) =>
+            addSelfPlanAndSendFunctions(client, getSelectBidInstruction(input)),
           withdrawBid: (input) =>
             addSelfPlanAndSendFunctions(
               client,

@@ -27,4 +27,8 @@ pub mod tender {
     pub fn withdraw_bid(ctx: Context<WithdrawBid>) -> Result<()> {
         instructions::withdraw_bid::handler(ctx)
     }
+
+    pub fn select_bid(ctx: Context<SelectBid>) -> Result<()> {
+        instructions::select_bid::handler(ctx)
+    }
 }
