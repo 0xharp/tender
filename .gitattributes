@@ -1,0 +1,26 @@
+# Force LF line endings for all text files, regardless of OS / git core.autocrlf.
+# Avoids cross-platform churn between WSL/Linux/macOS contributors.
+* text=auto eol=lf
+
+# Explicitly mark binaries (no diff, no eol conversion)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.gguf binary
+*.onnx binary
+*.so binary
+*.wasm binary
+*.pdf binary
+
+# Generated files: don't show in diffs by default
+pnpm-lock.yaml linguist-generated=true
+Cargo.lock linguist-generated=true
+target/idl/*.json linguist-generated=true

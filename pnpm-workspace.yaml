@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+ignoredBuiltDependencies:
+  - '@biomejs/biome'
+  - esbuild
+  - sharp
+  - unrs-resolver

@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: web + sidecar + shared (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: lint (biome)
+        run: pnpm lint
+
+      - name: typecheck
+        run: pnpm typecheck
+
+      - name: build
+        run: pnpm build
+
+  anchor:
+    name: programs/tender (anchor build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: install solana cli
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: install anchor
+        run: cargo install --git https://github.com/coral-xyz/anchor --tag v0.32.1 anchor-cli --locked
+
+      - name: anchor build
+        run: anchor build

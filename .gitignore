@@ -1,0 +1,59 @@
+# Local-only docs and research (never commit)
+.local-docs/
+.superstack/
+*.internal.md
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js
+.next/
+out/
+.turbo/
+next-env.d.ts
+
+# TypeScript build
+*.tsbuildinfo
+dist/
+build/
+
+# Anchor / Solana / Rust
+# Cargo.lock IS committed (program is a binary crate — pin for reproducible builds)
+target/
+.anchor/
+test-ledger/
+**/*.rs.bk
+
+# Env + secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+keypairs/
+wallets/
+
+# Local model files (large; not committed)
+apps/ai-sidecar/models/
+*.gguf
+*.onnx
+
+# Coverage + test outputs
+coverage/
+.nyc_output/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db

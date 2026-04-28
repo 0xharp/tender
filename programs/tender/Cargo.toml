@@ -1,0 +1,22 @@
+[package]
+name = "tender"
+version = "0.0.1"
+description = "Tender — sealed-bid procurement, escrow, and on-chain reputation registry"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/0xharp/tender"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "tender"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+anchor-lang = "0.32.1"
