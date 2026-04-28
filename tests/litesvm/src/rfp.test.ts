@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import { findRfpPda, instructions, types } from '@tender/tender-client';
+import { describe, expect, it } from 'vitest';
 import {
   bytes32,
   expectFailureWithCode,

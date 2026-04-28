@@ -20,11 +20,11 @@ pub mod tender {
         instructions::rfp_close_bidding::handler(ctx)
     }
 
-    pub fn bid_commit(ctx: Context<BidCommitIx>, args: BidCommitArgs) -> Result<()> {
-        instructions::bid_commit::handler(ctx, args)
+    pub fn commit_bid(ctx: Context<CommitBid>, args: CommitBidArgs) -> Result<()> {
+        instructions::commit_bid::handler(ctx, args)
     }
 
-    pub fn bid_withdraw(ctx: Context<BidWithdrawIx>) -> Result<()> {
-        instructions::bid_withdraw::handler(ctx)
+    pub fn withdraw_bid(ctx: Context<WithdrawBid>) -> Result<()> {
+        instructions::withdraw_bid::handler(ctx)
     }
 }

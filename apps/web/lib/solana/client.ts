@@ -1,9 +1,4 @@
-import {
-  type Address,
-  address,
-  createSolanaRpc,
-  createSolanaRpcSubscriptions,
-} from '@solana/kit';
+import { type Address, address, createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit';
 
 const HELIUS_HTTP = process.env.NEXT_PUBLIC_HELIUS_RPC_URL;
 const HELIUS_WSS = process.env.NEXT_PUBLIC_HELIUS_WSS_URL;

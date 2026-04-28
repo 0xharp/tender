@@ -6,14 +6,14 @@ use crate::state::{
 };
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-pub struct BidCommitArgs {
+pub struct CommitBidArgs {
     pub commit_hash: [u8; 32],
     pub ciphertext_storage_uri: String,
 }
 
 #[derive(Accounts)]
-#[instruction(args: BidCommitArgs)]
-pub struct BidCommitIx<'info> {
+#[instruction(args: CommitBidArgs)]
+pub struct CommitBid<'info> {
     #[account(mut)]
     pub provider: Signer<'info>,
 
@@ -32,7 +32,7 @@ pub struct BidCommitIx<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<BidCommitIx>, args: BidCommitArgs) -> Result<()> {
+pub fn handler(ctx: Context<CommitBid>, args: CommitBidArgs) -> Result<()> {
     require!(
         args.ciphertext_storage_uri.len() <= MAX_CIPHERTEXT_URI_LEN,
         TenderError::UriTooLong

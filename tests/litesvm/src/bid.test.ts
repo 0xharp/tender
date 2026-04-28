@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import { findRfpPda, instructions, pdas, types } from '@tender/tender-client';
+import { describe, expect, it } from 'vitest';
 import {
   bytes32,
   expectFailureWithCode,
@@ -49,7 +49,7 @@ describe('bid_commit', () => {
     const { svm, rfpPda } = await setupOpenRfp();
     const provider = await fundedSigner(svm);
 
-    const bidIx = await instructions.getBidCommitInstructionAsync({
+    const bidIx = await instructions.getCommitBidInstructionAsync({
       provider,
       rfp: rfpPda,
       commitHash: bytes32(7),
@@ -73,7 +73,7 @@ describe('bid_commit', () => {
     setUnixTimestamp(svm, args.bidOpenAt - 100n);
 
     const provider = await fundedSigner(svm);
-    const bidIx = await instructions.getBidCommitInstructionAsync({
+    const bidIx = await instructions.getCommitBidInstructionAsync({
       provider,
       rfp: rfpPda,
       commitHash: bytes32(8),
@@ -87,7 +87,7 @@ describe('bid_commit', () => {
     setUnixTimestamp(svm, args.bidCloseAt + 1n);
 
     const provider = await fundedSigner(svm);
-    const bidIx = await instructions.getBidCommitInstructionAsync({
+    const bidIx = await instructions.getCommitBidInstructionAsync({
       provider,
       rfp: rfpPda,
       commitHash: bytes32(9),
@@ -100,7 +100,7 @@ describe('bid_commit', () => {
     const { svm, rfpPda } = await setupOpenRfp();
     const provider = await fundedSigner(svm);
 
-    const bidIx1 = await instructions.getBidCommitInstructionAsync({
+    const bidIx1 = await instructions.getCommitBidInstructionAsync({
       provider,
       rfp: rfpPda,
       commitHash: bytes32(10),
@@ -108,7 +108,7 @@ describe('bid_commit', () => {
     });
     expectSuccess(await sendIxs(svm, provider, [bidIx1]));
 
-    const bidIx2 = await instructions.getBidCommitInstructionAsync({
+    const bidIx2 = await instructions.getCommitBidInstructionAsync({
       provider,
       rfp: rfpPda,
       commitHash: bytes32(11),
@@ -123,7 +123,7 @@ describe('bid_commit', () => {
 
     for (let i = 0; i < 3; i++) {
       const provider = await fundedSigner(svm);
-      const bidIx = await instructions.getBidCommitInstructionAsync({
+      const bidIx = await instructions.getCommitBidInstructionAsync({
         provider,
         rfp: rfpPda,
         commitHash: bytes32(20 + i),
@@ -142,7 +142,7 @@ describe('bid_withdraw', () => {
     const { svm, rfpPda } = await setupOpenRfp();
     const provider = await fundedSigner(svm);
 
-    const bidIx = await instructions.getBidCommitInstructionAsync({
+    const bidIx = await instructions.getCommitBidInstructionAsync({
       provider,
       rfp: rfpPda,
       commitHash: bytes32(30),
@@ -150,7 +150,7 @@ describe('bid_withdraw', () => {
     });
     expectSuccess(await sendIxs(svm, provider, [bidIx]));
 
-    const withdrawIx = await instructions.getBidWithdrawInstructionAsync({
+    const withdrawIx = await instructions.getWithdrawBidInstructionAsync({
       provider,
       rfp: rfpPda,
     });
@@ -168,7 +168,7 @@ describe('bid_withdraw', () => {
     const { svm, rfpPda, args } = await setupOpenRfp();
     const provider = await fundedSigner(svm);
 
-    const bidIx = await instructions.getBidCommitInstructionAsync({
+    const bidIx = await instructions.getCommitBidInstructionAsync({
       provider,
       rfp: rfpPda,
       commitHash: bytes32(31),
@@ -178,7 +178,7 @@ describe('bid_withdraw', () => {
 
     setUnixTimestamp(svm, args.bidCloseAt + 1n);
 
-    const withdrawIx = await instructions.getBidWithdrawInstructionAsync({
+    const withdrawIx = await instructions.getWithdrawBidInstructionAsync({
       provider,
       rfp: rfpPda,
     });
@@ -190,7 +190,7 @@ describe('bid_withdraw', () => {
     const owner = await fundedSigner(svm);
     const intruder = await fundedSigner(svm);
 
-    const bidIx = await instructions.getBidCommitInstructionAsync({
+    const bidIx = await instructions.getCommitBidInstructionAsync({
       provider: owner,
       rfp: rfpPda,
       commitHash: bytes32(32),
@@ -198,7 +198,7 @@ describe('bid_withdraw', () => {
     });
     expectSuccess(await sendIxs(svm, owner, [bidIx]));
 
-    const withdrawIx = await instructions.getBidWithdrawInstructionAsync({
+    const withdrawIx = await instructions.getWithdrawBidInstructionAsync({
       provider: intruder,
       rfp: rfpPda,
     });

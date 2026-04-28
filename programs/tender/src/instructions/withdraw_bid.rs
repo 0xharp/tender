@@ -4,7 +4,7 @@ use crate::errors::TenderError;
 use crate::state::{BidCommit, BidStatus, BidWithdrawn, Rfp};
 
 #[derive(Accounts)]
-pub struct BidWithdrawIx<'info> {
+pub struct WithdrawBid<'info> {
     #[account(mut)]
     pub provider: Signer<'info>,
 
@@ -24,7 +24,7 @@ pub struct BidWithdrawIx<'info> {
     pub bid: Account<'info, BidCommit>,
 }
 
-pub fn handler(ctx: Context<BidWithdrawIx>) -> Result<()> {
+pub fn handler(ctx: Context<WithdrawBid>) -> Result<()> {
     let bid = &ctx.accounts.bid;
     let rfp = &mut ctx.accounts.rfp;
 

@@ -39,17 +39,17 @@ import {
 import { findBidPda } from "../pdas";
 import { TENDER_PROGRAM_ADDRESS } from "../programs";
 
-export const BID_WITHDRAW_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  163, 145, 193, 23, 109, 13, 207, 139,
+export const WITHDRAW_BID_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
+  110, 53, 157, 195, 147, 100, 110, 73,
 ]);
 
-export function getBidWithdrawDiscriminatorBytes(): ReadonlyUint8Array {
+export function getWithdrawBidDiscriminatorBytes(): ReadonlyUint8Array {
   return fixEncoderSize(getBytesEncoder(), 8).encode(
-    BID_WITHDRAW_DISCRIMINATOR,
+    WITHDRAW_BID_DISCRIMINATOR,
   );
 }
 
-export type BidWithdrawInstruction<
+export type WithdrawBidInstruction<
   TProgram extends string = typeof TENDER_PROGRAM_ADDRESS,
   TAccountProvider extends string | AccountMeta<string> = string,
   TAccountRfp extends string | AccountMeta<string> = string,
@@ -69,34 +69,34 @@ export type BidWithdrawInstruction<
     ]
   >;
 
-export type BidWithdrawInstructionData = { discriminator: ReadonlyUint8Array };
+export type WithdrawBidInstructionData = { discriminator: ReadonlyUint8Array };
 
-export type BidWithdrawInstructionDataArgs = {};
+export type WithdrawBidInstructionDataArgs = {};
 
-export function getBidWithdrawInstructionDataEncoder(): FixedSizeEncoder<BidWithdrawInstructionDataArgs> {
+export function getWithdrawBidInstructionDataEncoder(): FixedSizeEncoder<WithdrawBidInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
-    (value) => ({ ...value, discriminator: BID_WITHDRAW_DISCRIMINATOR }),
+    (value) => ({ ...value, discriminator: WITHDRAW_BID_DISCRIMINATOR }),
   );
 }
 
-export function getBidWithdrawInstructionDataDecoder(): FixedSizeDecoder<BidWithdrawInstructionData> {
+export function getWithdrawBidInstructionDataDecoder(): FixedSizeDecoder<WithdrawBidInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
   ]);
 }
 
-export function getBidWithdrawInstructionDataCodec(): FixedSizeCodec<
-  BidWithdrawInstructionDataArgs,
-  BidWithdrawInstructionData
+export function getWithdrawBidInstructionDataCodec(): FixedSizeCodec<
+  WithdrawBidInstructionDataArgs,
+  WithdrawBidInstructionData
 > {
   return combineCodec(
-    getBidWithdrawInstructionDataEncoder(),
-    getBidWithdrawInstructionDataDecoder(),
+    getWithdrawBidInstructionDataEncoder(),
+    getWithdrawBidInstructionDataDecoder(),
   );
 }
 
-export type BidWithdrawAsyncInput<
+export type WithdrawBidAsyncInput<
   TAccountProvider extends string = string,
   TAccountRfp extends string = string,
   TAccountBid extends string = string,
@@ -106,16 +106,16 @@ export type BidWithdrawAsyncInput<
   bid?: Address<TAccountBid>;
 };
 
-export async function getBidWithdrawInstructionAsync<
+export async function getWithdrawBidInstructionAsync<
   TAccountProvider extends string,
   TAccountRfp extends string,
   TAccountBid extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
-  input: BidWithdrawAsyncInput<TAccountProvider, TAccountRfp, TAccountBid>,
+  input: WithdrawBidAsyncInput<TAccountProvider, TAccountRfp, TAccountBid>,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  BidWithdrawInstruction<
+  WithdrawBidInstruction<
     TProgramAddress,
     TAccountProvider,
     TAccountRfp,
@@ -154,9 +154,9 @@ export async function getBidWithdrawInstructionAsync<
       getAccountMeta("rfp", accounts.rfp),
       getAccountMeta("bid", accounts.bid),
     ],
-    data: getBidWithdrawInstructionDataEncoder().encode({}),
+    data: getWithdrawBidInstructionDataEncoder().encode({}),
     programAddress,
-  } as BidWithdrawInstruction<
+  } as WithdrawBidInstruction<
     TProgramAddress,
     TAccountProvider,
     TAccountRfp,
@@ -164,7 +164,7 @@ export async function getBidWithdrawInstructionAsync<
   >);
 }
 
-export type BidWithdrawInput<
+export type WithdrawBidInput<
   TAccountProvider extends string = string,
   TAccountRfp extends string = string,
   TAccountBid extends string = string,
@@ -174,15 +174,15 @@ export type BidWithdrawInput<
   bid: Address<TAccountBid>;
 };
 
-export function getBidWithdrawInstruction<
+export function getWithdrawBidInstruction<
   TAccountProvider extends string,
   TAccountRfp extends string,
   TAccountBid extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
-  input: BidWithdrawInput<TAccountProvider, TAccountRfp, TAccountBid>,
+  input: WithdrawBidInput<TAccountProvider, TAccountRfp, TAccountBid>,
   config?: { programAddress?: TProgramAddress },
-): BidWithdrawInstruction<
+): WithdrawBidInstruction<
   TProgramAddress,
   TAccountProvider,
   TAccountRfp,
@@ -209,9 +209,9 @@ export function getBidWithdrawInstruction<
       getAccountMeta("rfp", accounts.rfp),
       getAccountMeta("bid", accounts.bid),
     ],
-    data: getBidWithdrawInstructionDataEncoder().encode({}),
+    data: getWithdrawBidInstructionDataEncoder().encode({}),
     programAddress,
-  } as BidWithdrawInstruction<
+  } as WithdrawBidInstruction<
     TProgramAddress,
     TAccountProvider,
     TAccountRfp,
@@ -219,7 +219,7 @@ export function getBidWithdrawInstruction<
   >);
 }
 
-export type ParsedBidWithdrawInstruction<
+export type ParsedWithdrawBidInstruction<
   TProgram extends string = typeof TENDER_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
@@ -229,17 +229,17 @@ export type ParsedBidWithdrawInstruction<
     rfp: TAccountMetas[1];
     bid: TAccountMetas[2];
   };
-  data: BidWithdrawInstructionData;
+  data: WithdrawBidInstructionData;
 };
 
-export function parseBidWithdrawInstruction<
+export function parseWithdrawBidInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedBidWithdrawInstruction<TProgram, TAccountMetas> {
+): ParsedWithdrawBidInstruction<TProgram, TAccountMetas> {
   if (instruction.accounts.length < 3) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -262,6 +262,6 @@ export function parseBidWithdrawInstruction<
       rfp: getNextAccount(),
       bid: getNextAccount(),
     },
-    data: getBidWithdrawInstructionDataDecoder().decode(instruction.data),
+    data: getWithdrawBidInstructionDataDecoder().decode(instruction.data),
   };
 }

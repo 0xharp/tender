@@ -43,8 +43,7 @@ export async function sendIxs(
   const message = pipe(
     createTransactionMessage({ version: 0 }),
     (m) => setTransactionMessageFeePayerSigner(payer, m),
-    (m) =>
-      setTransactionMessageLifetimeUsingBlockhash({ blockhash, lastValidBlockHeight: 0n }, m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash({ blockhash, lastValidBlockHeight: 0n }, m),
     (m) => appendTransactionMessageInstructions(ixs, m),
   );
   const signed = await signTransactionMessageWithSigners(message);

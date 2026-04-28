@@ -7,6 +7,5 @@
     "noEmit": true,
     "noUncheckedIndexedAccess": false
   },
-  "include": ["src/**/*"],
-  "exclude": ["src/generated/index.ts"]
+  "include": ["src/**/*"]
 }

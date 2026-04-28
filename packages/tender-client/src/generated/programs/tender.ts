@@ -41,22 +41,22 @@ import {
   type RfpArgs,
 } from "../accounts";
 import {
-  getBidCommitInstructionAsync,
-  getBidWithdrawInstructionAsync,
+  getCommitBidInstructionAsync,
   getRfpCloseBiddingInstruction,
   getRfpCreateInstruction,
-  parseBidCommitInstruction,
-  parseBidWithdrawInstruction,
+  getWithdrawBidInstructionAsync,
+  parseCommitBidInstruction,
   parseRfpCloseBiddingInstruction,
   parseRfpCreateInstruction,
-  type BidCommitAsyncInput,
-  type BidWithdrawAsyncInput,
-  type ParsedBidCommitInstruction,
-  type ParsedBidWithdrawInstruction,
+  parseWithdrawBidInstruction,
+  type CommitBidAsyncInput,
+  type ParsedCommitBidInstruction,
   type ParsedRfpCloseBiddingInstruction,
   type ParsedRfpCreateInstruction,
+  type ParsedWithdrawBidInstruction,
   type RfpCloseBiddingInput,
   type RfpCreateInput,
+  type WithdrawBidAsyncInput,
 } from "../instructions";
 import { findBidPda } from "../pdas";
 
@@ -101,10 +101,10 @@ export function identifyTenderAccount(
 }
 
 export enum TenderInstruction {
-  BidCommit,
-  BidWithdraw,
+  CommitBid,
   RfpCloseBidding,
   RfpCreate,
+  WithdrawBid,
 }
 
 export function identifyTenderInstruction(
@@ -115,23 +115,12 @@ export function identifyTenderInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([78, 194, 107, 105, 89, 184, 117, 157]),
+        new Uint8Array([149, 237, 198, 113, 53, 66, 70, 76]),
       ),
       0,
     )
   ) {
-    return TenderInstruction.BidCommit;
-  }
-  if (
-    containsBytes(
-      data,
-      fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([163, 145, 193, 23, 109, 13, 207, 139]),
-      ),
-      0,
-    )
-  ) {
-    return TenderInstruction.BidWithdraw;
+    return TenderInstruction.CommitBid;
   }
   if (
     containsBytes(
@@ -155,6 +144,17 @@ export function identifyTenderInstruction(
   ) {
     return TenderInstruction.RfpCreate;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([110, 53, 157, 195, 147, 100, 110, 73]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.WithdrawBid;
+  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION,
     { instructionData: data, programName: "tender" },
@@ -165,35 +165,28 @@ export type ParsedTenderInstruction<
   TProgram extends string = "4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ",
 > =
   | ({
-      instructionType: TenderInstruction.BidCommit;
-    } & ParsedBidCommitInstruction<TProgram>)
-  | ({
-      instructionType: TenderInstruction.BidWithdraw;
-    } & ParsedBidWithdrawInstruction<TProgram>)
+      instructionType: TenderInstruction.CommitBid;
+    } & ParsedCommitBidInstruction<TProgram>)
   | ({
       instructionType: TenderInstruction.RfpCloseBidding;
     } & ParsedRfpCloseBiddingInstruction<TProgram>)
   | ({
       instructionType: TenderInstruction.RfpCreate;
-    } & ParsedRfpCreateInstruction<TProgram>);
+    } & ParsedRfpCreateInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.WithdrawBid;
+    } & ParsedWithdrawBidInstruction<TProgram>);
 
 export function parseTenderInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
 ): ParsedTenderInstruction<TProgram> {
   const instructionType = identifyTenderInstruction(instruction);
   switch (instructionType) {
-    case TenderInstruction.BidCommit: {
+    case TenderInstruction.CommitBid: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: TenderInstruction.BidCommit,
-        ...parseBidCommitInstruction(instruction),
-      };
-    }
-    case TenderInstruction.BidWithdraw: {
-      assertIsInstructionWithAccounts(instruction);
-      return {
-        instructionType: TenderInstruction.BidWithdraw,
-        ...parseBidWithdrawInstruction(instruction),
+        instructionType: TenderInstruction.CommitBid,
+        ...parseCommitBidInstruction(instruction),
       };
     }
     case TenderInstruction.RfpCloseBidding: {
@@ -208,6 +201,13 @@ export function parseTenderInstruction<TProgram extends string>(
       return {
         instructionType: TenderInstruction.RfpCreate,
         ...parseRfpCreateInstruction(instruction),
+      };
+    }
+    case TenderInstruction.WithdrawBid: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.WithdrawBid,
+        ...parseWithdrawBidInstruction(instruction),
       };
     }
     default:
@@ -231,13 +231,9 @@ export type TenderPluginAccounts = {
 };
 
 export type TenderPluginInstructions = {
-  bidCommit: (
-    input: BidCommitAsyncInput,
-  ) => ReturnType<typeof getBidCommitInstructionAsync> &
-    SelfPlanAndSendFunctions;
-  bidWithdraw: (
-    input: BidWithdrawAsyncInput,
-  ) => ReturnType<typeof getBidWithdrawInstructionAsync> &
+  commitBid: (
+    input: CommitBidAsyncInput,
+  ) => ReturnType<typeof getCommitBidInstructionAsync> &
     SelfPlanAndSendFunctions;
   rfpCloseBidding: (
     input: RfpCloseBiddingInput,
@@ -246,6 +242,10 @@ export type TenderPluginInstructions = {
   rfpCreate: (
     input: RfpCreateInput,
   ) => ReturnType<typeof getRfpCreateInstruction> & SelfPlanAndSendFunctions;
+  withdrawBid: (
+    input: WithdrawBidAsyncInput,
+  ) => ReturnType<typeof getWithdrawBidInstructionAsync> &
+    SelfPlanAndSendFunctions;
 };
 
 export type TenderPluginPdas = { bid: typeof findBidPda };
@@ -267,15 +267,10 @@ export function tenderProgram() {
           rfp: addSelfFetchFunctions(client, getRfpCodec()),
         },
         instructions: {
-          bidCommit: (input) =>
+          commitBid: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getBidCommitInstructionAsync(input),
-            ),
-          bidWithdraw: (input) =>
-            addSelfPlanAndSendFunctions(
-              client,
-              getBidWithdrawInstructionAsync(input),
+              getCommitBidInstructionAsync(input),
             ),
           rfpCloseBidding: (input) =>
             addSelfPlanAndSendFunctions(
@@ -284,6 +279,11 @@ export function tenderProgram() {
             ),
           rfpCreate: (input) =>
             addSelfPlanAndSendFunctions(client, getRfpCreateInstruction(input)),
+          withdrawBid: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getWithdrawBidInstructionAsync(input),
+            ),
         },
         pdas: { bid: findBidPda },
       },

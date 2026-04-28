@@ -46,15 +46,15 @@ import {
 import { findBidPda } from "../pdas";
 import { TENDER_PROGRAM_ADDRESS } from "../programs";
 
-export const BID_COMMIT_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  78, 194, 107, 105, 89, 184, 117, 157,
+export const COMMIT_BID_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
+  149, 237, 198, 113, 53, 66, 70, 76,
 ]);
 
-export function getBidCommitDiscriminatorBytes(): ReadonlyUint8Array {
-  return fixEncoderSize(getBytesEncoder(), 8).encode(BID_COMMIT_DISCRIMINATOR);
+export function getCommitBidDiscriminatorBytes(): ReadonlyUint8Array {
+  return fixEncoderSize(getBytesEncoder(), 8).encode(COMMIT_BID_DISCRIMINATOR);
 }
 
-export type BidCommitInstruction<
+export type CommitBidInstruction<
   TProgram extends string = typeof TENDER_PROGRAM_ADDRESS,
   TAccountProvider extends string | AccountMeta<string> = string,
   TAccountRfp extends string | AccountMeta<string> = string,
@@ -79,18 +79,18 @@ export type BidCommitInstruction<
     ]
   >;
 
-export type BidCommitInstructionData = {
+export type CommitBidInstructionData = {
   discriminator: ReadonlyUint8Array;
   commitHash: ReadonlyUint8Array;
   ciphertextStorageUri: string;
 };
 
-export type BidCommitInstructionDataArgs = {
+export type CommitBidInstructionDataArgs = {
   commitHash: ReadonlyUint8Array;
   ciphertextStorageUri: string;
 };
 
-export function getBidCommitInstructionDataEncoder(): Encoder<BidCommitInstructionDataArgs> {
+export function getCommitBidInstructionDataEncoder(): Encoder<CommitBidInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
@@ -100,11 +100,11 @@ export function getBidCommitInstructionDataEncoder(): Encoder<BidCommitInstructi
         addEncoderSizePrefix(getUtf8Encoder(), getU32Encoder()),
       ],
     ]),
-    (value) => ({ ...value, discriminator: BID_COMMIT_DISCRIMINATOR }),
+    (value) => ({ ...value, discriminator: COMMIT_BID_DISCRIMINATOR }),
   );
 }
 
-export function getBidCommitInstructionDataDecoder(): Decoder<BidCommitInstructionData> {
+export function getCommitBidInstructionDataDecoder(): Decoder<CommitBidInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["commitHash", fixDecoderSize(getBytesDecoder(), 32)],
@@ -115,17 +115,17 @@ export function getBidCommitInstructionDataDecoder(): Decoder<BidCommitInstructi
   ]);
 }
 
-export function getBidCommitInstructionDataCodec(): Codec<
-  BidCommitInstructionDataArgs,
-  BidCommitInstructionData
+export function getCommitBidInstructionDataCodec(): Codec<
+  CommitBidInstructionDataArgs,
+  CommitBidInstructionData
 > {
   return combineCodec(
-    getBidCommitInstructionDataEncoder(),
-    getBidCommitInstructionDataDecoder(),
+    getCommitBidInstructionDataEncoder(),
+    getCommitBidInstructionDataDecoder(),
   );
 }
 
-export type BidCommitAsyncInput<
+export type CommitBidAsyncInput<
   TAccountProvider extends string = string,
   TAccountRfp extends string = string,
   TAccountBid extends string = string,
@@ -135,18 +135,18 @@ export type BidCommitAsyncInput<
   rfp: Address<TAccountRfp>;
   bid?: Address<TAccountBid>;
   systemProgram?: Address<TAccountSystemProgram>;
-  commitHash: BidCommitInstructionDataArgs["commitHash"];
-  ciphertextStorageUri: BidCommitInstructionDataArgs["ciphertextStorageUri"];
+  commitHash: CommitBidInstructionDataArgs["commitHash"];
+  ciphertextStorageUri: CommitBidInstructionDataArgs["ciphertextStorageUri"];
 };
 
-export async function getBidCommitInstructionAsync<
+export async function getCommitBidInstructionAsync<
   TAccountProvider extends string,
   TAccountRfp extends string,
   TAccountBid extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
-  input: BidCommitAsyncInput<
+  input: CommitBidAsyncInput<
     TAccountProvider,
     TAccountRfp,
     TAccountBid,
@@ -154,7 +154,7 @@ export async function getBidCommitInstructionAsync<
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  BidCommitInstruction<
+  CommitBidInstruction<
     TProgramAddress,
     TAccountProvider,
     TAccountRfp,
@@ -203,11 +203,11 @@ export async function getBidCommitInstructionAsync<
       getAccountMeta("bid", accounts.bid),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getBidCommitInstructionDataEncoder().encode(
-      args as BidCommitInstructionDataArgs,
+    data: getCommitBidInstructionDataEncoder().encode(
+      args as CommitBidInstructionDataArgs,
     ),
     programAddress,
-  } as BidCommitInstruction<
+  } as CommitBidInstruction<
     TProgramAddress,
     TAccountProvider,
     TAccountRfp,
@@ -216,7 +216,7 @@ export async function getBidCommitInstructionAsync<
   >);
 }
 
-export type BidCommitInput<
+export type CommitBidInput<
   TAccountProvider extends string = string,
   TAccountRfp extends string = string,
   TAccountBid extends string = string,
@@ -226,25 +226,25 @@ export type BidCommitInput<
   rfp: Address<TAccountRfp>;
   bid: Address<TAccountBid>;
   systemProgram?: Address<TAccountSystemProgram>;
-  commitHash: BidCommitInstructionDataArgs["commitHash"];
-  ciphertextStorageUri: BidCommitInstructionDataArgs["ciphertextStorageUri"];
+  commitHash: CommitBidInstructionDataArgs["commitHash"];
+  ciphertextStorageUri: CommitBidInstructionDataArgs["ciphertextStorageUri"];
 };
 
-export function getBidCommitInstruction<
+export function getCommitBidInstruction<
   TAccountProvider extends string,
   TAccountRfp extends string,
   TAccountBid extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
-  input: BidCommitInput<
+  input: CommitBidInput<
     TAccountProvider,
     TAccountRfp,
     TAccountBid,
     TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): BidCommitInstruction<
+): CommitBidInstruction<
   TProgramAddress,
   TAccountProvider,
   TAccountRfp,
@@ -283,11 +283,11 @@ export function getBidCommitInstruction<
       getAccountMeta("bid", accounts.bid),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
-    data: getBidCommitInstructionDataEncoder().encode(
-      args as BidCommitInstructionDataArgs,
+    data: getCommitBidInstructionDataEncoder().encode(
+      args as CommitBidInstructionDataArgs,
     ),
     programAddress,
-  } as BidCommitInstruction<
+  } as CommitBidInstruction<
     TProgramAddress,
     TAccountProvider,
     TAccountRfp,
@@ -296,7 +296,7 @@ export function getBidCommitInstruction<
   >);
 }
 
-export type ParsedBidCommitInstruction<
+export type ParsedCommitBidInstruction<
   TProgram extends string = typeof TENDER_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
@@ -307,17 +307,17 @@ export type ParsedBidCommitInstruction<
     bid: TAccountMetas[2];
     systemProgram: TAccountMetas[3];
   };
-  data: BidCommitInstructionData;
+  data: CommitBidInstructionData;
 };
 
-export function parseBidCommitInstruction<
+export function parseCommitBidInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedBidCommitInstruction<TProgram, TAccountMetas> {
+): ParsedCommitBidInstruction<TProgram, TAccountMetas> {
   if (instruction.accounts.length < 4) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -341,6 +341,6 @@ export function parseBidCommitInstruction<
       bid: getNextAccount(),
       systemProgram: getNextAccount(),
     },
-    data: getBidCommitInstructionDataDecoder().decode(instruction.data),
+    data: getCommitBidInstructionDataDecoder().decode(instruction.data),
   };
 }
