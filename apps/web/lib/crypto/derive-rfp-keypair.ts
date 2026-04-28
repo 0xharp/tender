@@ -44,13 +44,13 @@ export function deriveSeedMessage(rfpNonce: Uint8Array): Uint8Array {
   if (rfpNonce.byteLength !== RFP_NONCE_BYTES) {
     throw new Error(`rfp_nonce must be ${RFP_NONCE_BYTES} bytes`);
   }
-  const text =
-    `Tender — derive sealed-bid encryption keypair (${KEY_DERIVATION_DOMAIN})\n\n` +
-    'This signature deterministically derives an X25519 encryption keypair for ' +
-    'receiving sealed bids on a procurement RFP. Same wallet + same nonce ' +
-    'produces the same keypair every time.\n\n' +
-    'This is NOT a transaction. No funds will move and nothing will be sent on-chain.\n\n' +
-    `RFP nonce: 0x${bytesToHex(rfpNonce)}`;
+  const text = `Tender — derive sealed-bid encryption keypair (${KEY_DERIVATION_DOMAIN})
+
+This signature deterministically derives an X25519 encryption keypair for receiving sealed bids on a procurement RFP. Same wallet + same nonce produces the same keypair every time.
+
+This is NOT a transaction. No funds will move and nothing will be sent on-chain.
+
+RFP nonce: 0x${bytesToHex(rfpNonce)}`;
   return enc.encode(text);
 }
 

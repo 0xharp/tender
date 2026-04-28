@@ -65,16 +65,12 @@ export function CryptoTestApp() {
         <WalletPicker />
       </section>
 
-      {account ? (
-        <ConnectedFlow account={account} />
-      ) : (
-        <DisconnectedPlaceholder />
-      )}
+      {account ? <ConnectedFlow account={account} /> : <DisconnectedPlaceholder />}
 
       <footer className="text-xs text-muted-foreground">
         Network panel proof: this page makes ZERO requests to any LLM, encryption service, or
-        backend. All cryptography runs on this device. Wallet signing is the only external call,
-        and it stays inside your wallet extension.
+        backend. All cryptography runs on this device. Wallet signing is the only external call, and
+        it stays inside your wallet extension.
       </footer>
     </main>
   );
@@ -186,8 +182,8 @@ function ConnectedFlow({ account }: { account: UiWalletAccount }) {
             <HexLine label="x25519 priv" bytes={keypair.priv} />
             <HexLine label="x25519 pub" bytes={keypair.pub} />
             <p className="mt-1 text-xs text-muted-foreground">
-              Determinism check: re-running this step with the same wallet + same nonce will
-              produce byte-identical keys.
+              Determinism check: re-running this step with the same wallet + same nonce will produce
+              byte-identical keys.
             </p>
           </div>
         )}
