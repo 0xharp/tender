@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { LocalTime } from '@/components/local-time';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getCurrentWallet } from '@/lib/auth/session';
 import { serverSupabase } from '@/lib/supabase/server';
 import { TENDER_PROGRAM_ID } from '@tender/shared';
 
@@ -17,17 +19,10 @@ function formatBudget(usdc: string): string {
   return `$${n.toLocaleString('en-US')} USDC`;
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
-
 export default async function Page({ params }: PageProps) {
   const { id } = await params;
 
-  const supabase = await serverSupabase();
+  const [wallet, supabase] = await Promise.all([getCurrentWallet(), serverSupabase()]);
   const { data: rfp, error } = await supabase
     .from('rfps')
     .select('*')
@@ -45,7 +40,21 @@ export default async function Page({ params }: PageProps) {
   }
   if (!rfp) notFound();
 
+  const isBuyer = wallet === rfp.buyer_wallet;
+  const isOpenForBids = rfp.status === 'open' && new Date(rfp.bid_close_at).getTime() > Date.now();
   const milestones = rfp.milestone_template;
+
+  // Check whether the signed-in viewer is a provider who has already bid on this RFP.
+  let viewerHasBid = false;
+  if (wallet && !isBuyer) {
+    const { data: existing } = await supabase
+      .from('bid_ciphertexts')
+      .select('id')
+      .eq('rfp_id', rfp.id)
+      .eq('provider_wallet', wallet)
+      .maybeSingle();
+    viewerHasBid = !!existing;
+  }
   const solscanRfp = `https://solscan.io/account/${rfp.on_chain_pda}?cluster=devnet`;
   const solscanTx = rfp.tx_signature
     ? `https://solscan.io/tx/${rfp.tx_signature}?cluster=devnet`
@@ -83,14 +92,30 @@ export default async function Page({ params }: PageProps) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Bid window</CardTitle>
+            <CardTitle className="text-base">Lifecycle</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm">opens {formatTime(rfp.bid_open_at)}</p>
-            <p className="text-sm">closes {formatTime(rfp.bid_close_at)}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              reveal closes {formatTime(rfp.reveal_close_at)}
-            </p>
+          <CardContent className="flex flex-col gap-3 text-sm">
+            <div>
+              <p className="font-medium">1. Bidding</p>
+              <p className="text-xs text-muted-foreground">
+                Providers submit sealed bids during this window.
+              </p>
+              <p className="mt-1">
+                <LocalTime iso={rfp.bid_open_at} />
+                <br />→ <LocalTime iso={rfp.bid_close_at} />
+              </p>
+            </div>
+            <div className="border-t border-border pt-3">
+              <p className="font-medium">2. Reveal & select</p>
+              <p className="text-xs text-muted-foreground">
+                Buyer decrypts bids and picks a winner before this deadline. If no winner is
+                selected by then, the RFP expires.
+              </p>
+              <p className="mt-1">
+                <LocalTime iso={rfp.bid_close_at} />
+                <br />→ <LocalTime iso={rfp.reveal_close_at} />
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -162,14 +187,26 @@ export default async function Page({ params }: PageProps) {
         <CardHeader>
           <CardTitle className="text-base">Bids</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
             {rfp.bid_count} {rfp.bid_count === 1 ? 'bid' : 'bids'} committed.
           </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Provider bid composer ships next — once available, eligible providers can submit sealed
-            bids here.
-          </p>
+          {isOpenForBids && !isBuyer && (
+            <Link
+              href={`/rfps/${id}/bid`}
+              className="inline-flex h-9 w-fit items-center justify-center rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
+            >
+              {viewerHasBid ? 'Manage your bid' : 'Submit a sealed bid'}
+            </Link>
+          )}
+          {isBuyer && (
+            <p className="text-xs text-muted-foreground">
+              You posted this RFP. Bid review tools arrive when the reveal window opens.
+            </p>
+          )}
+          {!isOpenForBids && !isBuyer && (
+            <p className="text-xs text-muted-foreground">Bidding is closed for this RFP.</p>
+          )}
         </CardContent>
       </Card>
     </main>

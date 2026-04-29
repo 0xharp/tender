@@ -8,6 +8,7 @@
  */
 
 import type { RfpCategory } from '../constants.js';
+import type { BidStorageBackend } from './bid.js';
 import type { RfpStatus } from './rfp.js';
 
 // ---------------------------------------------------------------------------
@@ -82,6 +83,36 @@ export type RfpUpdate = Partial<
 >;
 
 // ---------------------------------------------------------------------------
+// bid_ciphertexts
+// ---------------------------------------------------------------------------
+
+export type BidCiphertextRow = {
+  id: string;
+  on_chain_pda: string;
+  rfp_id: string;
+  rfp_pda: string;
+  provider_wallet: string;
+  ciphertext: Uint8Array;
+  ephemeral_pubkey_hex: string;
+  commit_hash_hex: string;
+  storage_backend: BidStorageBackend;
+  per_session_id: string | null;
+  submitted_at: string;
+  // Encrypt-to-both: same plaintext, encrypted to provider's wallet-derived
+  // X25519 pubkey. Lets the provider decrypt their own bids back without the
+  // buyer. Nullable for legacy rows that pre-date the encrypt-to-both column.
+  provider_ciphertext: Uint8Array | null;
+  provider_ephemeral_pubkey_hex: string | null;
+};
+
+export type BidCiphertextInsert = Omit<BidCiphertextRow, 'id' | 'submitted_at'> & {
+  id?: string;
+  submitted_at?: string;
+};
+
+export type BidCiphertextUpdate = Partial<Omit<BidCiphertextRow, 'id' | 'on_chain_pda'>>;
+
+// ---------------------------------------------------------------------------
 // reputation_cache
 // ---------------------------------------------------------------------------
 
@@ -114,6 +145,12 @@ export type Database = {
         Row: RfpRow;
         Insert: RfpInsert;
         Update: RfpUpdate;
+        Relationships: [];
+      };
+      bid_ciphertexts: {
+        Row: BidCiphertextRow;
+        Insert: BidCiphertextInsert;
+        Update: BidCiphertextUpdate;
         Relationships: [];
       };
       reputation_cache: {
