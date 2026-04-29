@@ -2,10 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { LocalTime } from '@/components/local-time';
+import { SectionHeader } from '@/components/primitives/section-header';
+import { StatusPill } from '@/components/primitives/status-pill';
 import { BidComposer } from '@/components/rfp/bid-composer';
 import { ExistingBidGate } from '@/components/rfp/existing-bid-gate';
-import { Toaster } from '@/components/ui/sonner';
+import { buttonVariants } from '@/components/ui/button';
 import { getCurrentWallet } from '@/lib/auth/session';
+import { cn } from '@/lib/utils';
 import { serverSupabase } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +32,7 @@ export default async function Page({ params }: PageProps) {
   if (error) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <div className="rounded border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-xl border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
           Failed to load RFP: {error.message}
         </div>
       </main>
@@ -42,28 +45,30 @@ export default async function Page({ params }: PageProps) {
 
   if (isBuyer || !isOpen) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <header className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Bid not available</h1>
-        </header>
-        <div className="rounded border border-dashed border-border p-6 text-sm text-muted-foreground">
-          {isBuyer
-            ? 'You posted this RFP, so you cannot bid on it.'
-            : 'This RFP is no longer accepting bids (status is not Open or the bid window has closed).'}
-          <div className="mt-3">
-            <Link href={`/rfps/${id}`} className="font-medium text-foreground underline">
-              ← back to RFP
-            </Link>
-          </div>
-        </div>
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10">
+        <SectionHeader
+          eyebrow="Provider · bid"
+          title="Bid not available"
+          size="sm"
+          description={
+            isBuyer
+              ? 'You posted this RFP, so you cannot bid on it.'
+              : 'This RFP is no longer accepting bids — status is not Open or the bid window has closed.'
+          }
+        />
+        <Link
+          href={`/rfps/${id}`}
+          className={cn(
+            buttonVariants({ variant: 'outline', size: 'sm' }),
+            'w-fit gap-2 rounded-full px-4',
+          )}
+        >
+          ← Back to RFP
+        </Link>
       </main>
     );
   }
 
-  // Look up an existing bid by this signed-in provider (if any).
-  // BidCommit PDA seeds = ["bid", rfp_pda, provider_wallet] — so each (rfp,
-  // provider) pair has at most one bid on-chain. If the row exists, we
-  // route to the manage-bid view instead of the composer.
   let existingBid: {
     on_chain_pda: string;
     commit_hash_hex: string;
@@ -80,16 +85,18 @@ export default async function Page({ params }: PageProps) {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <header className="mb-6 flex flex-col gap-2">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          {existingBid ? 'provider / your bid' : 'provider / submit bid'}
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">{rfp.title}</h1>
-        <p className="text-xs text-muted-foreground">
-          Bidding closes <LocalTime iso={rfp.bid_close_at} />.
-        </p>
-      </header>
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
+      <SectionHeader
+        eyebrow={existingBid ? 'Provider · your bid' : 'Provider · submit bid'}
+        title={rfp.title}
+        size="sm"
+        description={
+          <>
+            Bidding closes <LocalTime iso={rfp.bid_close_at} />.
+          </>
+        }
+        actions={<StatusPill tone="sealed">sealed</StatusPill>}
+      />
 
       {existingBid && wallet ? (
         <ExistingBidGate
@@ -108,8 +115,6 @@ export default async function Page({ params }: PageProps) {
           milestoneCount={rfp.milestone_template.length}
         />
       )}
-
-      <Toaster />
     </main>
   );
 }

@@ -12,6 +12,9 @@ import { useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
+import { DataField } from '@/components/primitives/data-field';
+import { HashLink } from '@/components/primitives/hash-link';
+import { StatusPill } from '@/components/primitives/status-pill';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -134,56 +137,44 @@ function ConnectedComposer({
 
   if (success) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">✓ Sealed bid committed on-chain</CardTitle>
+      <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-card via-card to-primary/5">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-12 -right-12 size-44 rounded-full bg-primary/15 blur-3xl"
+        />
+        <CardHeader className="flex flex-row items-baseline justify-between gap-3">
+          <CardTitle className="text-base">Sealed bid committed</CardTitle>
+          <StatusPill tone="sealed">on-chain</StatusPill>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">
+        <CardContent className="flex flex-col gap-5">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             Your bid is encrypted to the buyer&rsquo;s pubkey and committed to devnet. Other
             providers see only the commit hash; only the buyer can decrypt your proposal at the
             reveal window.
           </p>
-          <div className="flex flex-col gap-2 rounded border border-dashed border-border p-3 font-mono text-xs">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-muted-foreground">bid PDA</span>
-              <Link
-                href={`https://solscan.io/account/${success.bidPda}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="break-all underline"
-              >
-                {success.bidPda.slice(0, 8)}…{success.bidPda.slice(-8)}
-              </Link>
-            </div>
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-muted-foreground">commit tx</span>
-              <Link
-                href={`https://solscan.io/tx/${success.txSignature}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="break-all underline"
-              >
-                {success.txSignature.slice(0, 8)}…{success.txSignature.slice(-8)}
-              </Link>
-            </div>
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-muted-foreground">commit hash</span>
-              <span className="break-all">{success.commitHashHex.slice(0, 16)}…</span>
-            </div>
+          <div className="flex flex-col gap-2.5 rounded-xl border border-dashed border-border/60 bg-card/40 p-4 backdrop-blur-sm">
+            <DataField label="bid PDA" value={<HashLink hash={success.bidPda} kind="account" />} />
+            <DataField
+              label="commit tx"
+              value={<HashLink hash={success.txSignature} kind="tx" />}
+            />
+            <DataField
+              label="commit hash"
+              value={<HashLink hash={success.commitHashHex} kind="none" visibleChars={8} />}
+            />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               href={`/rfps/${rfpPda}`}
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
+              className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-md shadow-primary/25 transition-colors hover:bg-primary/90"
             >
-              ← back to RFP
+              ← Back to RFP
             </Link>
             <Link
               href={`/providers/${account.address}`}
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-border px-4 text-sm font-medium transition-colors hover:bg-card"
+              className="inline-flex h-9 items-center justify-center rounded-full border border-border bg-card/60 px-4 text-sm font-medium transition-colors hover:bg-card"
             >
-              your provider profile
+              Your provider profile
             </Link>
           </div>
         </CardContent>
@@ -194,11 +185,12 @@ function ConnectedComposer({
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Sealed bid</CardTitle>
+        <CardHeader className="flex flex-row items-baseline justify-between gap-3">
+          <CardTitle className="text-base">Sealed bid</CardTitle>
+          <StatusPill tone="sealed">encrypt to buyer</StatusPill>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="rounded border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <div className="rounded-xl border border-dashed border-border/60 bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
             Your bid will be encrypted to the buyer&rsquo;s RFP-specific X25519 pubkey. Only the
             buyer can decrypt it. Other bidders see only your commit hash on-chain.
           </div>
@@ -317,8 +309,17 @@ function ConnectedComposer({
       </Card>
 
       <div className="flex items-center justify-end gap-3">
-        {stage && <span className="text-xs text-muted-foreground">{STAGE_LABEL[stage]}</span>}
-        <Button type="submit" disabled={submitting}>
+        {stage && (
+          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="size-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_8px] shadow-primary/60" />
+            {STAGE_LABEL[stage]}
+          </span>
+        )}
+        <Button
+          type="submit"
+          disabled={submitting}
+          className="h-10 rounded-full px-6 shadow-md shadow-primary/25"
+        >
           {submitting ? 'Submitting…' : 'Encrypt + commit bid'}
         </Button>
       </div>

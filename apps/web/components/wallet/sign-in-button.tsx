@@ -83,7 +83,11 @@ export function SignInButton({
 
   return (
     <div className="flex flex-col gap-2">
-      <Button onClick={handleSignIn} disabled={busy}>
+      <Button
+        onClick={handleSignIn}
+        disabled={busy}
+        className="h-10 w-full rounded-full px-6 shadow-md shadow-primary/25 sm:w-fit"
+      >
         {busy ? 'Signing in…' : 'Sign in with Solana'}
       </Button>
       {error && <p className="text-xs text-destructive">{error}</p>}

@@ -1,31 +1,44 @@
 'use client';
 
 import { useSelectedWalletAccount } from '@solana/react';
+import { LockKeyholeIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { ClientOnly } from '@/components/client-only';
+import { SectionHeader } from '@/components/primitives/section-header';
 import { SignInButton } from '@/components/wallet/sign-in-button';
 import { WalletPicker } from '@/components/wallet/wallet-picker';
+import { cn } from '@/lib/utils';
 
-/**
- * Full-page gate shown by `(app)/layout.tsx` when no session cookie exists.
- *
- * Step 1: connect a Solana wallet.
- * Step 2: sign the SIWS message → server verifies + sets session cookie.
- * After success, refresh the route — the layout's `getCurrentWallet()` now
- * returns a wallet and renders the actual app.
- */
 export function SignInGate() {
   return (
-    <main className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center gap-6 px-6 py-12">
-      <div className="flex flex-col gap-2 text-center">
-        <h1 className="text-2xl font-semibold">Sign in to Tender</h1>
-        <p className="text-sm text-muted-foreground">
-          Connect a Solana wallet, then sign a one-time message to authorize a session.
-        </p>
-      </div>
+    <main className="relative isolate mx-auto flex w-full max-w-xl flex-col gap-8 px-4 py-16 sm:px-6">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-20 left-1/2 -z-10 size-[420px] -translate-x-1/2 rounded-full bg-primary/15 blur-3xl"
+      />
 
-      <ClientOnly fallback={<p className="text-sm text-muted-foreground">Loading wallet…</p>}>
+      <SectionHeader
+        eyebrow="Authentication"
+        title={
+          <span className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary">
+              <LockKeyholeIcon className="size-4" />
+            </span>
+            Sign in to Tender
+          </span>
+        }
+        description="Connect a Solana wallet, then sign a one-time message to authorize a 24-hour session. No funds move."
+        size="sm"
+      />
+
+      <ClientOnly
+        fallback={
+          <div className="rounded-2xl border border-dashed border-border/60 p-6 text-sm text-muted-foreground">
+            Loading wallets…
+          </div>
+        }
+      >
         <GateInner />
       </ClientOnly>
     </main>
@@ -37,19 +50,62 @@ function GateInner() {
   const router = useRouter();
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-        <p className="text-xs uppercase tracking-widest text-muted-foreground">1. Connect wallet</p>
+    <div className="flex flex-col gap-4">
+      <Step n={1} title="Connect wallet" complete={!!account}>
         <WalletPicker />
-      </section>
-      {account && (
-        <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">
-            2. Sign in with Solana
-          </p>
+      </Step>
+
+      <Step n={2} title="Sign in with Solana" complete={false} dimmed={!account}>
+        {account ? (
           <SignInButton account={account} onSignedIn={() => router.refresh()} />
-        </section>
-      )}
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Pick a wallet above. The signature is local — no funds move.
+          </p>
+        )}
+      </Step>
     </div>
+  );
+}
+
+function Step({
+  n,
+  title,
+  complete,
+  dimmed,
+  children,
+}: {
+  n: number;
+  title: string;
+  complete?: boolean;
+  dimmed?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        'flex flex-col gap-3 rounded-2xl border p-5 backdrop-blur-sm transition-all',
+        dimmed
+          ? 'border-dashed border-border/40 bg-muted/20 opacity-70'
+          : 'border-border/60 bg-card/50',
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={cn(
+            'flex size-6 items-center justify-center rounded-full border font-mono text-[11px] tabular-nums transition-colors',
+            complete
+              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+              : 'border-border bg-card text-muted-foreground',
+          )}
+        >
+          {complete ? '✓' : n}
+        </span>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          {title}
+        </p>
+      </div>
+      {children}
+    </section>
   );
 }

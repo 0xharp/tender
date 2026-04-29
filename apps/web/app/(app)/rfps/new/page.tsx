@@ -1,21 +1,16 @@
+import { SectionHeader } from '@/components/primitives/section-header';
 import { RfpCreateForm } from '@/components/rfp/rfp-create-form';
-import { Toaster } from '@/components/ui/sonner';
 
 export default function Page() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <header className="mb-8 flex flex-col gap-2">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          buyer / new rfp
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">Post a request for proposal</h1>
-        <p className="text-sm text-muted-foreground">
-          Sealed bids encrypt to your wallet&rsquo;s derived keypair. Title + budget + windows go
-          on-chain; scope detail stays off-chain.
-        </p>
-      </header>
+    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
+      <SectionHeader
+        eyebrow="Buyer · new RFP"
+        title="Post a request for proposal"
+        description="Sealed bids encrypt to your wallet's derived keypair. Title, budget, and windows go on-chain; scope detail stays off-chain."
+        size="sm"
+      />
       <RfpCreateForm />
-      <Toaster />
     </main>
   );
 }

@@ -214,8 +214,17 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
       </Card>
 
       <div className="flex items-center justify-end gap-3">
-        {stage && <span className="text-xs text-muted-foreground">{STAGE_LABEL[stage]}</span>}
-        <Button type="submit" disabled={submitting}>
+        {stage && (
+          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="size-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_8px] shadow-primary/60" />
+            {STAGE_LABEL[stage]}
+          </span>
+        )}
+        <Button
+          type="submit"
+          disabled={submitting}
+          className="h-10 rounded-full px-6 shadow-md shadow-primary/25"
+        >
           {submitting ? 'Posting…' : 'Post RFP'}
         </Button>
       </div>

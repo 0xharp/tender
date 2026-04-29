@@ -1,9 +1,16 @@
+import { ArrowUpRightIcon, BoxIcon, CalendarRangeIcon, KeyRoundIcon } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { LocalTime } from '@/components/local-time';
+import { DataField } from '@/components/primitives/data-field';
+import { HashLink } from '@/components/primitives/hash-link';
+import { SectionHeader } from '@/components/primitives/section-header';
+import { type StatusTone, StatusPill } from '@/components/primitives/status-pill';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCurrentWallet } from '@/lib/auth/session';
+import { cn } from '@/lib/utils';
 import { serverSupabase } from '@/lib/supabase/server';
 import { TENDER_PROGRAM_ID } from '@tender/shared';
 
@@ -16,12 +23,18 @@ interface PageProps {
 function formatBudget(usdc: string): string {
   const n = Number(usdc);
   if (Number.isNaN(n)) return `${usdc} USDC`;
-  return `$${n.toLocaleString('en-US')} USDC`;
+  return `$${n.toLocaleString('en-US')}`;
+}
+
+function statusTone(status: string): StatusTone {
+  if (status === 'open') return 'open';
+  if (status === 'reveal') return 'reveal';
+  if (status === 'awarded') return 'awarded';
+  return 'closed';
 }
 
 export default async function Page({ params }: PageProps) {
   const { id } = await params;
-
   const [wallet, supabase] = await Promise.all([getCurrentWallet(), serverSupabase()]);
   const { data: rfp, error } = await supabase
     .from('rfps')
@@ -32,7 +45,7 @@ export default async function Page({ params }: PageProps) {
   if (error) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <div className="rounded border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-xl border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
           Failed to load RFP: {error.message}
         </div>
       </main>
@@ -44,7 +57,6 @@ export default async function Page({ params }: PageProps) {
   const isOpenForBids = rfp.status === 'open' && new Date(rfp.bid_close_at).getTime() > Date.now();
   const milestones = rfp.milestone_template;
 
-  // Check whether the signed-in viewer is a provider who has already bid on this RFP.
   let viewerHasBid = false;
   if (wallet && !isBuyer) {
     const { data: existing } = await supabase
@@ -55,88 +67,142 @@ export default async function Page({ params }: PageProps) {
       .maybeSingle();
     viewerHasBid = !!existing;
   }
-  const solscanRfp = `https://solscan.io/account/${rfp.on_chain_pda}?cluster=devnet`;
-  const solscanTx = rfp.tx_signature
-    ? `https://solscan.io/tx/${rfp.tx_signature}?cluster=devnet`
-    : null;
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10">
-      <header className="flex flex-col gap-2">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          {rfp.category.replace('_', ' ')} · {rfp.status}
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">{rfp.title}</h1>
-        <p className="font-mono text-xs text-muted-foreground">
-          buyer: {rfp.buyer_wallet.slice(0, 4)}…{rfp.buyer_wallet.slice(-4)}
-        </p>
-      </header>
+    <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
+      <SectionHeader
+        eyebrow={`RFP · ${rfp.category.replace(/_/g, ' ')}`}
+        title={rfp.title}
+        size="md"
+        actions={
+          <StatusPill tone={statusTone(rfp.status)}>{rfp.status}</StatusPill>
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Scope</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="whitespace-pre-wrap text-sm leading-6">{rfp.scope_summary}</p>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Budget cap</CardTitle>
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <Card className="overflow-hidden">
+          <CardHeader className="flex flex-row items-baseline justify-between gap-3">
+            <CardTitle className="text-base">Scope</CardTitle>
+            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+              buyer · <HashLink hash={rfp.buyer_wallet} kind="account" visibleChars={4} />
+            </span>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{formatBudget(rfp.budget_max_usdc)}</p>
+            <p className="whitespace-pre-wrap text-sm leading-7 text-foreground/90">
+              {rfp.scope_summary}
+            </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Lifecycle</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 text-sm">
-            <div>
-              <p className="font-medium">1. Bidding</p>
-              <p className="text-xs text-muted-foreground">
-                Providers submit sealed bids during this window.
+
+        <div className="flex flex-col gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <BoxIcon className="size-3.5" />
+                Budget cap
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="font-mono text-3xl font-semibold tabular-nums text-foreground">
+                {formatBudget(rfp.budget_max_usdc)}
+                <span className="ml-1.5 text-base font-normal text-muted-foreground">USDC</span>
               </p>
-              <p className="mt-1">
-                <LocalTime iso={rfp.bid_open_at} />
-                <br />→ <LocalTime iso={rfp.bid_close_at} />
+              <p className="mt-2 text-xs text-muted-foreground">
+                {rfp.bid_count} {rfp.bid_count === 1 ? 'sealed bid' : 'sealed bids'} committed
               </p>
-            </div>
-            <div className="border-t border-border pt-3">
-              <p className="font-medium">2. Reveal & select</p>
-              <p className="text-xs text-muted-foreground">
-                Buyer decrypts bids and picks a winner before this deadline. If no winner is
-                selected by then, the RFP expires.
-              </p>
-              <p className="mt-1">
-                <LocalTime iso={rfp.bid_close_at} />
-                <br />→ <LocalTime iso={rfp.reveal_close_at} />
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <CalendarRangeIcon className="size-3.5" />
+                Lifecycle
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <LifecycleStep
+                index={1}
+                title="Bidding"
+                description="Providers submit ECIES-encrypted bids."
+                from={rfp.bid_open_at}
+                to={rfp.bid_close_at}
+              />
+              <div className="border-t border-border" />
+              <LifecycleStep
+                index={2}
+                title="Reveal & select"
+                description="Buyer decrypts in browser, picks a winner."
+                from={rfp.bid_close_at}
+                to={rfp.reveal_close_at}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </section>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Milestones ({milestones.length})</CardTitle>
+        <CardHeader className="flex flex-row items-baseline justify-between">
+          <CardTitle className="text-base">Milestones</CardTitle>
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            {milestones.length} steps
+          </span>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {milestones.map((m, i) => (
             <div
               key={`${i}-${m.name}`}
-              className="flex items-start justify-between gap-4 rounded border border-dashed border-border p-3"
+              className="flex flex-col gap-2 rounded-xl border border-dashed border-border/60 bg-card/40 p-3 transition-colors hover:border-border hover:bg-card"
             >
-              <div>
+              <div className="flex items-baseline justify-between gap-2">
                 <p className="text-sm font-medium">{m.name}</p>
-                <p className="text-xs text-muted-foreground">{m.description}</p>
+                <span className="font-mono text-xs text-primary tabular-nums">{m.percentage}%</span>
               </div>
-              <span className="font-mono text-xs">{m.percentage}%</span>
+              <p className="text-xs leading-relaxed text-muted-foreground">{m.description}</p>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-card via-card to-primary/5">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-12 -right-8 size-40 rounded-full bg-primary/15 blur-3xl"
+        />
+        <CardHeader className="flex flex-row items-baseline justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <KeyRoundIcon className="size-4 text-primary" />
+              {isBuyer ? 'Your RFP' : isOpenForBids ? 'Submit a sealed bid' : 'Bidding closed'}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {isBuyer
+                ? 'Bid review opens when the reveal window starts. You will sign once to derive your RFP keypair and decrypt all bids in browser memory.'
+                : isOpenForBids
+                  ? 'Your bid is encrypted to the buyer’s pubkey before commit. Other providers see only a 32-byte hash.'
+                  : 'No new bids accepted. Reveal phase has begun or the RFP has expired.'}
+            </p>
+          </div>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between gap-4">
+          <div className="font-mono text-sm tabular-nums text-foreground">
+            {rfp.bid_count}{' '}
+            <span className="text-xs text-muted-foreground">
+              {rfp.bid_count === 1 ? 'committed' : 'committed'}
+            </span>
+          </div>
+          {isOpenForBids && !isBuyer && (
+            <Link
+              href={`/rfps/${id}/bid`}
+              className={cn(
+                buttonVariants({ size: 'lg' }),
+                'h-11 gap-2 rounded-full px-6 shadow-md shadow-primary/25',
+              )}
+            >
+              {viewerHasBid ? 'Manage your bid' : 'Submit sealed bid'}
+              <ArrowUpRightIcon className="size-3.5" />
+            </Link>
+          )}
         </CardContent>
       </Card>
 
@@ -144,71 +210,49 @@ export default async function Page({ params }: PageProps) {
         <CardHeader>
           <CardTitle className="text-base">On-chain references</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-sm">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="text-muted-foreground">RFP PDA</span>
-            <Link
-              href={solscanRfp}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-xs underline"
-            >
-              {rfp.on_chain_pda.slice(0, 8)}…{rfp.on_chain_pda.slice(-8)}
-            </Link>
-          </div>
-          {solscanTx && (
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-muted-foreground">create tx</span>
-              <Link
-                href={solscanTx}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-xs underline"
-              >
-                {rfp.tx_signature?.slice(0, 8)}…{rfp.tx_signature?.slice(-8)}
-              </Link>
-            </div>
-          )}
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="text-muted-foreground">program</span>
-            <Link
-              href={`https://solscan.io/account/${TENDER_PROGRAM_ID}?cluster=devnet`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-xs underline"
-            >
-              {TENDER_PROGRAM_ID.slice(0, 8)}…{TENDER_PROGRAM_ID.slice(-8)}
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Bids</CardTitle>
-        </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            {rfp.bid_count} {rfp.bid_count === 1 ? 'bid' : 'bids'} committed.
-          </p>
-          {isOpenForBids && !isBuyer && (
-            <Link
-              href={`/rfps/${id}/bid`}
-              className="inline-flex h-9 w-fit items-center justify-center rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
-            >
-              {viewerHasBid ? 'Manage your bid' : 'Submit a sealed bid'}
-            </Link>
+          <DataField label="RFP PDA" value={<HashLink hash={rfp.on_chain_pda} kind="account" />} />
+          {rfp.tx_signature && (
+            <DataField
+              label="create tx"
+              value={<HashLink hash={rfp.tx_signature} kind="tx" />}
+            />
           )}
-          {isBuyer && (
-            <p className="text-xs text-muted-foreground">
-              You posted this RFP. Bid review tools arrive when the reveal window opens.
-            </p>
-          )}
-          {!isOpenForBids && !isBuyer && (
-            <p className="text-xs text-muted-foreground">Bidding is closed for this RFP.</p>
-          )}
+          <DataField
+            label="program"
+            value={<HashLink hash={TENDER_PROGRAM_ID} kind="account" />}
+          />
         </CardContent>
       </Card>
     </main>
+  );
+}
+
+function LifecycleStep({
+  index,
+  title,
+  description,
+  from,
+  to,
+}: {
+  index: number;
+  title: string;
+  description: string;
+  from: string;
+  to: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="flex size-6 flex-shrink-0 items-center justify-center rounded-full border border-border bg-card font-mono text-[10px] tabular-nums text-muted-foreground">
+        {index}
+      </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="text-sm font-medium leading-tight">{title}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+          <LocalTime iso={from} /> → <LocalTime iso={to} />
+        </p>
+      </div>
+    </div>
   );
 }

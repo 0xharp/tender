@@ -2,12 +2,16 @@
 
 import { useWalletAccountTransactionSendingSigner } from '@solana/react';
 import type { UiWalletAccount } from '@wallet-standard/react';
+import { ArrowUpRightIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { LocalTime } from '@/components/local-time';
+import { DataField } from '@/components/primitives/data-field';
+import { HashLink } from '@/components/primitives/hash-link';
+import { StatusPill } from '@/components/primitives/status-pill';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { withdrawBid } from '@/lib/bids/withdraw-flow';
@@ -51,61 +55,46 @@ export function ExistingBidPanel(props: ExistingBidPanelProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="relative overflow-hidden border-primary/25 bg-gradient-to-br from-card via-card to-primary/5">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-12 -right-12 size-40 rounded-full bg-primary/15 blur-3xl"
+      />
+      <CardHeader className="flex flex-row items-baseline justify-between gap-3">
         <CardTitle className="text-base">You&rsquo;ve already bid on this RFP</CardTitle>
+        <StatusPill tone="sealed">sealed</StatusPill>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">
+      <CardContent className="flex flex-col gap-5">
+        <p className="text-sm leading-relaxed text-muted-foreground">
           Each provider can have one active bid per RFP. To submit a different proposal, withdraw
-          this one first and then re-bid.
+          this one first and re-bid.
         </p>
 
-        <div className="flex flex-col gap-2 rounded border border-dashed border-border p-3 font-mono text-xs">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="text-muted-foreground">bid PDA</span>
-            <Link
-              href={`https://solscan.io/account/${props.bidPda}?cluster=devnet`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="break-all underline"
-            >
-              {props.bidPda.slice(0, 8)}…{props.bidPda.slice(-8)}
-            </Link>
-          </div>
+        <div className="flex flex-col gap-2.5 rounded-xl border border-dashed border-border/60 bg-card/40 p-4 backdrop-blur-sm">
+          <DataField label="bid PDA" value={<HashLink hash={props.bidPda} kind="account" />} />
           {props.txSignature && (
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-muted-foreground">commit tx</span>
-              <Link
-                href={`https://solscan.io/tx/${props.txSignature}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="break-all underline"
-              >
-                {props.txSignature.slice(0, 8)}…{props.txSignature.slice(-8)}
-              </Link>
-            </div>
+            <DataField label="commit tx" value={<HashLink hash={props.txSignature} kind="tx" />} />
           )}
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="text-muted-foreground">commit hash</span>
-            <span className="break-all">{props.commitHashHex.slice(0, 16)}…</span>
-          </div>
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="text-muted-foreground">submitted</span>
-            <span>
-              <LocalTime iso={props.submittedAt} />
-            </span>
-          </div>
+          <DataField
+            label="commit hash"
+            value={<HashLink hash={props.commitHashHex} kind="none" visibleChars={8} />}
+          />
+          <DataField label="submitted" value={<LocalTime iso={props.submittedAt} />} mono={false} />
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Link
             href={`/providers/${props.account.address}`}
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-border px-4 text-sm font-medium transition-colors hover:bg-card"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-border bg-card/60 px-4 text-sm font-medium transition-colors hover:bg-card"
           >
-            View bid plaintext (your profile)
+            View bid plaintext (your profile) <ArrowUpRightIcon className="size-3.5" />
           </Link>
-          <Button variant="outline" disabled={withdrawing} onClick={handleWithdraw}>
+          <Button
+            variant="outline"
+            disabled={withdrawing}
+            onClick={handleWithdraw}
+            className="h-9 rounded-full border-border px-4"
+          >
             {withdrawing ? 'Withdrawing…' : 'Withdraw bid'}
           </Button>
         </div>

@@ -1,8 +1,10 @@
-import Link from 'next/link';
+import { TrendingUpIcon } from 'lucide-react';
 
+import { DataField } from '@/components/primitives/data-field';
+import { HashLink } from '@/components/primitives/hash-link';
+import { SectionHeader } from '@/components/primitives/section-header';
 import { ProviderBidsPanel } from '@/components/rfp/provider-bids-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Toaster } from '@/components/ui/sonner';
 import { serverSupabase } from '@/lib/supabase/server';
 import { TENDER_PROGRAM_ID } from '@tender/shared';
 
@@ -25,25 +27,34 @@ export default async function Page({ params }: PageProps) {
   ]);
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10">
-      <header className="flex flex-col gap-2">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          provider
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {profile?.display_name ?? 'Pseudonymous provider'}
-        </h1>
-        <p className="break-all font-mono text-xs text-muted-foreground">{wallet}</p>
-      </header>
+    <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
+      <SectionHeader
+        eyebrow="Provider"
+        title={profile?.display_name ?? 'Pseudonymous provider'}
+        description={
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <HashLink hash={wallet} kind="account" visibleChars={22} />
+          </span>
+        }
+        size="md"
+      />
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Reputation</CardTitle>
+        <CardHeader className="flex flex-row items-baseline justify-between gap-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TrendingUpIcon className="size-4 text-muted-foreground" />
+            Reputation
+          </CardTitle>
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            on-chain registry · ships next phase
+          </span>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            On-chain reputation registry ships next phase. Today this provider has{' '}
-            <span className="font-medium text-foreground">{count ?? 0}</span>{' '}
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Today this provider has{' '}
+            <span className="font-mono font-semibold tabular-nums text-foreground">
+              {count ?? 0}
+            </span>{' '}
             {count === 1 ? 'sealed bid' : 'sealed bids'} committed.
           </p>
         </CardContent>
@@ -55,27 +66,11 @@ export default async function Page({ params }: PageProps) {
         <CardHeader>
           <CardTitle className="text-base">On-chain</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-sm">
-          <Link
-            href={`https://solscan.io/account/${wallet}?cluster=devnet`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-xs underline"
-          >
-            wallet on Solscan ↗
-          </Link>
-          <Link
-            href={`https://solscan.io/account/${TENDER_PROGRAM_ID}?cluster=devnet`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-xs underline"
-          >
-            tender program ↗
-          </Link>
+        <CardContent className="flex flex-col gap-2.5">
+          <DataField label="wallet" value={<HashLink hash={wallet} kind="account" />} />
+          <DataField label="program" value={<HashLink hash={TENDER_PROGRAM_ID} kind="account" />} />
         </CardContent>
       </Card>
-
-      <Toaster />
     </main>
   );
 }
