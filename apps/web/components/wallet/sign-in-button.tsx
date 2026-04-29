@@ -7,9 +7,11 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 
+// Phantom is strict about SIWS message rendering: keep the statement plain
+// ASCII (no em-dash, no fancy punctuation) and short. See:
+// https://docs.phantom.app/solana/sign-in-with-solana
 const STATEMENT =
-  'Sign in to Tender — your wallet authorizes a 24-hour session for posting RFPs and bids. ' +
-  'This is NOT a transaction; no funds will move.';
+  'Sign in to Tender. This authorizes a 24-hour session. No funds will move.';
 
 function bytesToBase64(input: { length: number; [n: number]: number }): string {
   let binary = '';
@@ -38,6 +40,7 @@ export function SignInButton({
       const expirationTime = new Date(now.getTime() + 5 * 60_000);
       const input: Omit<SolanaSignInInput, 'address'> = {
         domain: window.location.host,
+        uri: window.location.origin,
         statement: STATEMENT,
         version: '1',
         chainId: 'solana:devnet',

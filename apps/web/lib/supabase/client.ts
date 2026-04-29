@@ -1,6 +1,6 @@
 'use client';
 
-import { createBrowserClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@tender/shared';
 
 import { publicSupabaseAnonKey, publicSupabaseUrl } from './env';
@@ -18,5 +18,11 @@ import { publicSupabaseAnonKey, publicSupabaseUrl } from './env';
  * to public data, anon-allowed writes (none in our schema).
  */
 export function browserSupabase() {
-  return createBrowserClient<Database>(publicSupabaseUrl(), publicSupabaseAnonKey());
+  return createClient<Database>(publicSupabaseUrl(), publicSupabaseAnonKey(), {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
 }
