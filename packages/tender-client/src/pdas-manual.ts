@@ -12,7 +12,7 @@ import {
   getProgramDerivedAddress,
 } from '@solana/kit';
 
-import { TENDER_PROGRAM_ADDRESS } from './generated/programs/tender.js';
+import { TENDER_PROGRAM_ADDRESS } from './generated/programs/tender';
 
 const addressEncoder = getAddressEncoder();
 const RFP_SEED = new Uint8Array([114, 102, 112]); // "rfp"

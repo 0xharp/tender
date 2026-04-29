@@ -1,9 +1,10 @@
 /**
  * Postgres schema types — mirrors supabase/migrations/0001_initial.sql.
  *
- * Hand-written rather than auto-generated to keep the package free of a
- * Supabase CLI dependency. When the schema changes, update both this file
- * and the migration in lockstep.
+ * Uses `type` (not `interface`) throughout so the shapes are structurally
+ * compatible with Supabase postgrest's `GenericTable` constraint
+ * (`Record<string, unknown>` for Row/Insert/Update). Interfaces would
+ * require an explicit index signature.
  */
 
 import type { RfpCategory } from '../constants.js';
@@ -13,7 +14,7 @@ import type { RfpStatus } from './rfp.js';
 // providers
 // ---------------------------------------------------------------------------
 
-export interface ProviderRow {
+export type ProviderRow = {
   wallet: string;
   display_name: string | null;
   bio: string | null;
@@ -24,7 +25,7 @@ export interface ProviderRow {
   kyb_attestation_uri: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
 export type ProviderInsert = Omit<ProviderRow, 'created_at' | 'updated_at'> & {
   created_at?: string;
@@ -37,13 +38,13 @@ export type ProviderUpdate = Partial<Omit<ProviderRow, 'wallet' | 'created_at'>>
 // rfps
 // ---------------------------------------------------------------------------
 
-export interface MilestoneTemplateEntry {
+export type MilestoneTemplateEntry = {
   name: string;
   description: string;
   percentage: number;
-}
+};
 
-export interface RfpRow {
+export type RfpRow = {
   id: string;
   on_chain_pda: string;
   buyer_wallet: string;
@@ -64,7 +65,7 @@ export interface RfpRow {
   tx_signature: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
 export type RfpInsert = Omit<
   RfpRow,
@@ -84,7 +85,7 @@ export type RfpUpdate = Partial<
 // reputation_cache
 // ---------------------------------------------------------------------------
 
-export interface ReputationCacheRow {
+export type ReputationCacheRow = {
   wallet: string;
   completed_engagements: number;
   disputed_engagements: number;
@@ -94,33 +95,36 @@ export interface ReputationCacheRow {
   categories: RfpCategory[];
   last_engagement_at: string | null;
   last_synced_at: string;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Database root — feed this to createClient<Database>()
 // ---------------------------------------------------------------------------
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       providers: {
         Row: ProviderRow;
         Insert: ProviderInsert;
         Update: ProviderUpdate;
+        Relationships: [];
       };
       rfps: {
         Row: RfpRow;
         Insert: RfpInsert;
         Update: RfpUpdate;
+        Relationships: [];
       };
       reputation_cache: {
         Row: ReputationCacheRow;
         Insert: ReputationCacheRow;
         Update: Partial<Omit<ReputationCacheRow, 'wallet'>>;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: Record<string, never>;
   };
-}
+};
