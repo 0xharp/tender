@@ -10,6 +10,8 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
+  getAddressDecoder,
+  getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getStructDecoder,
@@ -26,10 +28,11 @@ import {
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
-  type ReadonlySignerAccount,
+  type ReadonlyAccount,
   type ReadonlyUint8Array,
   type TransactionSigner,
   type WritableAccount,
+  type WritableSignerAccount,
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
@@ -48,30 +51,56 @@ export function getSelectBidDiscriminatorBytes(): ReadonlyUint8Array {
 export type SelectBidInstruction<
   TProgram extends string = typeof TENDER_PROGRAM_ADDRESS,
   TAccountBuyer extends string | AccountMeta<string> = string,
-  TAccountRfp extends string | AccountMeta<string> = string,
   TAccountBid extends string | AccountMeta<string> = string,
+  TAccountMagicProgram extends string | AccountMeta<string> =
+    "Magic11111111111111111111111111111111111111",
+  TAccountMagicContext extends string | AccountMeta<string> =
+    "MagicContext1111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
       TAccountBuyer extends string
-        ? ReadonlySignerAccount<TAccountBuyer> &
+        ? WritableSignerAccount<TAccountBuyer> &
             AccountSignerMeta<TAccountBuyer>
         : TAccountBuyer,
-      TAccountRfp extends string ? WritableAccount<TAccountRfp> : TAccountRfp,
       TAccountBid extends string ? WritableAccount<TAccountBid> : TAccountBid,
+      TAccountMagicProgram extends string
+        ? ReadonlyAccount<TAccountMagicProgram>
+        : TAccountMagicProgram,
+      TAccountMagicContext extends string
+        ? WritableAccount<TAccountMagicContext>
+        : TAccountMagicContext,
       ...TRemainingAccounts,
     ]
   >;
 
-export type SelectBidInstructionData = { discriminator: ReadonlyUint8Array };
+export type SelectBidInstructionData = {
+  discriminator: ReadonlyUint8Array;
+  /**
+   * The provider's wallet pubkey. Verified against `bid.provider_identity`.
+   * In L1, the buyer learns this by decrypting the buyer envelope after
+   * `open_reveal_window` adds them to the permission set.
+   */
+  providerWallet: Address;
+};
 
-export type SelectBidInstructionDataArgs = {};
+export type SelectBidInstructionDataArgs = {
+  /**
+   * The provider's wallet pubkey. Verified against `bid.provider_identity`.
+   * In L1, the buyer learns this by decrypting the buyer envelope after
+   * `open_reveal_window` adds them to the permission set.
+   */
+  providerWallet: Address;
+};
 
 export function getSelectBidInstructionDataEncoder(): FixedSizeEncoder<SelectBidInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
+    getStructEncoder([
+      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
+      ["providerWallet", getAddressEncoder()],
+    ]),
     (value) => ({ ...value, discriminator: SELECT_BID_DISCRIMINATOR }),
   );
 }
@@ -79,6 +108,7 @@ export function getSelectBidInstructionDataEncoder(): FixedSizeEncoder<SelectBid
 export function getSelectBidInstructionDataDecoder(): FixedSizeDecoder<SelectBidInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
+    ["providerWallet", getAddressDecoder()],
   ]);
 }
 
@@ -94,56 +124,84 @@ export function getSelectBidInstructionDataCodec(): FixedSizeCodec<
 
 export type SelectBidInput<
   TAccountBuyer extends string = string,
-  TAccountRfp extends string = string,
   TAccountBid extends string = string,
+  TAccountMagicProgram extends string = string,
+  TAccountMagicContext extends string = string,
 > = {
   buyer: TransactionSigner<TAccountBuyer>;
-  rfp: Address<TAccountRfp>;
   bid: Address<TAccountBid>;
+  magicProgram?: Address<TAccountMagicProgram>;
+  magicContext?: Address<TAccountMagicContext>;
+  providerWallet: SelectBidInstructionDataArgs["providerWallet"];
 };
 
 export function getSelectBidInstruction<
   TAccountBuyer extends string,
-  TAccountRfp extends string,
   TAccountBid extends string,
+  TAccountMagicProgram extends string,
+  TAccountMagicContext extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
-  input: SelectBidInput<TAccountBuyer, TAccountRfp, TAccountBid>,
+  input: SelectBidInput<
+    TAccountBuyer,
+    TAccountBid,
+    TAccountMagicProgram,
+    TAccountMagicContext
+  >,
   config?: { programAddress?: TProgramAddress },
 ): SelectBidInstruction<
   TProgramAddress,
   TAccountBuyer,
-  TAccountRfp,
-  TAccountBid
+  TAccountBid,
+  TAccountMagicProgram,
+  TAccountMagicContext
 > {
   // Program address.
   const programAddress = config?.programAddress ?? TENDER_PROGRAM_ADDRESS;
 
   // Original accounts.
   const originalAccounts = {
-    buyer: { value: input.buyer ?? null, isWritable: false },
-    rfp: { value: input.rfp ?? null, isWritable: true },
+    buyer: { value: input.buyer ?? null, isWritable: true },
     bid: { value: input.bid ?? null, isWritable: true },
+    magicProgram: { value: input.magicProgram ?? null, isWritable: false },
+    magicContext: { value: input.magicContext ?? null, isWritable: true },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
     ResolvedInstructionAccount
   >;
 
+  // Original args.
+  const args = { ...input };
+
+  // Resolve default values.
+  if (!accounts.magicProgram.value) {
+    accounts.magicProgram.value =
+      "Magic11111111111111111111111111111111111111" as Address<"Magic11111111111111111111111111111111111111">;
+  }
+  if (!accounts.magicContext.value) {
+    accounts.magicContext.value =
+      "MagicContext1111111111111111111111111111111" as Address<"MagicContext1111111111111111111111111111111">;
+  }
+
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
       getAccountMeta("buyer", accounts.buyer),
-      getAccountMeta("rfp", accounts.rfp),
       getAccountMeta("bid", accounts.bid),
+      getAccountMeta("magicProgram", accounts.magicProgram),
+      getAccountMeta("magicContext", accounts.magicContext),
     ],
-    data: getSelectBidInstructionDataEncoder().encode({}),
+    data: getSelectBidInstructionDataEncoder().encode(
+      args as SelectBidInstructionDataArgs,
+    ),
     programAddress,
   } as SelectBidInstruction<
     TProgramAddress,
     TAccountBuyer,
-    TAccountRfp,
-    TAccountBid
+    TAccountBid,
+    TAccountMagicProgram,
+    TAccountMagicContext
   >);
 }
 
@@ -154,8 +212,9 @@ export type ParsedSelectBidInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     buyer: TAccountMetas[0];
-    rfp: TAccountMetas[1];
-    bid: TAccountMetas[2];
+    bid: TAccountMetas[1];
+    magicProgram: TAccountMetas[2];
+    magicContext: TAccountMetas[3];
   };
   data: SelectBidInstructionData;
 };
@@ -168,12 +227,12 @@ export function parseSelectBidInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedSelectBidInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 3) {
+  if (instruction.accounts.length < 4) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 3,
+        expectedAccountMetas: 4,
       },
     );
   }
@@ -187,8 +246,9 @@ export function parseSelectBidInstruction<
     programAddress: instruction.programAddress,
     accounts: {
       buyer: getNextAccount(),
-      rfp: getNextAccount(),
       bid: getNextAccount(),
+      magicProgram: getNextAccount(),
+      magicContext: getNextAccount(),
     },
     data: getSelectBidInstructionDataDecoder().decode(instruction.data),
   };

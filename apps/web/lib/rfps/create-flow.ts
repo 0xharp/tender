@@ -32,14 +32,19 @@ import {
   signAndSendTransactionMessageWithSigners,
 } from '@solana/kit';
 import { USDC_DECIMALS } from '@tender/shared';
-import { findRfpPda, instructions } from '@tender/tender-client';
+import { findRfpPda, instructions, types } from '@tender/tender-client';
 
 import {
   type DerivedRfpKeypair,
   deriveRfpKeypair,
   deriveSeedMessage,
 } from '@/lib/crypto/derive-rfp-keypair';
-import type { RfpCategoryEnum, RfpCreatePayload, RfpFormValues } from '@/lib/rfps/schema';
+import type {
+  BidderVisibility,
+  RfpCategoryEnum,
+  RfpCreatePayload,
+  RfpFormValues,
+} from '@/lib/rfps/schema';
 
 const CATEGORY_ENUM_INDEX: Record<RfpCategoryEnum, number> = {
   audit: 0,
@@ -50,6 +55,10 @@ const CATEGORY_ENUM_INDEX: Record<RfpCategoryEnum, number> = {
   market_making: 5,
   other: 6,
 };
+
+function bidderVisibilityToOnChain(v: BidderVisibility): types.BidderVisibility {
+  return v === 'public' ? types.BidderVisibility.Public : types.BidderVisibility.BuyerOnly;
+}
 
 export function generateRfpNonce(): Uint8Array {
   const buf = new Uint8Array(8);
@@ -146,6 +155,7 @@ export async function submitRfpCreate({
     bidCloseAt,
     revealCloseAt,
     milestoneCount: values.milestone_count,
+    bidderVisibility: bidderVisibilityToOnChain(values.bidder_visibility),
   });
 
   // Step 4 — build + sign + send via wallet
@@ -170,19 +180,16 @@ export async function submitRfpCreate({
   await waitForSignatureConfirmed({ rpc, signature: txSignature });
   void sendAndConfirm; // keep import wired for tree-shaking — used in future ix flows
 
-  // Step 6 — POST metadata
+  // Step 6 — POST off-chain metadata (only the human-readable fields we don't
+  // put on-chain, plus rfp_nonce_hex for L1 bid seed derivation). Everything
+  // else lives on the on-chain Rfp account; clients enrich via
+  // lib/solana/chain-reads.ts.
   onProgress?.('saving_metadata');
   const payload: RfpCreatePayload = {
     on_chain_pda: rfpPda,
     rfp_nonce_hex: bytesToHex(rfpNonce),
-    buyer_encryption_pubkey_hex: bytesToHex(buyerKeypair.x25519PublicKey),
     title: values.title,
-    category: values.category,
     scope_summary: values.scope_summary,
-    budget_max_usdc: values.budget_max_usdc,
-    bid_open_at: new Date(Number(bidOpenAt) * 1000).toISOString(),
-    bid_close_at: new Date(Number(bidCloseAt) * 1000).toISOString(),
-    reveal_close_at: new Date(Number(revealCloseAt) * 1000).toISOString(),
     milestone_template: milestoneTemplate,
     tx_signature: txSignature,
   };
@@ -203,7 +210,7 @@ export async function submitRfpCreate({
   return {
     rfpPda,
     txSignature,
-    buyerEncryptionPubkeyHex: payload.buyer_encryption_pubkey_hex,
+    buyerEncryptionPubkeyHex: bytesToHex(buyerKeypair.x25519PublicKey),
     rfpNonceHex: payload.rfp_nonce_hex,
   };
 }

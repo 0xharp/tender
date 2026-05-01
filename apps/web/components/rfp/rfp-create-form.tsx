@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { friendlyBidError } from '@/lib/bids/error-utils';
 import { type SubmitStage, submitRfpCreate } from '@/lib/rfps/create-flow';
 import { RFP_CATEGORIES, type RfpFormValues, rfpFormSchema } from '@/lib/rfps/schema';
 import { rpc, rpcSubscriptions } from '@/lib/solana/client';
@@ -66,7 +67,8 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
   const [submitting, setSubmitting] = useState(false);
 
   const form = useForm<RfpFormValues>({
-    resolver: zodResolver(rfpFormSchema),
+    // biome-ignore lint/suspicious/noExplicitAny: zod default + react-hook-form Resolver type drift
+    resolver: zodResolver(rfpFormSchema) as any,
     defaultValues: {
       title: '',
       category: 'audit',
@@ -75,6 +77,7 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
       bid_window_hours: 72,
       reveal_window_hours: 48,
       milestone_count: 3,
+      bidder_visibility: 'public',
     },
   });
 
@@ -99,7 +102,7 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
       });
       router.push(`/rfps/${result.rfpPda}`);
     } catch (e) {
-      toast.error('RFP create failed', { description: (e as Error).message });
+      toast.error('RFP create failed', { description: friendlyBidError(e) });
     } finally {
       setSubmitting(false);
       setStage(null);
@@ -210,6 +213,68 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
               flow.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Privacy</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3 text-xs leading-relaxed">
+            <p className="font-medium text-foreground">
+              Bid contents are always sealed until the bid window closes — even from you.
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              This is enforced cryptographically by the MagicBlock TEE-backed validator, not by
+              policy.{' '}
+              <a
+                href="https://github.com/0xharp/tender/blob/main/docs/PRIVACY-MODEL.md"
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2 hover:text-primary"
+              >
+                Read the model →
+              </a>
+            </p>
+          </div>
+
+          <fieldset className="flex flex-col gap-2.5" aria-describedby="visibility-help">
+            <legend className="mb-1 text-sm font-medium">Bidder list visibility</legend>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card/40 p-3 transition-colors has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5">
+              <input
+                type="radio"
+                value="public"
+                {...form.register('bidder_visibility')}
+                className="mt-0.5 size-4 cursor-pointer accent-primary"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium">
+                  Public bidder list <span className="text-muted-foreground">(recommended)</span>
+                </span>
+                <span className="text-xs leading-relaxed text-muted-foreground">
+                  Anyone can see which providers bid on this RFP. Standard for most procurement;
+                  helps build vendor reputation visibility.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card/40 p-3 transition-colors has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5">
+              <input
+                type="radio"
+                value="buyer_only"
+                {...form.register('bidder_visibility')}
+                className="mt-0.5 size-4 cursor-pointer accent-primary"
+              />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium">Private bidder list</span>
+                <span className="text-xs leading-relaxed text-muted-foreground">
+                  Only you (the buyer) see who bid, and only after the window closes. Useful for
+                  sensitive RFPs where disclosing the bidder pool itself is competitive info. Bid
+                  contents remain sealed identically — this only controls identity.
+                </span>
+              </span>
+            </label>
+          </fieldset>
         </CardContent>
       </Card>
 

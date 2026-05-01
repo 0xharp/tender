@@ -19,6 +19,8 @@ pub enum TenderError {
     BidCommitHashMismatch,
     #[msg("Bid is not in a withdrawable state")]
     BidNotWithdrawable,
+    #[msg("Bid is not in the expected lifecycle state for this action")]
+    InvalidBidStatus,
 
     // Authorization
     #[msg("Signer is not the buyer")]
@@ -35,6 +37,20 @@ pub enum TenderError {
     UriTooLong,
     #[msg("Budget must be greater than zero")]
     InvalidBudget,
+    #[msg("Declared envelope size exceeds maximum")]
+    EnvelopeTooLarge,
+    #[msg("Declared envelope size must be > 0")]
+    EnvelopeEmpty,
+    #[msg("In Public mode, bid_pda_seed must equal the provider wallet bytes")]
+    InvalidBidSeedForPublicMode,
+
+    // Chunked write errors
+    #[msg("Chunk offset is out of bounds for the declared envelope size")]
+    ChunkOffsetOutOfBounds,
+    #[msg("Chunk would write past the declared envelope size")]
+    ChunkOverrun,
+    #[msg("Chunk targets an unknown envelope kind (must be 0 = buyer, 1 = provider)")]
+    InvalidEnvelopeKind,
 
     // Status transitions
     #[msg("RFP is not in a state that allows this action")]

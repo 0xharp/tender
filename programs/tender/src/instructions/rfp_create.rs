@@ -1,7 +1,9 @@
 use anchor_lang::prelude::*;
 
 use crate::errors::TenderError;
-use crate::state::{MAX_MILESTONE_COUNT, MIN_MILESTONE_COUNT, Rfp, RfpCreated, RfpStatus};
+use crate::state::{
+    BidderVisibility, MAX_MILESTONE_COUNT, MIN_MILESTONE_COUNT, Rfp, RfpCreated, RfpStatus,
+};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct RfpCreateArgs {
@@ -14,6 +16,7 @@ pub struct RfpCreateArgs {
     pub bid_close_at: i64,
     pub reveal_close_at: i64,
     pub milestone_count: u8,
+    pub bidder_visibility: BidderVisibility,
 }
 
 #[derive(Accounts)]
@@ -57,6 +60,7 @@ pub fn handler(ctx: Context<RfpCreate>, args: RfpCreateArgs) -> Result<()> {
     rfp.bid_close_at = args.bid_close_at;
     rfp.reveal_close_at = args.reveal_close_at;
     rfp.milestone_count = args.milestone_count;
+    rfp.bidder_visibility = args.bidder_visibility;
     rfp.status = RfpStatus::Open;
     rfp.winner = None;
     rfp.escrow_vault = Pubkey::default();
@@ -72,6 +76,7 @@ pub fn handler(ctx: Context<RfpCreate>, args: RfpCreateArgs) -> Result<()> {
         bid_close_at: rfp.bid_close_at,
         reveal_close_at: rfp.reveal_close_at,
         milestone_count: rfp.milestone_count,
+        bidder_visibility: rfp.bidder_visibility,
     });
 
     Ok(())

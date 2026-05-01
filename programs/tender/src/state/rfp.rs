@@ -15,6 +15,7 @@ pub struct Rfp {
     pub bid_close_at: i64,
     pub reveal_close_at: i64,
     pub milestone_count: u8,
+    pub bidder_visibility: BidderVisibility,
     pub status: RfpStatus,
     pub winner: Option<Pubkey>,
     pub escrow_vault: Pubkey,
@@ -35,6 +36,18 @@ pub enum RfpStatus {
     Cancelled,
 }
 
+/// Per-RFP bidder identity privacy level.
+/// See `docs/PRIVACY-MODEL.md` for the full rationale.
+#[derive(AnchorSerialize, AnchorDeserialize, InitSpace, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BidderVisibility {
+    /// L0 — anyone can enumerate which providers bid on this RFP.
+    /// `BidCommit` PDA seed includes the provider wallet; identity stored as `Plain(Pubkey)`.
+    Public,
+    /// L1 — only the buyer (after the bid window closes) can see who bid.
+    /// `BidCommit` PDA seed uses a provider-derived nonce; identity stored as `Hashed([u8; 32])`.
+    BuyerOnly,
+}
+
 #[event]
 pub struct RfpCreated {
     pub rfp: Pubkey,
@@ -44,6 +57,7 @@ pub struct RfpCreated {
     pub bid_close_at: i64,
     pub reveal_close_at: i64,
     pub milestone_count: u8,
+    pub bidder_visibility: BidderVisibility,
 }
 
 #[event]

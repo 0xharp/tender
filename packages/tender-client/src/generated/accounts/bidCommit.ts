@@ -29,8 +29,6 @@ import {
   getU32Encoder,
   getU8Decoder,
   getU8Encoder,
-  getUtf8Decoder,
-  getUtf8Encoder,
   transformEncoder,
   type Account,
   type Address,
@@ -47,8 +45,12 @@ import {
 import {
   getBidStatusDecoder,
   getBidStatusEncoder,
+  getProviderIdentityDecoder,
+  getProviderIdentityEncoder,
   type BidStatus,
   type BidStatusArgs,
+  type ProviderIdentity,
+  type ProviderIdentityArgs,
 } from "../types";
 
 export const BID_COMMIT_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -61,20 +63,92 @@ export function getBidCommitDiscriminatorBytes(): ReadonlyUint8Array {
 
 export type BidCommit = {
   discriminator: ReadonlyUint8Array;
+  /** The RFP this bid is for. */
   rfp: Address;
-  provider: Address;
+  /**
+   * Snapshot of the parent RFP's `buyer` at init time. Stored locally so the
+   * ER-side `open_reveal_window` ix can build the new permission set without
+   * having to read the base-layer Rfp account.
+   */
+  buyer: Address;
+  /**
+   * Snapshot of the parent RFP's `bid_close_at` at init time. Used by
+   * `open_reveal_window` to enforce the time gate without a base-layer read.
+   */
+  bidCloseAt: bigint;
+  /**
+   * PDA seed bytes used at init (`[b"bid", rfp, bid_pda_seed]`). In L0 mode
+   * equals `provider_wallet.to_bytes()`; in L1 mode equals
+   * `sha256(walletSig(BID_PDA_SEED_DOMAIN || rfp_nonce))`.
+   */
+  bidPdaSeed: ReadonlyUint8Array;
+  /** Provider identity binding — see `ProviderIdentity`. */
+  providerIdentity: ProviderIdentity;
+  /** `sha256(buyer_envelope || provider_envelope)`. Verified at `finalize_bid`. */
   commitHash: ReadonlyUint8Array;
-  ciphertextStorageUri: string;
+  /**
+   * Declared size of `buyer_envelope` at init. Used by `write_bid_chunk` to
+   * validate offsets and by `finalize_bid` to know the slice bounds.
+   */
+  buyerEnvelopeLen: number;
+  /** Declared size of `provider_envelope` at init. */
+  providerEnvelopeLen: number;
+  /**
+   * ECIES envelope encrypted to the buyer's RFP-specific X25519 pubkey.
+   * Populated by `write_bid_chunk` calls on the ER, sealed by `finalize_bid`.
+   */
+  buyerEnvelope: ReadonlyUint8Array;
+  /**
+   * ECIES envelope encrypted to the provider's per-wallet X25519 pubkey.
+   * Same flow as `buyer_envelope`.
+   */
+  providerEnvelope: ReadonlyUint8Array;
   submittedAt: bigint;
   status: BidStatus;
   bump: number;
 };
 
 export type BidCommitArgs = {
+  /** The RFP this bid is for. */
   rfp: Address;
-  provider: Address;
+  /**
+   * Snapshot of the parent RFP's `buyer` at init time. Stored locally so the
+   * ER-side `open_reveal_window` ix can build the new permission set without
+   * having to read the base-layer Rfp account.
+   */
+  buyer: Address;
+  /**
+   * Snapshot of the parent RFP's `bid_close_at` at init time. Used by
+   * `open_reveal_window` to enforce the time gate without a base-layer read.
+   */
+  bidCloseAt: number | bigint;
+  /**
+   * PDA seed bytes used at init (`[b"bid", rfp, bid_pda_seed]`). In L0 mode
+   * equals `provider_wallet.to_bytes()`; in L1 mode equals
+   * `sha256(walletSig(BID_PDA_SEED_DOMAIN || rfp_nonce))`.
+   */
+  bidPdaSeed: ReadonlyUint8Array;
+  /** Provider identity binding — see `ProviderIdentity`. */
+  providerIdentity: ProviderIdentityArgs;
+  /** `sha256(buyer_envelope || provider_envelope)`. Verified at `finalize_bid`. */
   commitHash: ReadonlyUint8Array;
-  ciphertextStorageUri: string;
+  /**
+   * Declared size of `buyer_envelope` at init. Used by `write_bid_chunk` to
+   * validate offsets and by `finalize_bid` to know the slice bounds.
+   */
+  buyerEnvelopeLen: number;
+  /** Declared size of `provider_envelope` at init. */
+  providerEnvelopeLen: number;
+  /**
+   * ECIES envelope encrypted to the buyer's RFP-specific X25519 pubkey.
+   * Populated by `write_bid_chunk` calls on the ER, sealed by `finalize_bid`.
+   */
+  buyerEnvelope: ReadonlyUint8Array;
+  /**
+   * ECIES envelope encrypted to the provider's per-wallet X25519 pubkey.
+   * Same flow as `buyer_envelope`.
+   */
+  providerEnvelope: ReadonlyUint8Array;
   submittedAt: number | bigint;
   status: BidStatusArgs;
   bump: number;
@@ -86,11 +160,20 @@ export function getBidCommitEncoder(): Encoder<BidCommitArgs> {
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["rfp", getAddressEncoder()],
-      ["provider", getAddressEncoder()],
+      ["buyer", getAddressEncoder()],
+      ["bidCloseAt", getI64Encoder()],
+      ["bidPdaSeed", fixEncoderSize(getBytesEncoder(), 32)],
+      ["providerIdentity", getProviderIdentityEncoder()],
       ["commitHash", fixEncoderSize(getBytesEncoder(), 32)],
+      ["buyerEnvelopeLen", getU32Encoder()],
+      ["providerEnvelopeLen", getU32Encoder()],
       [
-        "ciphertextStorageUri",
-        addEncoderSizePrefix(getUtf8Encoder(), getU32Encoder()),
+        "buyerEnvelope",
+        addEncoderSizePrefix(getBytesEncoder(), getU32Encoder()),
+      ],
+      [
+        "providerEnvelope",
+        addEncoderSizePrefix(getBytesEncoder(), getU32Encoder()),
       ],
       ["submittedAt", getI64Encoder()],
       ["status", getBidStatusEncoder()],
@@ -105,11 +188,17 @@ export function getBidCommitDecoder(): Decoder<BidCommit> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["rfp", getAddressDecoder()],
-    ["provider", getAddressDecoder()],
+    ["buyer", getAddressDecoder()],
+    ["bidCloseAt", getI64Decoder()],
+    ["bidPdaSeed", fixDecoderSize(getBytesDecoder(), 32)],
+    ["providerIdentity", getProviderIdentityDecoder()],
     ["commitHash", fixDecoderSize(getBytesDecoder(), 32)],
+    ["buyerEnvelopeLen", getU32Decoder()],
+    ["providerEnvelopeLen", getU32Decoder()],
+    ["buyerEnvelope", addDecoderSizePrefix(getBytesDecoder(), getU32Decoder())],
     [
-      "ciphertextStorageUri",
-      addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder()),
+      "providerEnvelope",
+      addDecoderSizePrefix(getBytesDecoder(), getU32Decoder()),
     ],
     ["submittedAt", getI64Decoder()],
     ["status", getBidStatusDecoder()],

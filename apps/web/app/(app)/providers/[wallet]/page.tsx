@@ -1,3 +1,6 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import bs58 from 'bs58';
+import { type Address } from '@solana/kit';
 import { TrendingUpIcon } from 'lucide-react';
 
 import { DataField } from '@/components/primitives/data-field';
@@ -5,6 +8,7 @@ import { HashLink } from '@/components/primitives/hash-link';
 import { SectionHeader } from '@/components/primitives/section-header';
 import { ProviderBidsPanel } from '@/components/rfp/provider-bids-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { listBids } from '@/lib/solana/chain-reads';
 import { serverSupabase } from '@/lib/supabase/server';
 import { TENDER_PROGRAM_ID } from '@tender/shared';
 
@@ -17,14 +21,19 @@ interface PageProps {
 export default async function Page({ params }: PageProps) {
   const { wallet } = await params;
   const supabase = await serverSupabase();
+  const walletAddr = wallet as Address;
+  const walletHash = sha256(bs58.decode(wallet));
 
-  const [{ data: profile }, { count }] = await Promise.all([
+  // Profile is off-chain (display name, bio). Bid count comes from on-chain
+  // (L0 + L1 are different program-account memcmp filters; merge by PDA).
+  const [{ data: profile }, l0Bids, l1Bids] = await Promise.all([
     supabase.from('providers').select('*').eq('wallet', wallet).maybeSingle(),
-    supabase
-      .from('bid_ciphertexts')
-      .select('id', { count: 'exact', head: true })
-      .eq('provider_wallet', wallet),
+    listBids({ providerWallet: walletAddr }),
+    listBids({ providerWalletHash: walletHash }),
   ]);
+  const dedup = new Set<string>();
+  for (const b of [...l0Bids, ...l1Bids]) dedup.add(b.address);
+  const count = dedup.size;
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">

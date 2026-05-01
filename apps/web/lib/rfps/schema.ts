@@ -23,22 +23,30 @@ export const RFP_CATEGORIES = [
 ] as const;
 export type RfpCategoryEnum = (typeof RFP_CATEGORIES)[number];
 
+export const bidderVisibilitySchema = z.enum(['public', 'buyer_only']);
+export type BidderVisibility = z.infer<typeof bidderVisibilitySchema>;
+
+/**
+ * Off-chain metadata payload (post-shrink). Everything else (windows, status,
+ * budget, buyer pubkey, category, visibility, etc.) lives on the on-chain
+ * Rfp account at `on_chain_pda` — clients enrich there. `rfp_nonce_hex` is
+ * kept off-chain because the on-chain Rfp account doesn't store it (only the
+ * PDA seed binds it) and L1 providers need the exact bytes to derive their
+ * bid_pda_seed.
+ */
 export const rfpCreatePayloadSchema = z.object({
   on_chain_pda: z.string().min(32).max(44),
   rfp_nonce_hex: z.string().regex(/^[0-9a-f]{16}$/),
-  buyer_encryption_pubkey_hex: z.string().regex(/^[0-9a-f]{64}$/),
   title: z.string().min(3).max(200),
-  category: z.enum(RFP_CATEGORIES),
   scope_summary: z.string().min(20).max(4000),
-  budget_max_usdc: z.string().regex(/^\d+(\.\d{1,6})?$/),
-  bid_open_at: isoDateTime,
-  bid_close_at: isoDateTime,
-  reveal_close_at: isoDateTime,
   milestone_template: z.array(milestoneTemplateEntrySchema).min(1).max(8),
   tx_signature: z.string().min(40).max(120),
 });
 
 export type RfpCreatePayload = z.infer<typeof rfpCreatePayloadSchema>;
+
+void isoDateTime; // kept as a re-export hook for future encrypted-scope flows
+void RFP_CATEGORIES; // ditto — category lives on-chain but we keep the enum for UI
 
 export const rfpFormSchema = z.object({
   title: z.string().min(3, 'At least 3 characters').max(200),
@@ -61,6 +69,7 @@ export const rfpFormSchema = z.object({
     .min(1, 'At least 1 hour')
     .max(24 * 14, 'At most 14 days'),
   milestone_count: z.number().int().min(1).max(8),
+  bidder_visibility: bidderVisibilitySchema.default('public'),
 });
 
 export type RfpFormValues = z.infer<typeof rfpFormSchema>;

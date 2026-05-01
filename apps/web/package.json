@@ -14,6 +14,7 @@
   "dependencies": {
     "@base-ui/react": "^1.4.1",
     "@hookform/resolvers": "^5.2.2",
+    "@magicblock-labs/ephemeral-rollups-kit": "0.12.0",
     "@noble/ciphers": "^2.2.0",
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
@@ -27,6 +28,7 @@
     "@tender/shared": "workspace:*",
     "@tender/tender-client": "workspace:*",
     "@wallet-standard/react": "^1.0.1",
+    "bs58": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "jose": "^6.2.3",

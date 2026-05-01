@@ -1,3 +1,6 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import bs58 from 'bs58';
+import { type Address } from '@solana/kit';
 import { ArrowUpRightIcon } from 'lucide-react';
 import Link from 'next/link';
 
@@ -6,32 +9,63 @@ import { Stagger, StaggerItem } from '@/components/motion/stagger';
 import { RfpCard } from '@/components/rfp/rfp-card';
 import { buttonVariants } from '@/components/ui/button';
 import { getCurrentWallet } from '@/lib/auth/session';
-import { cn } from '@/lib/utils';
+import {
+  bidderVisibilityToString,
+  listBids,
+  listRfps,
+  microUsdcToDecimal,
+  rfpStatusToString,
+  unixSecondsToIso,
+} from '@/lib/solana/chain-reads';
 import { serverSupabase } from '@/lib/supabase/server';
+import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardBuying() {
   const wallet = (await getCurrentWallet()) as string;
+  const walletAddr = wallet as Address;
+
+  // On-chain reads + supabase metadata join. listRfps with the buyer filter
+  // hits getProgramAccounts with a memcmp at offset 8 (buyer pubkey).
   const supabase = await serverSupabase();
+  const walletHash = sha256(bs58.decode(wallet));
+  const [chainRfps, l0Bids, l1Bids, metaResult] = await Promise.all([
+    listRfps({ buyer: walletAddr }),
+    listBids({ providerWallet: walletAddr }),
+    listBids({ providerWalletHash: walletHash }),
+    supabase
+      .from('rfps')
+      .select('on_chain_pda, title, scope_summary, milestone_template, created_at')
+      .order('created_at', { ascending: false }),
+  ]);
 
-  const { data: rfps, error } = await supabase
-    .from('rfps')
-    .select(
-      'on_chain_pda, title, category, scope_summary, budget_max_usdc, bid_close_at, bid_count, status',
-    )
-    .eq('buyer_wallet', wallet)
-    .order('created_at', { ascending: false });
+  const error = metaResult.error;
+  const metaByPda = new Map((metaResult.data ?? []).map((r) => [r.on_chain_pda, r]));
+  const bidsCount = l0Bids.length + l1Bids.length;
 
-  const { count: bidsCount } = await supabase
-    .from('bid_ciphertexts')
-    .select('*', { count: 'exact', head: true })
-    .eq('provider_wallet', wallet);
+  const rfps = chainRfps
+    .map(({ address, data }) => {
+      const meta = metaByPda.get(address);
+      if (!meta) return null;
+      return {
+        on_chain_pda: address,
+        title: meta.title,
+        category: 'engineering',
+        scope_summary: meta.scope_summary,
+        budget_max_usdc: microUsdcToDecimal(data.budgetMax),
+        bid_close_at: unixSecondsToIso(data.bidCloseAt),
+        bid_count: data.bidCount,
+        status: rfpStatusToString(data.status),
+        bidder_visibility: bidderVisibilityToString(data.bidderVisibility),
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r != null);
 
   const tabs = [
     { href: '/dashboard', label: 'Overview' },
-    { href: '/dashboard/buying', label: 'Buying', count: rfps?.length ?? 0 },
-    { href: '/dashboard/bidding', label: 'Bidding', count: bidsCount ?? 0 },
+    { href: '/dashboard/buying', label: 'Buying', count: rfps.length },
+    { href: '/dashboard/bidding', label: 'Bidding', count: bidsCount },
   ];
 
   return (
@@ -51,13 +85,13 @@ export default async function DashboardBuying() {
     >
       {error && (
         <div className="rounded-xl border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
-          Failed to load: {error.message}
+          Failed to load metadata: {error.message}
         </div>
       )}
 
-      {rfps && rfps.length === 0 && <EmptyBuying />}
+      {rfps.length === 0 && !error && <EmptyBuying />}
 
-      {rfps && rfps.length > 0 && (
+      {rfps.length > 0 && (
         <Stagger className="grid grid-cols-1 gap-4 md:grid-cols-2" step={0.05} delay={0.1}>
           {rfps.map((r) => (
             <StaggerItem key={r.on_chain_pda}>

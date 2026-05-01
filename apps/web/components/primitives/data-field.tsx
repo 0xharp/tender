@@ -1,10 +1,14 @@
+import { InfoIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export interface DataFieldProps {
   label: string;
   value: ReactNode;
+  /** Optional tooltip content shown on hover/focus of an info icon next to the label. */
+  hint?: ReactNode;
   /** Render label small-caps with letter-spacing (default true). */
   caps?: boolean;
   /** Render in mono with tabular-nums (default true). */
@@ -24,6 +28,7 @@ export interface DataFieldProps {
 export function DataField({
   label,
   value,
+  hint,
   caps = true,
   mono = true,
   layout = 'inline',
@@ -41,11 +46,30 @@ export function DataField({
     >
       <span
         className={cn(
-          'text-xs text-muted-foreground',
+          'inline-flex items-center gap-1 text-xs text-muted-foreground',
           caps && 'text-[10px] font-medium uppercase tracking-[0.14em]',
         )}
       >
         {label}
+        {hint && (
+          <Tooltip>
+            <TooltipTrigger
+              render={(props) => (
+                <button
+                  {...props}
+                  type="button"
+                  aria-label={`Info about ${label}`}
+                  className="inline-flex cursor-help items-center text-muted-foreground/60 transition-colors hover:text-foreground"
+                >
+                  <InfoIcon className="size-3" />
+                </button>
+              )}
+            />
+            <TooltipContent className="max-w-[260px] text-[11px] leading-relaxed">
+              {hint}
+            </TooltipContent>
+          </Tooltip>
+        )}
       </span>
       <span
         className={cn(

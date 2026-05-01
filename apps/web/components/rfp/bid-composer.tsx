@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   useSelectedWalletAccount,
   useSignMessage,
-  useWalletAccountTransactionSendingSigner,
+  useSignTransactions,
 } from '@solana/react';
 import type { UiWalletAccount } from '@wallet-standard/react';
 import Link from 'next/link';
@@ -20,25 +20,43 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { friendlyBidError } from '@/lib/bids/error-utils';
+import type { BidderVisibility } from '@/lib/bids/schema';
 import { type BidFormValues, bidFormSchema } from '@/lib/bids/schema';
 import { type BidSubmitStage, type SubmitBidResult, submitBid } from '@/lib/bids/submit-flow';
-import { rpc, rpcSubscriptions } from '@/lib/solana/client';
+import { rpc } from '@/lib/solana/client';
 
 const STAGE_LABEL: Record<BidSubmitStage, string> = {
   deriving_provider_key: 'Approve the derive-key signature in your wallet…',
+  deriving_bid_seed: 'Approve the private bid seed signature…',
   encrypting: 'Encrypting bid to buyer + provider pubkeys…',
-  building_tx: 'Building the on-chain transaction…',
-  awaiting_signature: 'Approve the transaction in your wallet…',
-  confirming_tx: 'Waiting for devnet confirmation…',
-  saving_metadata: 'Saving sealed bid…',
+  authenticating_er: 'Authenticating with the MagicBlock TEE rollup…',
+  building_txs: 'Building all transactions for batched signing…',
+  awaiting_signature: 'Approve all transactions in your wallet (single popup)…',
+  submitting_init: 'Submitting init + delegation transaction…',
+  awaiting_delegation: 'Waiting for the bid to land on the private rollup…',
+  writing_chunks: 'Writing encrypted bid chunks to the rollup…',
+  finalizing: 'Sealing the bid (sha256 verification)…',
+  saving_metadata: 'Saving bid index entry…',
 };
 
 export interface BidComposerProps {
   rfpId: string;
   rfpPda: string;
+  rfpNonceHex: string;
+  bidderVisibility: BidderVisibility;
   buyerEncryptionPubkeyHex: string;
   budgetMaxUsdc: string;
   milestoneCount: number;
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0) throw new Error('odd-length hex');
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
 }
 
 export function BidComposer(props: BidComposerProps) {
@@ -77,11 +95,13 @@ function ConnectedComposer({
   account,
   rfpId,
   rfpPda,
+  rfpNonceHex,
+  bidderVisibility,
   buyerEncryptionPubkeyHex,
   budgetMaxUsdc,
   milestoneCount,
 }: { account: UiWalletAccount } & BidComposerProps) {
-  const sendingSigner = useWalletAccountTransactionSendingSigner(account, 'solana:devnet');
+  const signTransactions = useSignTransactions(account, 'solana:devnet');
   const signMessage = useSignMessage(account);
   const [stage, setStage] = useState<BidSubmitStage | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -109,26 +129,31 @@ function ConnectedComposer({
     try {
       const result = await submitBid({
         rfpId,
-        // biome-ignore lint/suspicious/noExplicitAny: kit Address is brand-only conversion
+        // biome-ignore lint/suspicious/noExplicitAny: kit Address brand
         rfpPda: rfpPda as any,
+        rfpNonce: hexToBytes(rfpNonceHex),
+        bidderVisibility,
         buyerEncryptionPubkeyHex,
         values,
-        // biome-ignore lint/suspicious/noExplicitAny: same
+        // biome-ignore lint/suspicious/noExplicitAny: kit Address brand
         providerWallet: account.address as any,
-        // biome-ignore lint/suspicious/noExplicitAny: kit signer type narrows at hook call site
+        // biome-ignore lint/suspicious/noExplicitAny: kit signer narrowing at hook call site
         signMessage: signMessage as any,
-        sendingSigner,
+        // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook return shape
+        signTransactions: signTransactions as any,
         rpc,
-        rpcSubscriptions,
         onProgress: setStage,
       });
       setSuccess(result);
       toast.success('Sealed bid committed', {
-        description: `tx ${result.txSignature.slice(0, 8)}…`,
+        description: `init ${result.initTxSignature.slice(0, 8)}… · finalize ${result.finalizeTxSignature.slice(0, 8)}…`,
         duration: 8000,
       });
     } catch (e) {
-      toast.error('Bid commit failed', { description: (e as Error).message, duration: 12000 });
+      toast.error('Bid commit failed', {
+        description: friendlyBidError(e),
+        duration: 12000,
+      });
     } finally {
       setSubmitting(false);
       setStage(null);
@@ -155,11 +180,16 @@ function ConnectedComposer({
           <div className="flex flex-col gap-2.5 rounded-xl border border-dashed border-border/60 bg-card/40 p-4 backdrop-blur-sm">
             <DataField label="bid PDA" value={<HashLink hash={success.bidPda} kind="account" />} />
             <DataField
-              label="commit tx"
-              value={<HashLink hash={success.txSignature} kind="tx" />}
+              label="init tx"
+              value={<HashLink hash={success.initTxSignature} kind="tx" />}
+            />
+            <DataField
+              label="finalize tx"
+              value={<HashLink hash={success.finalizeTxSignature} kind="tx" />}
             />
             <DataField
               label="commit hash"
+              hint="sha256 of your encrypted bid envelopes (buyer + provider). Stored on the BidCommit account; verified by finalize_bid against the bytes you wrote. If anyone tampers with the envelopes on PER, the hash check fails."
               value={<HashLink hash={success.commitHashHex} kind="none" visibleChars={8} />}
             />
           </div>

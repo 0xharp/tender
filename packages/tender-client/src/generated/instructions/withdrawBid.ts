@@ -26,6 +26,7 @@ import {
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
+  type ReadonlyAccount,
   type ReadonlyUint8Array,
   type TransactionSigner,
   type WritableAccount,
@@ -36,7 +37,7 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { findBidPda } from "../pdas";
+import { findPermissionPda } from "../pdas";
 import { TENDER_PROGRAM_ADDRESS } from "../programs";
 
 export const WITHDRAW_BID_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -52,8 +53,14 @@ export function getWithdrawBidDiscriminatorBytes(): ReadonlyUint8Array {
 export type WithdrawBidInstruction<
   TProgram extends string = typeof TENDER_PROGRAM_ADDRESS,
   TAccountProvider extends string | AccountMeta<string> = string,
-  TAccountRfp extends string | AccountMeta<string> = string,
   TAccountBid extends string | AccountMeta<string> = string,
+  TAccountPermission extends string | AccountMeta<string> = string,
+  TAccountPermissionProgram extends string | AccountMeta<string> =
+    "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1",
+  TAccountMagicProgram extends string | AccountMeta<string> =
+    "Magic11111111111111111111111111111111111111",
+  TAccountMagicContext extends string | AccountMeta<string> =
+    "MagicContext1111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -63,8 +70,19 @@ export type WithdrawBidInstruction<
         ? WritableSignerAccount<TAccountProvider> &
             AccountSignerMeta<TAccountProvider>
         : TAccountProvider,
-      TAccountRfp extends string ? WritableAccount<TAccountRfp> : TAccountRfp,
       TAccountBid extends string ? WritableAccount<TAccountBid> : TAccountBid,
+      TAccountPermission extends string
+        ? WritableAccount<TAccountPermission>
+        : TAccountPermission,
+      TAccountPermissionProgram extends string
+        ? ReadonlyAccount<TAccountPermissionProgram>
+        : TAccountPermissionProgram,
+      TAccountMagicProgram extends string
+        ? ReadonlyAccount<TAccountMagicProgram>
+        : TAccountMagicProgram,
+      TAccountMagicContext extends string
+        ? WritableAccount<TAccountMagicContext>
+        : TAccountMagicContext,
       ...TRemainingAccounts,
     ]
   >;
@@ -98,28 +116,47 @@ export function getWithdrawBidInstructionDataCodec(): FixedSizeCodec<
 
 export type WithdrawBidAsyncInput<
   TAccountProvider extends string = string,
-  TAccountRfp extends string = string,
   TAccountBid extends string = string,
+  TAccountPermission extends string = string,
+  TAccountPermissionProgram extends string = string,
+  TAccountMagicProgram extends string = string,
+  TAccountMagicContext extends string = string,
 > = {
   provider: TransactionSigner<TAccountProvider>;
-  rfp: Address<TAccountRfp>;
-  bid?: Address<TAccountBid>;
+  bid: Address<TAccountBid>;
+  permission?: Address<TAccountPermission>;
+  permissionProgram?: Address<TAccountPermissionProgram>;
+  magicProgram?: Address<TAccountMagicProgram>;
+  magicContext?: Address<TAccountMagicContext>;
 };
 
 export async function getWithdrawBidInstructionAsync<
   TAccountProvider extends string,
-  TAccountRfp extends string,
   TAccountBid extends string,
+  TAccountPermission extends string,
+  TAccountPermissionProgram extends string,
+  TAccountMagicProgram extends string,
+  TAccountMagicContext extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
-  input: WithdrawBidAsyncInput<TAccountProvider, TAccountRfp, TAccountBid>,
+  input: WithdrawBidAsyncInput<
+    TAccountProvider,
+    TAccountBid,
+    TAccountPermission,
+    TAccountPermissionProgram,
+    TAccountMagicProgram,
+    TAccountMagicContext
+  >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
   WithdrawBidInstruction<
     TProgramAddress,
     TAccountProvider,
-    TAccountRfp,
-    TAccountBid
+    TAccountBid,
+    TAccountPermission,
+    TAccountPermissionProgram,
+    TAccountMagicProgram,
+    TAccountMagicContext
   >
 > {
   // Program address.
@@ -128,8 +165,14 @@ export async function getWithdrawBidInstructionAsync<
   // Original accounts.
   const originalAccounts = {
     provider: { value: input.provider ?? null, isWritable: true },
-    rfp: { value: input.rfp ?? null, isWritable: true },
     bid: { value: input.bid ?? null, isWritable: true },
+    permission: { value: input.permission ?? null, isWritable: true },
+    permissionProgram: {
+      value: input.permissionProgram ?? null,
+      isWritable: false,
+    },
+    magicProgram: { value: input.magicProgram ?? null, isWritable: false },
+    magicContext: { value: input.magicContext ?? null, isWritable: true },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -137,56 +180,89 @@ export async function getWithdrawBidInstructionAsync<
   >;
 
   // Resolve default values.
-  if (!accounts.bid.value) {
-    accounts.bid.value = await findBidPda({
-      rfp: getAddressFromResolvedInstructionAccount("rfp", accounts.rfp.value),
-      provider: getAddressFromResolvedInstructionAccount(
-        "provider",
-        accounts.provider.value,
-      ),
+  if (!accounts.permission.value) {
+    accounts.permission.value = await findPermissionPda({
+      bid: getAddressFromResolvedInstructionAccount("bid", accounts.bid.value),
     });
+  }
+  if (!accounts.permissionProgram.value) {
+    accounts.permissionProgram.value =
+      "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1" as Address<"ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1">;
+  }
+  if (!accounts.magicProgram.value) {
+    accounts.magicProgram.value =
+      "Magic11111111111111111111111111111111111111" as Address<"Magic11111111111111111111111111111111111111">;
+  }
+  if (!accounts.magicContext.value) {
+    accounts.magicContext.value =
+      "MagicContext1111111111111111111111111111111" as Address<"MagicContext1111111111111111111111111111111">;
   }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
       getAccountMeta("provider", accounts.provider),
-      getAccountMeta("rfp", accounts.rfp),
       getAccountMeta("bid", accounts.bid),
+      getAccountMeta("permission", accounts.permission),
+      getAccountMeta("permissionProgram", accounts.permissionProgram),
+      getAccountMeta("magicProgram", accounts.magicProgram),
+      getAccountMeta("magicContext", accounts.magicContext),
     ],
     data: getWithdrawBidInstructionDataEncoder().encode({}),
     programAddress,
   } as WithdrawBidInstruction<
     TProgramAddress,
     TAccountProvider,
-    TAccountRfp,
-    TAccountBid
+    TAccountBid,
+    TAccountPermission,
+    TAccountPermissionProgram,
+    TAccountMagicProgram,
+    TAccountMagicContext
   >);
 }
 
 export type WithdrawBidInput<
   TAccountProvider extends string = string,
-  TAccountRfp extends string = string,
   TAccountBid extends string = string,
+  TAccountPermission extends string = string,
+  TAccountPermissionProgram extends string = string,
+  TAccountMagicProgram extends string = string,
+  TAccountMagicContext extends string = string,
 > = {
   provider: TransactionSigner<TAccountProvider>;
-  rfp: Address<TAccountRfp>;
   bid: Address<TAccountBid>;
+  permission: Address<TAccountPermission>;
+  permissionProgram?: Address<TAccountPermissionProgram>;
+  magicProgram?: Address<TAccountMagicProgram>;
+  magicContext?: Address<TAccountMagicContext>;
 };
 
 export function getWithdrawBidInstruction<
   TAccountProvider extends string,
-  TAccountRfp extends string,
   TAccountBid extends string,
+  TAccountPermission extends string,
+  TAccountPermissionProgram extends string,
+  TAccountMagicProgram extends string,
+  TAccountMagicContext extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
-  input: WithdrawBidInput<TAccountProvider, TAccountRfp, TAccountBid>,
+  input: WithdrawBidInput<
+    TAccountProvider,
+    TAccountBid,
+    TAccountPermission,
+    TAccountPermissionProgram,
+    TAccountMagicProgram,
+    TAccountMagicContext
+  >,
   config?: { programAddress?: TProgramAddress },
 ): WithdrawBidInstruction<
   TProgramAddress,
   TAccountProvider,
-  TAccountRfp,
-  TAccountBid
+  TAccountBid,
+  TAccountPermission,
+  TAccountPermissionProgram,
+  TAccountMagicProgram,
+  TAccountMagicContext
 > {
   // Program address.
   const programAddress = config?.programAddress ?? TENDER_PROGRAM_ADDRESS;
@@ -194,28 +270,54 @@ export function getWithdrawBidInstruction<
   // Original accounts.
   const originalAccounts = {
     provider: { value: input.provider ?? null, isWritable: true },
-    rfp: { value: input.rfp ?? null, isWritable: true },
     bid: { value: input.bid ?? null, isWritable: true },
+    permission: { value: input.permission ?? null, isWritable: true },
+    permissionProgram: {
+      value: input.permissionProgram ?? null,
+      isWritable: false,
+    },
+    magicProgram: { value: input.magicProgram ?? null, isWritable: false },
+    magicContext: { value: input.magicContext ?? null, isWritable: true },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
     ResolvedInstructionAccount
   >;
 
+  // Resolve default values.
+  if (!accounts.permissionProgram.value) {
+    accounts.permissionProgram.value =
+      "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1" as Address<"ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1">;
+  }
+  if (!accounts.magicProgram.value) {
+    accounts.magicProgram.value =
+      "Magic11111111111111111111111111111111111111" as Address<"Magic11111111111111111111111111111111111111">;
+  }
+  if (!accounts.magicContext.value) {
+    accounts.magicContext.value =
+      "MagicContext1111111111111111111111111111111" as Address<"MagicContext1111111111111111111111111111111">;
+  }
+
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
       getAccountMeta("provider", accounts.provider),
-      getAccountMeta("rfp", accounts.rfp),
       getAccountMeta("bid", accounts.bid),
+      getAccountMeta("permission", accounts.permission),
+      getAccountMeta("permissionProgram", accounts.permissionProgram),
+      getAccountMeta("magicProgram", accounts.magicProgram),
+      getAccountMeta("magicContext", accounts.magicContext),
     ],
     data: getWithdrawBidInstructionDataEncoder().encode({}),
     programAddress,
   } as WithdrawBidInstruction<
     TProgramAddress,
     TAccountProvider,
-    TAccountRfp,
-    TAccountBid
+    TAccountBid,
+    TAccountPermission,
+    TAccountPermissionProgram,
+    TAccountMagicProgram,
+    TAccountMagicContext
   >);
 }
 
@@ -226,8 +328,11 @@ export type ParsedWithdrawBidInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     provider: TAccountMetas[0];
-    rfp: TAccountMetas[1];
-    bid: TAccountMetas[2];
+    bid: TAccountMetas[1];
+    permission: TAccountMetas[2];
+    permissionProgram: TAccountMetas[3];
+    magicProgram: TAccountMetas[4];
+    magicContext: TAccountMetas[5];
   };
   data: WithdrawBidInstructionData;
 };
@@ -240,12 +345,12 @@ export function parseWithdrawBidInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedWithdrawBidInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 3) {
+  if (instruction.accounts.length < 6) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 3,
+        expectedAccountMetas: 6,
       },
     );
   }
@@ -259,8 +364,11 @@ export function parseWithdrawBidInstruction<
     programAddress: instruction.programAddress,
     accounts: {
       provider: getNextAccount(),
-      rfp: getNextAccount(),
       bid: getNextAccount(),
+      permission: getNextAccount(),
+      permissionProgram: getNextAccount(),
+      magicProgram: getNextAccount(),
+      magicContext: getNextAccount(),
     },
     data: getWithdrawBidInstructionDataDecoder().decode(instruction.data),
   };

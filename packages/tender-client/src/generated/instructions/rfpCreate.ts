@@ -43,6 +43,12 @@ import {
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import { TENDER_PROGRAM_ADDRESS } from "../programs";
+import {
+  getBidderVisibilityDecoder,
+  getBidderVisibilityEncoder,
+  type BidderVisibility,
+  type BidderVisibilityArgs,
+} from "../types";
 
 export const RFP_CREATE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
   22, 47, 2, 221, 48, 134, 28, 16,
@@ -86,6 +92,7 @@ export type RfpCreateInstructionData = {
   bidCloseAt: bigint;
   revealCloseAt: bigint;
   milestoneCount: number;
+  bidderVisibility: BidderVisibility;
 };
 
 export type RfpCreateInstructionDataArgs = {
@@ -98,6 +105,7 @@ export type RfpCreateInstructionDataArgs = {
   bidCloseAt: number | bigint;
   revealCloseAt: number | bigint;
   milestoneCount: number;
+  bidderVisibility: BidderVisibilityArgs;
 };
 
 export function getRfpCreateInstructionDataEncoder(): FixedSizeEncoder<RfpCreateInstructionDataArgs> {
@@ -113,6 +121,7 @@ export function getRfpCreateInstructionDataEncoder(): FixedSizeEncoder<RfpCreate
       ["bidCloseAt", getI64Encoder()],
       ["revealCloseAt", getI64Encoder()],
       ["milestoneCount", getU8Encoder()],
+      ["bidderVisibility", getBidderVisibilityEncoder()],
     ]),
     (value) => ({ ...value, discriminator: RFP_CREATE_DISCRIMINATOR }),
   );
@@ -130,6 +139,7 @@ export function getRfpCreateInstructionDataDecoder(): FixedSizeDecoder<RfpCreate
     ["bidCloseAt", getI64Decoder()],
     ["revealCloseAt", getI64Decoder()],
     ["milestoneCount", getU8Decoder()],
+    ["bidderVisibility", getBidderVisibilityDecoder()],
   ]);
 }
 
@@ -160,6 +170,7 @@ export type RfpCreateInput<
   bidCloseAt: RfpCreateInstructionDataArgs["bidCloseAt"];
   revealCloseAt: RfpCreateInstructionDataArgs["revealCloseAt"];
   milestoneCount: RfpCreateInstructionDataArgs["milestoneCount"];
+  bidderVisibility: RfpCreateInstructionDataArgs["bidderVisibility"];
 };
 
 export function getRfpCreateInstruction<

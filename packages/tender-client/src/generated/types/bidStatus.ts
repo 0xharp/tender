@@ -16,10 +16,9 @@ import {
 } from "@solana/kit";
 
 export enum BidStatus {
+  Initializing,
   Committed,
-  Revealed,
   Selected,
-  Rejected,
   Withdrawn,
   Expired,
 }

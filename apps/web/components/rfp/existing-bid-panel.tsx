@@ -1,6 +1,6 @@
 'use client';
 
-import { useWalletAccountTransactionSendingSigner } from '@solana/react';
+import { useSignMessage, useSignTransactions } from '@solana/react';
 import type { UiWalletAccount } from '@wallet-standard/react';
 import { ArrowUpRightIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -14,6 +14,7 @@ import { HashLink } from '@/components/primitives/hash-link';
 import { StatusPill } from '@/components/primitives/status-pill';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { friendlyBidError } from '@/lib/bids/error-utils';
 import { withdrawBid } from '@/lib/bids/withdraw-flow';
 import { rpc } from '@/lib/solana/client';
 
@@ -27,7 +28,10 @@ export interface ExistingBidPanelProps {
 }
 
 export function ExistingBidPanel(props: ExistingBidPanelProps) {
-  const sendingSigner = useWalletAccountTransactionSendingSigner(props.account, 'solana:devnet');
+  // Batched sign — withdraw-flow now needs two txs (ER undelegate + base-layer
+  // close) signed in one popup, then dispatched to different RPCs.
+  const signTransactions = useSignTransactions(props.account, 'solana:devnet');
+  const signMessage = useSignMessage(props.account);
   const router = useRouter();
   const [withdrawing, setWithdrawing] = useState(false);
 
@@ -36,9 +40,15 @@ export function ExistingBidPanel(props: ExistingBidPanelProps) {
     try {
       const result = await withdrawBid({
         // biome-ignore lint/suspicious/noExplicitAny: kit Address brand
+        bidPda: props.bidPda as any,
+        // biome-ignore lint/suspicious/noExplicitAny: kit Address brand
         rfpPda: props.rfpPda as any,
-        bidPda: props.bidPda,
-        sendingSigner,
+        // biome-ignore lint/suspicious/noExplicitAny: kit Address brand
+        providerWallet: props.account.address as any,
+        // biome-ignore lint/suspicious/noExplicitAny: kit signer narrowing at hook site
+        signMessage: signMessage as any,
+        // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook return shape
+        signTransactions: signTransactions as any,
         rpc,
         onProgress: () => undefined,
       });
@@ -48,7 +58,7 @@ export function ExistingBidPanel(props: ExistingBidPanelProps) {
       });
       router.refresh();
     } catch (e) {
-      toast.error('Withdraw failed', { description: (e as Error).message, duration: 12000 });
+      toast.error('Withdraw failed', { description: friendlyBidError(e), duration: 12000 });
     } finally {
       setWithdrawing(false);
     }
@@ -77,6 +87,7 @@ export function ExistingBidPanel(props: ExistingBidPanelProps) {
           )}
           <DataField
             label="commit hash"
+            hint="sha256 of your two encrypted bid envelopes. The on-chain integrity check — any tampering with the envelopes on PER would fail this hash."
             value={<HashLink hash={props.commitHashHex} kind="none" visibleChars={8} />}
           />
           <DataField label="submitted" value={<LocalTime iso={props.submittedAt} />} mono={false} />

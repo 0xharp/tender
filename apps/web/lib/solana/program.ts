@@ -5,4 +5,4 @@ import { tenderProgramId } from './client';
 export { tenderProgramId };
 export const tender = tenderClient;
 export const findRfpPda = tenderClient.findRfpPda;
-export const findBidPda = tenderClient.pdas.findBidPda;
+export const findBidPda = tenderClient.findBidPda;

@@ -6,5 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./bidderVisibility";
 export * from "./bidStatus";
+export * from "./providerIdentity";
 export * from "./rfpStatus";

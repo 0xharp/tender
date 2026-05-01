@@ -27,6 +27,7 @@ function defaultRfpArgs() {
     bidCloseAt: NOW + 86_400n,
     revealCloseAt: NOW + 86_400n * 3n,
     milestoneCount: 3,
+    bidderVisibility: types.BidderVisibility.Public,
   };
 }
 

@@ -28,20 +28,34 @@ export const TENDER_ERROR__BID_ALREADY_COMMITTED = 0x1774; // 6004
 export const TENDER_ERROR__BID_COMMIT_HASH_MISMATCH = 0x1775; // 6005
 /** BidNotWithdrawable: Bid is not in a withdrawable state */
 export const TENDER_ERROR__BID_NOT_WITHDRAWABLE = 0x1776; // 6006
+/** InvalidBidStatus: Bid is not in the expected lifecycle state for this action */
+export const TENDER_ERROR__INVALID_BID_STATUS = 0x1777; // 6007
 /** NotBuyer: Signer is not the buyer */
-export const TENDER_ERROR__NOT_BUYER = 0x1777; // 6007
+export const TENDER_ERROR__NOT_BUYER = 0x1778; // 6008
 /** NotProvider: Signer is not the provider */
-export const TENDER_ERROR__NOT_PROVIDER = 0x1778; // 6008
+export const TENDER_ERROR__NOT_PROVIDER = 0x1779; // 6009
 /** InvalidMilestoneCount: Milestone count must be between 1 and 8 */
-export const TENDER_ERROR__INVALID_MILESTONE_COUNT = 0x1779; // 6009
+export const TENDER_ERROR__INVALID_MILESTONE_COUNT = 0x177a; // 6010
 /** InvalidBidWindow: bid_open_at must be < bid_close_at < reveal_close_at */
-export const TENDER_ERROR__INVALID_BID_WINDOW = 0x177a; // 6010
+export const TENDER_ERROR__INVALID_BID_WINDOW = 0x177b; // 6011
 /** UriTooLong: Ciphertext storage URI exceeds maximum length */
-export const TENDER_ERROR__URI_TOO_LONG = 0x177b; // 6011
+export const TENDER_ERROR__URI_TOO_LONG = 0x177c; // 6012
 /** InvalidBudget: Budget must be greater than zero */
-export const TENDER_ERROR__INVALID_BUDGET = 0x177c; // 6012
+export const TENDER_ERROR__INVALID_BUDGET = 0x177d; // 6013
+/** EnvelopeTooLarge: Declared envelope size exceeds maximum */
+export const TENDER_ERROR__ENVELOPE_TOO_LARGE = 0x177e; // 6014
+/** EnvelopeEmpty: Declared envelope size must be > 0 */
+export const TENDER_ERROR__ENVELOPE_EMPTY = 0x177f; // 6015
+/** InvalidBidSeedForPublicMode: In Public mode, bid_pda_seed must equal the provider wallet bytes */
+export const TENDER_ERROR__INVALID_BID_SEED_FOR_PUBLIC_MODE = 0x1780; // 6016
+/** ChunkOffsetOutOfBounds: Chunk offset is out of bounds for the declared envelope size */
+export const TENDER_ERROR__CHUNK_OFFSET_OUT_OF_BOUNDS = 0x1781; // 6017
+/** ChunkOverrun: Chunk would write past the declared envelope size */
+export const TENDER_ERROR__CHUNK_OVERRUN = 0x1782; // 6018
+/** InvalidEnvelopeKind: Chunk targets an unknown envelope kind (must be 0 = buyer, 1 = provider) */
+export const TENDER_ERROR__INVALID_ENVELOPE_KIND = 0x1783; // 6019
 /** InvalidRfpStatus: RFP is not in a state that allows this action */
-export const TENDER_ERROR__INVALID_RFP_STATUS = 0x177d; // 6013
+export const TENDER_ERROR__INVALID_RFP_STATUS = 0x1784; // 6020
 
 export type TenderError =
   | typeof TENDER_ERROR__BID_ALREADY_COMMITTED
@@ -50,8 +64,15 @@ export type TenderError =
   | typeof TENDER_ERROR__BID_WINDOW_CLOSED
   | typeof TENDER_ERROR__BID_WINDOW_NOT_OPEN
   | typeof TENDER_ERROR__BID_WINDOW_STILL_OPEN
+  | typeof TENDER_ERROR__CHUNK_OFFSET_OUT_OF_BOUNDS
+  | typeof TENDER_ERROR__CHUNK_OVERRUN
+  | typeof TENDER_ERROR__ENVELOPE_EMPTY
+  | typeof TENDER_ERROR__ENVELOPE_TOO_LARGE
+  | typeof TENDER_ERROR__INVALID_BID_SEED_FOR_PUBLIC_MODE
+  | typeof TENDER_ERROR__INVALID_BID_STATUS
   | typeof TENDER_ERROR__INVALID_BID_WINDOW
   | typeof TENDER_ERROR__INVALID_BUDGET
+  | typeof TENDER_ERROR__INVALID_ENVELOPE_KIND
   | typeof TENDER_ERROR__INVALID_MILESTONE_COUNT
   | typeof TENDER_ERROR__INVALID_RFP_STATUS
   | typeof TENDER_ERROR__NOT_BUYER
@@ -68,8 +89,15 @@ if (process.env["NODE_ENV"] !== "production") {
     [TENDER_ERROR__BID_WINDOW_CLOSED]: `Bid window has closed`,
     [TENDER_ERROR__BID_WINDOW_NOT_OPEN]: `Bid window not yet open`,
     [TENDER_ERROR__BID_WINDOW_STILL_OPEN]: `Bid window is still open`,
+    [TENDER_ERROR__CHUNK_OFFSET_OUT_OF_BOUNDS]: `Chunk offset is out of bounds for the declared envelope size`,
+    [TENDER_ERROR__CHUNK_OVERRUN]: `Chunk would write past the declared envelope size`,
+    [TENDER_ERROR__ENVELOPE_EMPTY]: `Declared envelope size must be > 0`,
+    [TENDER_ERROR__ENVELOPE_TOO_LARGE]: `Declared envelope size exceeds maximum`,
+    [TENDER_ERROR__INVALID_BID_SEED_FOR_PUBLIC_MODE]: `In Public mode, bid_pda_seed must equal the provider wallet bytes`,
+    [TENDER_ERROR__INVALID_BID_STATUS]: `Bid is not in the expected lifecycle state for this action`,
     [TENDER_ERROR__INVALID_BID_WINDOW]: `bid_open_at must be < bid_close_at < reveal_close_at`,
     [TENDER_ERROR__INVALID_BUDGET]: `Budget must be greater than zero`,
+    [TENDER_ERROR__INVALID_ENVELOPE_KIND]: `Chunk targets an unknown envelope kind (must be 0 = buyer, 1 = provider)`,
     [TENDER_ERROR__INVALID_MILESTONE_COUNT]: `Milestone count must be between 1 and 8`,
     [TENDER_ERROR__INVALID_RFP_STATUS]: `RFP is not in a state that allows this action`,
     [TENDER_ERROR__NOT_BUYER]: `Signer is not the buyer`,

@@ -48,8 +48,10 @@ function Hero() {
 
         <StaggerItem>
           <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-            Sealed-bid RFPs for crypto-native organizations. Bids are ECIES-encrypted to the buyer
-            and committed on-chain — competitors see only a 32-byte hash until reveal.
+            Sealed-bid RFPs for crypto-native organizations. Bids stay encrypted on a{' '}
+            <span className="text-foreground">MagicBlock TEE-backed rollup</span> — sealed from
+            everyone, <span className="text-foreground">including the buyer</span>, until the bid
+            window closes. Optional private bidder list keeps the bidder pool itself confidential.
           </p>
         </StaggerItem>
 
@@ -109,20 +111,20 @@ function HeroDiagram() {
       <DiagramCard
         icon={LockKeyholeIcon}
         title="Sealed"
-        body="ECIES to the buyer's pubkey. Plaintext never persists."
+        body="ECIES envelopes encrypted to buyer + provider. Plaintext never persists anywhere."
         accent="violet"
       />
       <DiagramCard
         icon={GitBranchIcon}
-        title="Committed"
-        body="32-byte commit hash on-chain. Competitors learn nothing."
+        title="Time-locked"
+        body="Envelopes live on MagicBlock PER. The TEE blocks buyer reads until bid window closes."
         accent="indigo"
         elevated
       />
       <DiagramCard
         icon={KeyRoundIcon}
         title="Revealed"
-        body="Buyer decrypts in-browser at the reveal window."
+        body="Permission flips at close. Buyer fetches from the rollup, decrypts in-browser."
         accent="fuchsia"
       />
     </div>
@@ -178,22 +180,22 @@ function HowItWorks() {
     {
       n: '01',
       title: 'Post an RFP',
-      body: 'Buyer creates a request with scope, budget range, milestones, and a reveal window. The RFP-specific X25519 pubkey is derived from a single wallet signature.',
+      body: 'Buyer creates a request with scope, budget range, milestones, and a reveal window. Pick public or private bidder list per RFP. The RFP-specific X25519 pubkey is derived from a single wallet signature.',
     },
     {
       n: '02',
       title: 'Providers commit',
-      body: 'Each bid is encrypted twice — once to the buyer (for reveal-time review) and once to the provider (for self-audit). Only a 32-byte hash goes on-chain.',
+      body: 'Each bid is ECIES-encrypted to buyer + provider, then chunked onto a delegated BidCommit account on MagicBlock\'s Private Ephemeral Rollup. Permission gating means even the buyer can\'t read until the window closes.',
     },
     {
       n: '03',
-      title: 'Reveal',
-      body: 'At close, the buyer signs once to derive their RFP keypair and decrypts every bid in browser memory. Plaintext never touches a server.',
+      title: 'Reveal opens',
+      body: 'After bid_close_at, anyone can call open_reveal_window. The on-chain time gate flips the permission set to add the buyer; the TEE-backed validator starts serving envelope reads to the buyer\'s wallet.',
     },
     {
       n: '04',
-      title: 'Escrow & pay',
-      body: 'Selected provider locks USDC into milestone escrow. Releases on-chain at each confirmed deliverable. Cross-chain payouts via Ika dWallets.',
+      title: 'Select & pay',
+      body: 'Buyer decrypts every bid in-browser, picks a winner, and locks USDC into milestone escrow. Releases on-chain at each confirmed deliverable. Cross-chain payouts via Ika dWallets.',
     },
   ];
 
@@ -232,8 +234,8 @@ function HowItWorks() {
 
 function TrustStrip() {
   const facts = [
-    { icon: ShieldCheckIcon, label: '5 on-chain instructions', value: 'Anchor 0.32' },
-    { icon: GitBranchIcon, label: 'Tests across 3 layers', value: '65 green' },
+    { icon: ShieldCheckIcon, label: 'Time-locked storage', value: 'MagicBlock PER · TEE' },
+    { icon: GitBranchIcon, label: '11 on-chain instructions', value: 'Anchor 0.32' },
     { icon: CoinsIcon, label: 'Settlement rail', value: 'USDC · cross-chain' },
     { icon: LockKeyholeIcon, label: 'Cryptography', value: 'X25519 + XChaCha20' },
   ];

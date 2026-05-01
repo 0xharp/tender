@@ -1,15 +1,14 @@
 /**
- * Postgres schema types — mirrors supabase/migrations/0001_initial.sql.
+ * Postgres schema types — mirrors current state after migration 0006
+ * (chain-is-source-of-truth). The `rfps` table holds only the human-readable
+ * text fields we never put on-chain; `bid_ciphertexts` no longer exists.
  *
- * Uses `type` (not `interface`) throughout so the shapes are structurally
- * compatible with Supabase postgrest's `GenericTable` constraint
- * (`Record<string, unknown>` for Row/Insert/Update). Interfaces would
- * require an explicit index signature.
+ * Authoritative state for RFP windows, status, bid_count, winner, etc. lives
+ * on the on-chain `Rfp` account at `on_chain_pda`. Authoritative state for
+ * bids lives on on-chain `BidCommit` accounts queried via getProgramAccounts.
  */
 
 import type { RfpCategory } from '../constants.js';
-import type { BidStorageBackend } from './bid.js';
-import type { RfpStatus } from './rfp.js';
 
 // ---------------------------------------------------------------------------
 // providers
@@ -45,72 +44,46 @@ export type MilestoneTemplateEntry = {
   percentage: number;
 };
 
+/** Per-RFP bidder identity privacy level — see docs/PRIVACY-MODEL.md. Lives
+ *  on-chain on the Rfp account; the type is exported here for callers that
+ *  decode chain state into TS. */
+export type BidderVisibility = 'public' | 'buyer_only';
+
+/**
+ * Rfp metadata row (post-migration 0006). The on-chain Rfp account is the
+ * source of truth for everything else (status, bid_count, winner, windows,
+ * identity, visibility, budget).
+ *
+ * `rfp_nonce_hex` is kept off-chain because the on-chain Rfp account doesn't
+ * store the nonce (it only appears in the PDA seed) — and L1 providers need
+ * the exact 8 bytes to deterministically derive their bid_pda_seed.
+ */
 export type RfpRow = {
   id: string;
   on_chain_pda: string;
-  buyer_wallet: string;
-  buyer_encryption_pubkey_hex: string;
   rfp_nonce_hex: string;
   title: string;
-  category: RfpCategory;
   scope_summary: string;
   scope_detail_encrypted: Uint8Array | null;
-  budget_max_usdc: string; // numeric → string for precision
-  bid_open_at: string;
-  bid_close_at: string;
-  reveal_close_at: string;
   milestone_template: MilestoneTemplateEntry[];
-  status: RfpStatus;
-  winner_wallet: string | null;
-  bid_count: number;
   tx_signature: string | null;
   created_at: string;
   updated_at: string;
 };
 
-export type RfpInsert = Omit<
-  RfpRow,
-  'id' | 'created_at' | 'updated_at' | 'bid_count' | 'status' | 'winner_wallet'
-> & {
+export type RfpInsert = Omit<RfpRow, 'id' | 'created_at' | 'updated_at'> & {
   id?: string;
-  bid_count?: number;
-  status?: RfpStatus;
-  winner_wallet?: string | null;
 };
 
-export type RfpUpdate = Partial<
-  Omit<RfpRow, 'id' | 'on_chain_pda' | 'buyer_wallet' | 'created_at'>
->;
+export type RfpUpdate = Partial<Omit<RfpRow, 'id' | 'on_chain_pda' | 'created_at'>>;
 
 // ---------------------------------------------------------------------------
 // bid_ciphertexts
 // ---------------------------------------------------------------------------
 
-export type BidCiphertextRow = {
-  id: string;
-  on_chain_pda: string;
-  rfp_id: string;
-  rfp_pda: string;
-  provider_wallet: string;
-  ciphertext: Uint8Array;
-  ephemeral_pubkey_hex: string;
-  commit_hash_hex: string;
-  storage_backend: BidStorageBackend;
-  per_session_id: string | null;
-  submitted_at: string;
-  // Encrypt-to-both: same plaintext, encrypted to provider's wallet-derived
-  // X25519 pubkey. Lets the provider decrypt their own bids back without the
-  // buyer. Nullable for legacy rows that pre-date the encrypt-to-both column.
-  provider_ciphertext: Uint8Array | null;
-  provider_ephemeral_pubkey_hex: string | null;
-};
-
-export type BidCiphertextInsert = Omit<BidCiphertextRow, 'id' | 'submitted_at'> & {
-  id?: string;
-  submitted_at?: string;
-};
-
-export type BidCiphertextUpdate = Partial<Omit<BidCiphertextRow, 'id' | 'on_chain_pda'>>;
+// `bid_ciphertexts` table dropped in migration 0006. Bids now read directly
+// from on-chain BidCommit accounts via getProgramAccounts. The decoded
+// BidCommit shape is exported by `@tender/tender-client` (`accounts.BidCommit`).
 
 // ---------------------------------------------------------------------------
 // reputation_cache
@@ -145,12 +118,6 @@ export type Database = {
         Row: RfpRow;
         Insert: RfpInsert;
         Update: RfpUpdate;
-        Relationships: [];
-      };
-      bid_ciphertexts: {
-        Row: BidCiphertextRow;
-        Insert: BidCiphertextInsert;
-        Update: BidCiphertextUpdate;
         Relationships: [];
       };
       reputation_cache: {

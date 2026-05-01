@@ -4,7 +4,7 @@ import { useSelectedWalletAccount } from '@solana/react';
 import { LogOutIcon, UserIcon, Wallet2Icon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ClientOnly } from '@/components/client-only';
 import { HashLink } from '@/components/primitives/hash-link';
@@ -34,6 +34,7 @@ export interface WalletNavButtonProps {
 export function WalletNavButton({ signedInWallet }: WalletNavButtonProps) {
   return (
     <ClientOnly fallback={<NavButtonShell label="Connect wallet" />}>
+      <WalletSessionSync signedInWallet={signedInWallet} />
       {signedInWallet === null ? (
         <ConnectWalletModal />
       ) : (
@@ -41,6 +42,41 @@ export function WalletNavButton({ signedInWallet }: WalletNavButtonProps) {
       )}
     </ClientOnly>
   );
+}
+
+/**
+ * Detects when the wallet selected in the extension diverges from the wallet
+ * the SIWS session was minted for, and clears the session cookie so the user
+ * gets prompted to sign in again with the new wallet. Without this, RLS-gated
+ * reads/writes silently fail because the JWT sub no longer matches the wallet
+ * doing the action — confusing both for the user and for our analytics.
+ *
+ * Renders nothing; pure side effect.
+ */
+function WalletSessionSync({ signedInWallet }: { signedInWallet: string | null }) {
+  const [account] = useSelectedWalletAccount();
+  const router = useRouter();
+  // Throttle: don't fire DELETE on every render — only on actual mismatch transitions.
+  const lastSyncedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!signedInWallet) return; // not signed in → nothing to sync
+    const connected = account?.address ?? null;
+    // Match: nothing to do.
+    if (connected === signedInWallet) {
+      lastSyncedFor.current = null;
+      return;
+    }
+    // Already synced this exact mismatch — don't re-fire.
+    const mismatchKey = `${signedInWallet}::${connected ?? 'disconnected'}`;
+    if (lastSyncedFor.current === mismatchKey) return;
+    lastSyncedFor.current = mismatchKey;
+
+    // Wallet swapped (or disconnected) without signing out — nuke the session.
+    void fetch('/api/auth/siws', { method: 'DELETE' }).then(() => router.refresh());
+  }, [account, signedInWallet, router]);
+
+  return null;
 }
 
 function NavButtonShell({ label, className }: { label: string; className?: string }) {
@@ -165,7 +201,15 @@ function SignOutItem({ onAfter }: { onAfter: () => void }) {
 
 function ConnectWalletModal() {
   const [open, setOpen] = useState(false);
+  const [account] = useSelectedWalletAccount();
   const router = useRouter();
+
+  // Three states for the trigger button:
+  //   - no wallet selected → "Connect wallet" (kicks off the picker step)
+  //   - wallet selected but not signed in → "Sign in" (skips straight to SIWS)
+  //   - signed in → not rendered here (SignedInPopover instead)
+  const isConnectedButUnauthed = account != null;
+  const buttonLabel = isConnectedButUnauthed ? 'Sign in' : 'Connect wallet';
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -178,7 +222,13 @@ function ConnectWalletModal() {
             className="gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90"
           >
             <Wallet2Icon className="size-3.5" />
-            Connect wallet
+            {buttonLabel}
+            {isConnectedButUnauthed && (
+              <span
+                aria-hidden
+                className="size-1.5 rounded-full bg-amber-300 shadow-[0_0_8px] shadow-amber-300/60"
+              />
+            )}
           </Button>
         )}
       />
@@ -186,8 +236,9 @@ function ConnectWalletModal() {
         <DialogHeader>
           <DialogTitle>Sign in to Tender</DialogTitle>
           <DialogDescription>
-            Connect a Solana wallet, then sign a one-time message to authorize a session. No funds
-            move.
+            {isConnectedButUnauthed
+              ? 'Sign a one-time message to authorize a session for this wallet. No funds move.'
+              : 'Connect a Solana wallet, then sign a one-time message to authorize a session. No funds move.'}
           </DialogDescription>
         </DialogHeader>
         <ConnectFlow

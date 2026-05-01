@@ -47,8 +47,12 @@ import {
   type ReadonlyUint8Array,
 } from "@solana/kit";
 import {
+  getBidderVisibilityDecoder,
+  getBidderVisibilityEncoder,
   getRfpStatusDecoder,
   getRfpStatusEncoder,
+  type BidderVisibility,
+  type BidderVisibilityArgs,
   type RfpStatus,
   type RfpStatusArgs,
 } from "../types";
@@ -72,6 +76,7 @@ export type Rfp = {
   bidCloseAt: bigint;
   revealCloseAt: bigint;
   milestoneCount: number;
+  bidderVisibility: BidderVisibility;
   status: RfpStatus;
   winner: Option<Address>;
   escrowVault: Address;
@@ -90,6 +95,7 @@ export type RfpArgs = {
   bidCloseAt: number | bigint;
   revealCloseAt: number | bigint;
   milestoneCount: number;
+  bidderVisibility: BidderVisibilityArgs;
   status: RfpStatusArgs;
   winner: OptionOrNullable<Address>;
   escrowVault: Address;
@@ -112,6 +118,7 @@ export function getRfpEncoder(): Encoder<RfpArgs> {
       ["bidCloseAt", getI64Encoder()],
       ["revealCloseAt", getI64Encoder()],
       ["milestoneCount", getU8Encoder()],
+      ["bidderVisibility", getBidderVisibilityEncoder()],
       ["status", getRfpStatusEncoder()],
       ["winner", getOptionEncoder(getAddressEncoder())],
       ["escrowVault", getAddressEncoder()],
@@ -136,6 +143,7 @@ export function getRfpDecoder(): Decoder<Rfp> {
     ["bidCloseAt", getI64Decoder()],
     ["revealCloseAt", getI64Decoder()],
     ["milestoneCount", getU8Decoder()],
+    ["bidderVisibility", getBidderVisibilityDecoder()],
     ["status", getRfpStatusDecoder()],
     ["winner", getOptionDecoder(getAddressDecoder())],
     ["escrowVault", getAddressDecoder()],

@@ -1,12 +1,17 @@
 'use client';
 
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { type Address, getAddressEncoder } from '@solana/kit';
 import {
   useSelectedWalletAccount,
   useSignMessage,
-  useWalletAccountTransactionSendingSigner,
+  useSignTransactions,
 } from '@solana/react';
 import type { UiWalletAccount } from '@wallet-standard/react';
-import { KeyRoundIcon, LockKeyholeIcon } from 'lucide-react';
+import { accounts } from '@tender/tender-client';
+import { InfoIcon, KeyRoundIcon, LockKeyholeIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -18,6 +23,8 @@ import { StatusPill } from '@/components/primitives/status-pill';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { friendlyBidError } from '@/lib/bids/error-utils';
 import { type SealedBidPlaintext, sealedBidPlaintextSchema } from '@/lib/bids/schema';
 import { withdrawBid } from '@/lib/bids/withdraw-flow';
 import {
@@ -25,44 +32,37 @@ import {
   deriveProviderSeedMessage,
 } from '@/lib/crypto/derive-provider-keypair';
 import { decryptBid } from '@/lib/crypto/ecies';
+import {
+  ensureTeeAuthToken,
+  ephemeralRpc,
+  fetchDelegatedAccountBytes,
+} from '@/lib/sdks/magicblock';
+import { listBids, unixSecondsToIso } from '@/lib/solana/chain-reads';
 import { rpc } from '@/lib/solana/client';
 import { cn } from '@/lib/utils';
 
-interface ApiBid {
-  id: string;
+const addressEncoder = getAddressEncoder();
+
+/** Slim shape derived from the on-chain BidCommit account. Replaces the
+ *  earlier "ApiBid" pulled from supabase. */
+interface BidView {
   on_chain_pda: string;
-  rfp_id: string;
   rfp_pda: string;
-  provider_wallet: string;
-  ephemeral_pubkey_hex: string;
+  bidder_visibility: 'public' | 'buyer_only';
   commit_hash_hex: string;
-  ciphertext_base64: string | null;
-  provider_ephemeral_pubkey_hex: string | null;
-  provider_ciphertext_base64: string | null;
-  storage_backend: string;
-  per_session_id: string | null;
   submitted_at: string;
 }
 
-interface DecryptedBid extends ApiBid {
+interface DecryptedBid extends BidView {
   plaintext: SealedBidPlaintext | null;
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
+  /** Decryption failed for a known reason (e.g. provider envelope absent or wrong wallet). */
+  decryptError?: string;
 }
 
 export function ProviderBidsPanel({ profileWallet }: { profileWallet: string }) {
   const [account] = useSelectedWalletAccount();
   const [hydrated, setHydrated] = useState(false);
 
-  // Wait one paint before deciding which branch to render. `useSelectedWalletAccount`
-  // returns undefined on the very first client render — without this defer, we'd
-  // briefly show the "sealed / not your bids" message before the wallet hook
-  // populates, which produces a 3-step visual flicker on every mount.
   useEffect(() => {
     setHydrated(true);
   }, []);
@@ -93,10 +93,6 @@ export function ProviderBidsPanel({ profileWallet }: { profileWallet: string }) 
   return <Connected profileWallet={profileWallet} account={account} />;
 }
 
-/**
- * Used both during wallet-hydration grace and during the bids fetch — same
- * footprint either way so the loading → loaded transition holds layout.
- */
 function BidsPanelSkeleton() {
   return (
     <Card className="border-border/60">
@@ -123,7 +119,9 @@ function Connected({
   account: UiWalletAccount;
 }) {
   const signMessage = useSignMessage(account);
-  const sendingSigner = useWalletAccountTransactionSendingSigner(account, 'solana:devnet');
+  // Batched sign for the 2-tx withdraw flow (ER undelegate + base-layer close).
+  const signTransactions = useSignTransactions(account, 'solana:devnet');
+  const router = useRouter();
 
   const [bids, setBids] = useState<DecryptedBid[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,13 +132,33 @@ function Connected({
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/bids?provider_wallet=${profileWallet}`);
-      if (!res.ok) {
-        toast.error('Failed to load bids');
-        return;
+      // Read directly from on-chain — getProgramAccounts with memcmp filter on
+      // the BidCommit's `provider_identity` field. L0 (Plain pubkey) and L1
+      // (Hashed sha256) live at the same offset but different tag values, so
+      // we issue two queries and merge.
+      const walletBytes = new Uint8Array(addressEncoder.encode(profileWallet as Address));
+      const walletHash = sha256(walletBytes);
+
+      const [l0Bids, l1Bids] = await Promise.all([
+        listBids({ providerWallet: profileWallet as Address }),
+        listBids({ providerWalletHash: walletHash }),
+      ]);
+
+      const merged = new Map<string, BidView>();
+      for (const b of [...l0Bids, ...l1Bids]) {
+        merged.set(b.address, {
+          on_chain_pda: b.address,
+          rfp_pda: b.data.rfp,
+          bidder_visibility:
+            (b.data.providerIdentity as { __kind: string }).__kind === 'Plain'
+              ? 'public'
+              : 'buyer_only',
+          commit_hash_hex: bytesToHex(new Uint8Array(b.data.commitHash)),
+          submitted_at: unixSecondsToIso(b.data.submittedAt),
+        });
       }
-      const { bids: rows } = (await res.json()) as { bids: ApiBid[] };
-      setBids(rows.map((r) => ({ ...r, plaintext: null })));
+
+      setBids(Array.from(merged.values()).map((r) => ({ ...r, plaintext: null })));
       setRevealed(false);
     } finally {
       setLoading(false);
@@ -154,27 +172,51 @@ function Connected({
   async function reveal() {
     setRevealing(true);
     try {
+      // 1. Derive provider X25519 keypair (one wallet popup, cached client-side).
       const seedMsg = deriveProviderSeedMessage();
       const { signature } = await signMessage({ message: seedMsg });
       const kp = deriveProviderKeypair(signature);
 
-      const next: DecryptedBid[] = bids.map((b) => {
-        if (!b.provider_ciphertext_base64) return { ...b, plaintext: null };
-        try {
-          const ct = base64ToBytes(b.provider_ciphertext_base64);
-          const json = new TextDecoder().decode(decryptBid(ct, kp.x25519PrivateKey));
-          const parsed = sealedBidPlaintextSchema.safeParse(JSON.parse(json));
-          return { ...b, plaintext: parsed.success ? parsed.data : null };
-        } catch {
-          return { ...b, plaintext: null };
-        }
+      // 2. Get TEE auth token + ER RPC client.
+      const teeToken = await ensureTeeAuthToken(account.address as Address, async (msg) => {
+        const { signature: sig } = await signMessage({ message: msg });
+        return sig;
       });
+      const erRpc = ephemeralRpc(teeToken);
+
+      // 3. For each bid: read BidCommit from ER, decrypt provider_envelope.
+      const next: DecryptedBid[] = await Promise.all(
+        bids.map(async (b) => {
+          const raw = await fetchDelegatedAccountBytes(b.on_chain_pda as Address, erRpc);
+          if (!raw) {
+            return {
+              ...b,
+              plaintext: null,
+              decryptError: 'PER permission denied or account not found.',
+            };
+          }
+          try {
+            const decoded = accounts.getBidCommitDecoder().decode(raw);
+            const providerEnvelope = decoded.providerEnvelope as Uint8Array;
+            const json = new TextDecoder().decode(decryptBid(providerEnvelope, kp.x25519PrivateKey));
+            const parsed = sealedBidPlaintextSchema.safeParse(JSON.parse(json));
+            return {
+              ...b,
+              plaintext: parsed.success ? parsed.data : null,
+              decryptError: parsed.success ? undefined : 'Plaintext failed schema validation.',
+            };
+          } catch (e) {
+            return { ...b, plaintext: null, decryptError: (e as Error).message };
+          }
+        }),
+      );
+
       setBids(next);
       setRevealed(true);
       const decryptedCount = next.filter((b) => b.plaintext !== null).length;
       toast.success(`Decrypted ${decryptedCount} of ${next.length} bid(s)`);
     } catch (e) {
-      toast.error('Reveal failed', { description: (e as Error).message });
+      toast.error('Reveal failed', { description: friendlyBidError(e) });
     } finally {
       setRevealing(false);
     }
@@ -184,10 +226,13 @@ function Connected({
     setWithdrawing(b.on_chain_pda);
     try {
       const result = await withdrawBid({
-        // biome-ignore lint/suspicious/noExplicitAny: kit Address brand
-        rfpPda: b.rfp_pda as any,
-        bidPda: b.on_chain_pda,
-        sendingSigner,
+        bidPda: b.on_chain_pda as Address,
+        rfpPda: b.rfp_pda as Address,
+        providerWallet: account.address as Address,
+        // biome-ignore lint/suspicious/noExplicitAny: kit signer narrowing at hook site
+        signMessage: signMessage as any,
+        // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook return shape
+        signTransactions: signTransactions as any,
         rpc,
         onProgress: () => undefined,
       });
@@ -196,9 +241,13 @@ function Connected({
         duration: 8000,
       });
       await refresh();
+      // Re-run server components on the page so server-rendered counts (e.g.
+      // the "Reputation" card on /providers/[wallet]) refresh too. Without
+      // this they stay stale until a manual reload.
+      router.refresh();
     } catch (e) {
       toast.error('Withdraw failed', {
-        description: (e as Error).message,
+        description: friendlyBidError(e),
         duration: 12000,
       });
     } finally {
@@ -270,7 +319,7 @@ function Connected({
         <p className="text-xs leading-relaxed text-muted-foreground">
           {revealed
             ? 'Plaintexts live only in this browser tab. Refresh the page and they re-seal automatically.'
-            : 'Click reveal once → wallet signs the derive-key message → plaintexts decrypt in-browser. Plaintexts are never stored anywhere.'}
+            : 'Click reveal → wallet signs derive-key + TEE auth → bids fetched from MagicBlock PER → plaintexts decrypted in-browser. Plaintexts are never stored anywhere.'}
         </p>
         <RevealGlow active={revealed}>
           <div className="flex flex-col gap-3">
@@ -321,6 +370,9 @@ function BidCard({
             external={false}
             visibleChars={6}
           />
+          {bid.bidder_visibility === 'buyer_only' && (
+            <StatusPill tone="sealed">private</StatusPill>
+          )}
         </span>
         <span className="font-mono text-[10px] text-muted-foreground">
           <LocalTime iso={bid.submitted_at} />
@@ -328,9 +380,27 @@ function BidCard({
       </div>
 
       {!revealed && (
-        <div className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
-          commit_hash ·{' '}
-          <HashLink hash={bid.commit_hash_hex} kind="none" visibleChars={8} />
+        <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+          commit_hash
+          <Tooltip>
+            <TooltipTrigger
+              render={(props) => (
+                <button
+                  {...props}
+                  type="button"
+                  aria-label="What is commit_hash?"
+                  className="inline-flex cursor-help items-center text-muted-foreground/60 transition-colors hover:text-foreground"
+                >
+                  <InfoIcon className="size-3" />
+                </button>
+              )}
+            />
+            <TooltipContent className="max-w-[260px] text-[11px] leading-relaxed">
+              sha256 of the encrypted bid envelopes. The on-chain integrity check — any tampering
+              with the bytes on the rollup would fail this hash.
+            </TooltipContent>
+          </Tooltip>
+          · <HashLink hash={bid.commit_hash_hex} kind="none" visibleChars={8} />
         </div>
       )}
 
@@ -396,7 +466,7 @@ function BidCard({
 
       {revealed && !bid.plaintext && (
         <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
-          Decryption failed. Wrong wallet or corrupted ciphertext.
+          Decryption failed.{bid.decryptError ? ` ${bid.decryptError}` : ''}
         </p>
       )}
 
@@ -420,10 +490,6 @@ function BidCard({
   );
 }
 
-/**
- * Placeholder bid card that matches the real BidCard's footprint, so the
- * loading → loaded transition holds layout (no width or height jump).
- */
 function BidSkeleton() {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border/60 bg-card/40 p-4">

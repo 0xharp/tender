@@ -6,8 +6,15 @@
  * @see https://github.com/codama-idl/codama
  */
 
-export * from "./commitBid";
+export * from "./closeWithdrawnBid";
+export * from "./commitBidInit";
+export * from "./delegateBid";
+export * from "./finalizeBid";
+export * from "./openRevealWindow";
+export * from "./processUndelegation";
 export * from "./rfpCloseBidding";
 export * from "./rfpCreate";
 export * from "./selectBid";
+export * from "./selectBidFinalize";
 export * from "./withdrawBid";
+export * from "./writeBidChunk";

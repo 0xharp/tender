@@ -1,5 +1,11 @@
 /**
- * Bid POST payload schema — shared between BidComposer client and /api/bids.
+ * Bid form + plaintext schemas. Used by `BidComposer` client and the
+ * provider-side decryption flow.
+ *
+ * Day 6.5 update: bids are stored ENTIRELY on-chain (BidCommit account
+ * delegated to MagicBlock PER). The `BidPostPayload` shape and
+ * `bid_ciphertexts` table were removed in migration 0006 — there is no
+ * off-chain bid row anymore.
  */
 import { z } from 'zod';
 
@@ -27,23 +33,8 @@ export const sealedBidPlaintextSchema = z.object({
 
 export type SealedBidPlaintext = z.infer<typeof sealedBidPlaintextSchema>;
 
-export const bidPostPayloadSchema = z.object({
-  rfp_id: z.string().uuid(),
-  rfp_pda: z.string().min(32).max(44),
-  on_chain_pda: z.string().min(32).max(44),
-  // Buyer-decryptable ciphertext. The on-chain commit_hash refers to this.
-  ephemeral_pubkey_hex: z.string().regex(/^[0-9a-f]{64}$/),
-  commit_hash_hex: z.string().regex(/^[0-9a-f]{64}$/),
-  ciphertext_base64: z.string().min(20),
-  // Provider-decryptable ciphertext (encrypted to provider's wallet-derived
-  // X25519 pubkey). Same plaintext, second ECIES envelope.
-  provider_ephemeral_pubkey_hex: z.string().regex(/^[0-9a-f]{64}$/),
-  provider_ciphertext_base64: z.string().min(20),
-  storage_backend: z.enum(['supabase', 'ipfs', 'arweave', 'per']).default('supabase'),
-  per_session_id: z.string().nullable().optional(),
-});
-
-export type BidPostPayload = z.infer<typeof bidPostPayloadSchema>;
+export const bidderVisibilitySchema = z.enum(['public', 'buyer_only']);
+export type BidderVisibility = z.infer<typeof bidderVisibilitySchema>;
 
 export const bidFormSchema = z
   .object({

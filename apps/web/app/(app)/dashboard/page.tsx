@@ -1,32 +1,37 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import bs58 from 'bs58';
+import { type Address } from '@solana/kit';
 import { ArrowUpRightIcon, FileTextIcon, GavelIcon, ScaleIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { DashboardShell } from '@/components/dashboard/dashboard-shell';
 import { buttonVariants } from '@/components/ui/button';
 import { getCurrentWallet } from '@/lib/auth/session';
+import { listBids, listRfps, rfpStatusToString } from '@/lib/solana/chain-reads';
 import { cn } from '@/lib/utils';
-import { serverSupabase } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardHome() {
   const wallet = (await getCurrentWallet()) as string;
-  const supabase = await serverSupabase();
 
-  const [{ count: rfpsPosted }, { count: bidsCommitted }, { count: openRfps }] = await Promise.all([
-    supabase
-      .from('rfps')
-      .select('*', { count: 'exact', head: true })
-      .eq('buyer_wallet', wallet),
-    supabase
-      .from('bid_ciphertexts')
-      .select('*', { count: 'exact', head: true })
-      .eq('provider_wallet', wallet),
-    supabase
-      .from('rfps')
-      .select('*', { count: 'exact', head: true })
-      .in('status', ['open', 'reveal']),
+  // Read on-chain — single source of truth.
+  // For the bidding count we union L0 (Plain provider) and L1 (Hashed provider) counts.
+  const walletAddr = wallet as Address;
+  const walletHash = sha256(bs58.decode(wallet));
+  const [allRfps, l0Bids, l1Bids] = await Promise.all([
+    listRfps(),
+    listBids({ providerWallet: walletAddr }),
+    listBids({ providerWalletHash: walletHash }),
   ]);
+
+  const myRfps = allRfps.filter((r) => r.data.buyer === walletAddr);
+  const rfpsPosted = myRfps.length;
+  const bidsCommitted = l0Bids.length + l1Bids.length;
+  const openRfps = allRfps.filter((r) => {
+    const s = rfpStatusToString(r.data.status);
+    return s === 'open' || s === 'reveal';
+  }).length;
 
   const tabs = [
     { href: '/dashboard', label: 'Overview' },
