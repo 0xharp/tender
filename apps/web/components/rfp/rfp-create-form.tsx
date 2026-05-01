@@ -227,7 +227,8 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
             </p>
             <p className="mt-1 text-muted-foreground">
               This is enforced cryptographically by the MagicBlock TEE-backed validator, not by
-              policy.{' '}
+              policy. The toggle below only controls whether the BIDDER LIST itself is publicly
+              enumerable; bid amounts, scope, and milestones stay sealed in either mode.{' '}
               <a
                 href="https://github.com/0xharp/tender/blob/main/docs/PRIVACY-MODEL.md"
                 target="_blank"
@@ -248,13 +249,14 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
                 {...form.register('bidder_visibility')}
                 className="mt-0.5 size-4 cursor-pointer accent-primary"
               />
-              <span className="flex flex-col gap-0.5">
+              <span className="flex flex-col gap-1">
                 <span className="text-sm font-medium">
                   Public bidder list <span className="text-muted-foreground">(recommended)</span>
                 </span>
                 <span className="text-xs leading-relaxed text-muted-foreground">
-                  Anyone can see which providers bid on this RFP. Standard for most procurement;
-                  helps build vendor reputation visibility.
+                  Each bid stores the provider's wallet address on-chain. Anyone scanning the
+                  program can list every wallet that bid on this RFP. Standard for most
+                  procurement; helps build vendor reputation visibility.
                 </span>
               </span>
             </label>
@@ -265,12 +267,15 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
                 {...form.register('bidder_visibility')}
                 className="mt-0.5 size-4 cursor-pointer accent-primary"
               />
-              <span className="flex flex-col gap-0.5">
+              <span className="flex flex-col gap-1">
                 <span className="text-sm font-medium">Private bidder list</span>
                 <span className="text-xs leading-relaxed text-muted-foreground">
-                  Only you (the buyer) see who bid, and only after the window closes. Useful for
-                  sensitive RFPs where disclosing the bidder pool itself is competitive info. Bid
-                  contents remain sealed identically — this only controls identity.
+                  Each bid stores only a <span className="font-mono">sha256</span> hash of the
+                  provider's wallet — the bidder list is not enumerable. The winner's wallet
+                  becomes public when you select them (because payment must flow); losers stay
+                  anonymous forever. An observer with a specific wallet to suspect can still hash
+                  and check it — this resists enumeration, not pointed lookup with a candidate
+                  set.
                 </span>
               </span>
             </label>
