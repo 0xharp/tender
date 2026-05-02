@@ -22,7 +22,10 @@ const itemVariants: Variants = {
   },
 };
 
-export type StaggerProps = Omit<ComponentPropsWithoutRef<typeof motion.div>, 'variants' | 'initial' | 'animate'> & {
+export type StaggerProps = Omit<
+  ComponentPropsWithoutRef<typeof motion.div>,
+  'variants' | 'initial' | 'animate'
+> & {
   children: ReactNode;
   /** Delay before stagger starts (sec). */
   delay?: number;
@@ -33,9 +36,9 @@ export type StaggerProps = Omit<ComponentPropsWithoutRef<typeof motion.div>, 'va
 /**
  * Container that staggers in its direct children. Each child is a
  * `<StaggerItem>` for the per-element fade+rise+blur entrance, OR any element
- * (no entrance) — the stagger only applies to motion-tagged children.
+ * (no entrance) - the stagger only applies to motion-tagged children.
  *
- * Use sparingly — reserve for hero/landing entrances and the reveal moment.
+ * Use sparingly - reserve for hero/landing entrances and the reveal moment.
  */
 export function Stagger({ children, delay, step, ...props }: StaggerProps) {
   const variants: Variants = {

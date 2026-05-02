@@ -97,7 +97,7 @@ describe('ECIES round-trip', () => {
     expect(dec.decode(decryptBid(bid2.blob, buyer.priv))).toBe('provider 2 bid');
   });
 
-  it('wrong buyer private key cannot decrypt — Poly1305 tag verification fails', () => {
+  it('wrong buyer private key cannot decrypt - Poly1305 tag verification fails', () => {
     const buyer = freshBuyerKeypair();
     const attacker = freshBuyerKeypair();
     const sealed = encryptBid(enc.encode('secret bid'), buyer.pub);

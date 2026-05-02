@@ -4,7 +4,7 @@
  *
  * Day 6.5 update: bids are stored ENTIRELY on-chain (BidCommit account
  * delegated to MagicBlock PER). The `BidPostPayload` shape and
- * `bid_ciphertexts` table were removed in migration 0006 — there is no
+ * `bid_ciphertexts` table were removed in migration 0006 - there is no
  * off-chain bid row anymore.
  */
 import { z } from 'zod';
@@ -19,6 +19,11 @@ export const sealedBidPlaintextSchema = z.object({
         name: z.string().min(1).max(120),
         description: z.string().min(1).max(2000),
         amountUsdc: z.string().regex(/^\d+(\.\d{1,6})?$/),
+        /** Days the provider commits to deliver this milestone after Start.
+         *  0 = provider declines a deadline (cancel-late-milestone disabled
+         *  for this milestone). Sum of durations should typically equal
+         *  `timelineDays`. */
+        durationDays: z.number().int().min(0).max(365),
       }),
     )
     .min(1)
@@ -47,6 +52,7 @@ export const bidFormSchema = z
           name: z.string().min(1).max(120),
           description: z.string().min(1).max(2000),
           amount_usdc: z.string().regex(/^\d+(\.\d{1,6})?$/),
+          duration_days: z.number().int().min(0).max(365),
         }),
       )
       .min(1)

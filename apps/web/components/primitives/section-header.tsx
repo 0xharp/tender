@@ -36,10 +36,7 @@ export function SectionHeader({
 }: SectionHeaderProps) {
   return (
     <header
-      className={cn(
-        'flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between',
-        className,
-      )}
+      className={cn('flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between', className)}
     >
       <div className="flex flex-col gap-2">
         {eyebrow && (

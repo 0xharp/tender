@@ -6,7 +6,7 @@
  * member, unlocking buyer-side decryption of the ECIES envelopes that have
  * been gated behind PER's TEE since `commit_bid_init`.
  *
- *   L0 (Public): anyone can call — caller looks up `bid.provider_identity::Plain`
+ *   L0 (Public): anyone can call - caller looks up `bid.provider_identity::Plain`
  *                and passes the pubkey. UI typically auto-fires for all bids on
  *                the RFP detail page after the window closes.
  *   L1 (BuyerOnly): only the provider knows their own pubkey, so the provider
@@ -34,9 +34,7 @@ export type OpenRevealStage = 'authenticating_er' | 'submitting' | 'confirming';
 
 export interface OpenRevealWindowInput {
   bidPda: Address;
-  /** Provider's wallet pubkey — verified against `bid.provider_identity` on-chain. */
-  providerWallet: Address;
-  /** Caller — anyone (L0) or the provider themselves (L1). */
+  /** Caller - anyone (post-bid-window-close, the ix is permissionless). */
   callerWallet: Address;
   signMessage: (input: { message: Uint8Array }) => Promise<{ signature: Uint8Array }>;
   sendingSigner: TransactionSigner;
@@ -49,7 +47,6 @@ export interface OpenRevealWindowResult {
 
 export async function openRevealWindow({
   bidPda,
-  providerWallet,
   callerWallet,
   signMessage,
   sendingSigner,
@@ -67,7 +64,6 @@ export async function openRevealWindow({
   const ix = await instructions.getOpenRevealWindowInstructionAsync({
     payer: sendingSigner,
     bid: bidPda,
-    providerWallet,
     permission: perAccounts.permission,
   });
 

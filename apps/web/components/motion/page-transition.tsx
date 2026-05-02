@@ -11,7 +11,7 @@ const EASE_OUT_QUART: [number, number, number, number] = [0.16, 1, 0.3, 1];
  * the root layout. Uses `pathname` as the AnimatePresence key so each route
  * change triggers a clean exit + enter.
  *
- * Kept restrained — the goal is "things settle into place" not "things fly
+ * Kept restrained - the goal is "things settle into place" not "things fly
  * around." For the cinematic moment, use <RevealGlow> instead.
  */
 export function PageTransition({ children }: { children: ReactNode }) {

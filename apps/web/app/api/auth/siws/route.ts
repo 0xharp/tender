@@ -1,8 +1,8 @@
 /**
  * SIWS sign-in + sign-out endpoint.
  *
- *   POST   — verify a SIWS message, mint session JWT, set httpOnly cookie
- *   DELETE — clear the session cookie
+ *   POST   - verify a SIWS message, mint session JWT, set httpOnly cookie
+ *   DELETE - clear the session cookie
  */
 import type { SolanaSignInInput, SolanaSignInOutput } from '@solana/wallet-standard-features';
 import { verifySignIn } from '@solana/wallet-standard-util';
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'missing input or output.account' }, { status: 400 });
   }
 
-  // Domain check — caller must claim our exact host.
+  // Domain check - caller must claim our exact host.
   const expectedHost = req.headers.get('host')?.toLowerCase();
   if (!expectedHost || body.input.domain?.toLowerCase() !== expectedHost) {
     return NextResponse.json(
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Liveness check — prevent stale signatures from being replayed forever.
+  // Liveness check - prevent stale signatures from being replayed forever.
   const now = Date.now();
   if (body.input.issuedAt) {
     const issuedAt = Date.parse(body.input.issuedAt);

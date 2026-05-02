@@ -1,21 +1,21 @@
 /**
- * Provider-side withdrawal — two-phase, both on-chain (Day 6.5).
+ * Provider-side withdrawal - two-phase, both on-chain (Day 6.5).
  *
  *   1. TEE auth (cached) → ER RPC.
  *   2. Build BOTH txs upfront with a noop signer for the provider field:
- *        - Tx 1 (ER): `withdraw_bid` — commit + undelegate the bid + permission
+ *        - Tx 1 (ER): `withdraw_bid` - commit + undelegate the bid + permission
  *          back to base layer. Status flips to `Withdrawn` pre-commit.
- *        - Tx 2 (base): `close_withdrawn_bid` — close the BidCommit, refund
+ *        - Tx 2 (base): `close_withdrawn_bid` - close the BidCommit, refund
  *          rent to provider, decrement `rfp.bid_count`.
- *   3. signTransactions — single batched wallet popup.
+ *   3. signTransactions - single batched wallet popup.
  *   4. Send tx 1 to ER (skipPreflight), await confirm.
  *   5. Poll base-layer until `bid` ownership returns from delegation_program to
  *      the Tender program (the seal-back has landed). Up to 30s.
  *   6. Send tx 2 to base layer (skipPreflight), await confirm.
- *   (no off-chain row to clean up — bids live entirely on-chain post Day 6.5).
+ *   (no off-chain row to clean up - bids live entirely on-chain post Day 6.5).
  *
  * Why two txs: the magicblock Magic Action runs BEFORE the bid undelegate's
- * ownership transfer is visible to the action handler — Anchor then trips on
+ * ownership transfer is visible to the action handler - Anchor then trips on
  * `AccountOwnedByWrongProgram` (#3007) trying to close the bid. Splitting
  * into two txs lets the second one wait for the seal-back to fully land.
  *
@@ -39,8 +39,8 @@ import {
 } from '@solana/kit';
 import { instructions } from '@tender/tender-client';
 
-import { tenderProgramId } from '@/lib/solana/client';
 import { derivePerBidAccounts, ensureTeeAuthToken, ephemeralRpc } from '@/lib/sdks/magicblock';
+import { tenderProgramId } from '@/lib/solana/client';
 
 export type WithdrawBidStage =
   | 'authenticating_er'
@@ -57,16 +57,25 @@ export type SignTransactions = (
 
 export interface WithdrawBidInput {
   bidPda: Address;
-  /** Parent RFP PDA — needed by `close_withdrawn_bid` to decrement bid_count. */
+  /** Parent RFP PDA - needed by `close_withdrawn_bid` to decrement bid_count. */
   rfpPda: Address;
   providerWallet: Address;
   signMessage: (input: { message: Uint8Array }) => Promise<{ signature: Uint8Array }>;
   signTransactions: SignTransactions;
   /** Base-layer RPC. */
   rpc: Rpc<SolanaRpcApi>;
-  /** Legacy partial-signer kept for type compatibility — not used in the new flow. */
+  /** Legacy partial-signer kept for type compatibility - not used in the new flow. */
   sendingSigner?: TransactionSigner;
   onProgress?: (stage: WithdrawBidStage) => void;
+  /**
+   * Private-mode withdraw: the bid was signed by an ephemeral wallet whose
+   * private key only the provider can derive. When this keypair is provided,
+   * we use it to LOCALLY sign all withdraw txs (no Phantom popup) AND to
+   * sign the TEE auth challenge. `providerWallet` should equal
+   * `ephemeralKeypair.publicKey`. The provider's main wallet is uninvolved
+   * with these txs; it's only needed (separately) to derive the ephemeral.
+   */
+  ephemeralKeypair?: import('@solana/web3.js').Keypair;
 }
 
 export interface WithdrawBidResult {
@@ -91,11 +100,27 @@ export async function withdrawBid({
   signTransactions,
   rpc,
   onProgress,
+  ephemeralKeypair,
 }: WithdrawBidInput): Promise<WithdrawBidResult> {
+  const useLocalSigning = !!ephemeralKeypair;
+  // Build effective signMessage: in private mode, sign locally with ephemeral
+  // (no popup) using @noble/curves ed25519 - same pattern as submit-flow.
+  let effectiveSignMessage = signMessage;
+  if (useLocalSigning && ephemeralKeypair) {
+    // biome-ignore lint/suspicious/noExplicitAny: noble subpath types vary
+    const ed = (await import('@noble/curves/ed25519.js')) as any;
+    const ed25519 = ed.ed25519 ?? ed.default?.ed25519 ?? ed;
+    const seed32 = ephemeralKeypair.secretKey.slice(0, 32);
+    effectiveSignMessage = async ({ message }) => {
+      const sig = ed25519.sign(message, seed32);
+      return { signature: new Uint8Array(sig) };
+    };
+  }
+
   // 1. TEE auth + ER RPC.
   onProgress?.('authenticating_er');
   const teeToken = await ensureTeeAuthToken(providerWallet, async (msg) => {
-    const { signature } = await signMessage({ message: msg });
+    const { signature } = await effectiveSignMessage({ message: msg });
     return signature;
   });
   const erRpc = ephemeralRpc(teeToken);
@@ -116,11 +141,11 @@ export async function withdrawBid({
     bid: bidPda,
     // Permission account derived under the permission program (NOT our program).
     // Codama defaults the seeds-program field to TENDER which produces the wrong
-    // PDA — pass it explicitly via derivePerBidAccounts.
+    // PDA - pass it explicitly via derivePerBidAccounts.
     permission: perAccounts.permission,
   });
 
-  // Pre-fetch both blockhashes — both have ~60s validity, comfortably covering
+  // Pre-fetch both blockhashes - both have ~60s validity, comfortably covering
   // our up-to-30s seal-back wait.
   const [{ value: erBlockhash }, { value: baseBlockhash }] = await Promise.all([
     erRpc.getLatestBlockhash().send(),
@@ -130,13 +155,30 @@ export async function withdrawBid({
   const erTxBytes = encodeTx([withdrawIx], providerWallet, erBlockhash);
   const baseTxBytes = encodeTx([closeIx], providerWallet, baseBlockhash);
 
-  // 3. Single batched popup.
+  // 3. Sign txs. Private mode signs locally with the ephemeral keypair (no
+  // popup); public mode goes through the wallet hook (one batched popup).
   onProgress?.('awaiting_signature');
-  const outputs = await signTransactions({ transaction: erTxBytes }, { transaction: baseTxBytes });
-  const signedEr = outputs[0]?.signedTransaction;
-  const signedClose = outputs[1]?.signedTransaction;
-  if (!signedEr || !signedClose) {
-    throw new Error('signTransactions returned an unexpected number of outputs');
+  let signedEr: Uint8Array;
+  let signedClose: Uint8Array;
+  if (useLocalSigning && ephemeralKeypair) {
+    const { VersionedTransaction } = await import('@solana/web3.js');
+    const signOne = (bytes: Uint8Array): Uint8Array => {
+      const tx = VersionedTransaction.deserialize(bytes);
+      tx.sign([ephemeralKeypair]);
+      return tx.serialize();
+    };
+    signedEr = signOne(erTxBytes);
+    signedClose = signOne(baseTxBytes);
+  } else {
+    const outputs = await signTransactions(
+      { transaction: erTxBytes },
+      { transaction: baseTxBytes },
+    );
+    const er = outputs[0]?.signedTransaction;
+    const close = outputs[1]?.signedTransaction;
+    if (!er || !close) throw new Error('signTransactions returned unexpected outputs');
+    signedEr = er;
+    signedClose = close;
   }
 
   // 4. Send tx 1 (ER undelegate).
@@ -147,12 +189,12 @@ export async function withdrawBid({
   // 5. Wait for the seal-back to flip the bid's owner back to our program on
   // base layer. The seal-back is a separate tx (signed by the validator) that
   // applies the undelegate intent. Poll until the bid account is visible and
-  // owned by Tender — that's our cue that close_withdrawn_bid will succeed.
+  // owned by Tender - that's our cue that close_withdrawn_bid will succeed.
   onProgress?.('awaiting_seal_back');
   await waitForBidUndelegated({ rpc, bidPda });
 
   // 6. Send tx 2 (base-layer close). After this commits, the bid PDA is closed
-  // (rent refunded) and rfp.bid_count is decremented — on-chain is the only
+  // (rent refunded) and rfp.bid_count is decremented - on-chain is the only
   // source of truth so there's nothing to clean up off-chain.
   onProgress?.('submitting_close');
   const closeTxSignature = await sendSigned(signedClose, rpc);
@@ -211,7 +253,7 @@ async function waitForBidUndelegated({
     await new Promise((r) => setTimeout(r, SEAL_BACK_POLL_INTERVAL_MS));
   }
   throw new Error(
-    `Timed out waiting for the ER seal-back to land — the bid is still owned by the delegation program after ${SEAL_BACK_POLL_TIMEOUT_MS}ms. The undelegate may still complete; you can retry the close step in a moment.`,
+    `Timed out waiting for the ER seal-back to land - the bid is still owned by the delegation program after ${SEAL_BACK_POLL_TIMEOUT_MS}ms. The undelegate may still complete; you can retry the close step in a moment.`,
   );
 }
 

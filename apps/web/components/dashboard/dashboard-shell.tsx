@@ -34,15 +34,16 @@ export function DashboardShell({
           <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
             {title}
           </h1>
-          {description && (
-            <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
-          )}
+          {description && <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>}
         </div>
         {actions && <div className="flex items-center gap-2">{actions}</div>}
       </header>
 
       {tabs && tabs.length > 0 && (
-        <nav className="-mx-1 flex items-center gap-1 overflow-x-auto" aria-label="Workspace sections">
+        <nav
+          className="-mx-1 flex items-center gap-1 overflow-x-auto"
+          aria-label="Workspace sections"
+        >
           {tabs.map((tab) => {
             const active = activeHref === tab.href;
             return (

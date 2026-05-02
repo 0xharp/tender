@@ -1,5 +1,5 @@
 /**
- * Sealed-bid ECIES — X25519 ECDH + XChaCha20-Poly1305.
+ * Sealed-bid ECIES - X25519 ECDH + XChaCha20-Poly1305.
  *
  * Wire format of an encrypted bid blob:
  *   | ephemeralPub (32) | nonce (24) | ciphertext (n + Poly1305 tag (16)) |
@@ -23,9 +23,9 @@ export const XCHACHA_NONCE_BYTES = 24;
 export interface EncryptedBid {
   /** Concatenated wire format: ephemeralPub || nonce || ciphertext+tag */
   blob: Uint8Array;
-  /** sha256(blob) — committed on-chain via commit_bid */
+  /** sha256(blob) - committed on-chain via commit_bid */
   commitHash: Uint8Array;
-  /** ephemeral pubkey (32 bytes) — also at the head of `blob`, exposed for indexing */
+  /** ephemeral pubkey (32 bytes) - also at the head of `blob`, exposed for indexing */
   ephemeralPub: Uint8Array;
 }
 

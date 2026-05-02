@@ -56,7 +56,7 @@ export function CryptoTestApp() {
         <h1 className="text-3xl font-semibold tracking-tight">/test/crypto</h1>
         <p className="text-sm text-muted-foreground">
           End-to-end demo of buyer keypair derivation + ECIES sealed-bid encrypt/decrypt. Real
-          wallet signature, real cryptography — no mocks.
+          wallet signature, real cryptography - no mocks.
         </p>
       </header>
 
@@ -86,7 +86,7 @@ function DisconnectedPlaceholder() {
 
 /**
  * Inner component mounted only when an account is selected. This is what makes
- * `useSignMessage(account)` safe — the hook never sees an undefined account.
+ * `useSignMessage(account)` safe - the hook never sees an undefined account.
  */
 function ConnectedFlow({ account }: { account: UiWalletAccount }) {
   const signMessage = useSignMessage(account);

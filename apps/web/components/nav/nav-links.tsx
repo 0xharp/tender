@@ -38,9 +38,7 @@ export function NavLinks({
   return (
     <nav
       className={cn(
-        variant === 'desktop'
-          ? 'hidden items-center gap-1 md:flex'
-          : 'flex flex-col gap-1',
+        variant === 'desktop' ? 'hidden items-center gap-1 md:flex' : 'flex flex-col gap-1',
       )}
     >
       {links.map((link) => {
@@ -55,9 +53,7 @@ export function NavLinks({
             className={cn(
               'relative rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
               variant === 'mobile' && 'py-3 text-base',
-              active
-                ? 'text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
+              active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {link.label}

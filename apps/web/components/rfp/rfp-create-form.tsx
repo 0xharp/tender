@@ -1,17 +1,14 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  useSelectedWalletAccount,
-  useSignMessage,
-  useWalletAccountTransactionSendingSigner,
-} from '@solana/react';
+import { useSelectedWalletAccount, useSignMessage, useSignTransactions } from '@solana/react';
 import type { UiWalletAccount } from '@wallet-standard/react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
+import { TxToastDescription } from '@/components/primitives/tx-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +25,25 @@ import { friendlyBidError } from '@/lib/bids/error-utils';
 import { type SubmitStage, submitRfpCreate } from '@/lib/rfps/create-flow';
 import { RFP_CATEGORIES, type RfpFormValues, rfpFormSchema } from '@/lib/rfps/schema';
 import { rpc, rpcSubscriptions } from '@/lib/solana/client';
+
+function CharCounter({ value, min, max }: { value: string; min: number; max: number }) {
+  const len = value.length;
+  const tooShort = len < min;
+  const tooLong = len > max;
+  return (
+    <p
+      className={
+        tooShort || tooLong
+          ? 'text-[10px] text-amber-600 dark:text-amber-400'
+          : 'text-[10px] text-muted-foreground'
+      }
+    >
+      {len} / {max} characters
+      {tooShort && ` · ${min - len} more required`}
+      {tooLong && ` · ${len - max} over the limit`}
+    </p>
+  );
+}
 
 const STAGE_LABEL: Record<SubmitStage, string> = {
   deriving_keypair: 'Sign the encryption-key derivation message…',
@@ -61,7 +77,7 @@ export function RfpCreateForm() {
 
 function ConnectedForm({ account }: { account: UiWalletAccount }) {
   const signMessage = useSignMessage(account);
-  const sendingSigner = useWalletAccountTransactionSendingSigner(account, 'solana:devnet');
+  const signTransactions = useSignTransactions(account, 'solana:devnet');
   const router = useRouter();
   const [stage, setStage] = useState<SubmitStage | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -69,15 +85,20 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
   const form = useForm<RfpFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: zod default + react-hook-form Resolver type drift
     resolver: zodResolver(rfpFormSchema) as any,
+    // No defaults that pre-fill meaningful values, but controlled fields
+    // (Select, radio) need a DEFINED initial value to stay controlled across
+    // their lifetime - Base UI warns when value flips from `undefined` to a
+    // string. Empty string is treated as "nothing selected" for those.
+    // biome-ignore lint/suspicious/noExplicitAny: zod default vs RHF Resolver type drift
     defaultValues: {
       title: '',
-      category: 'audit',
+      category: '' as any,
       scope_summary: '',
-      budget_max_usdc: '50000',
-      bid_window_hours: 72,
-      reveal_window_hours: 48,
-      milestone_count: 3,
-      bidder_visibility: 'public',
+      reserve_price_usdc: '',
+      // Numeric <Input>s are uncontrolled HTML - undefined is safe.
+      bid_window_hours: undefined as any,
+      reveal_window_hours: undefined as any,
+      bidder_visibility: '' as any,
     },
   });
 
@@ -92,13 +113,15 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
         wallet: account.address as any,
         values,
         signMessage,
-        sendingSigner,
+        // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook return shape
+        signTransactions: signTransactions as any,
         rpc,
         rpcSubscriptions,
         onProgress: setStage,
       });
       toast.success('RFP posted to devnet', {
-        description: `tx ${result.txSignature.slice(0, 8)}…`,
+        description: <TxToastDescription hash={result.txSignature} prefix="Tx" />,
+        duration: 8000,
       });
       router.push(`/rfps/${result.rfpPda}`);
     } catch (e) {
@@ -119,6 +142,7 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="title">Title</Label>
             <Input id="title" placeholder="Smart-contract audit" {...form.register('title')} />
+            <CharCounter value={form.watch('title') ?? ''} min={3} max={200} />
             {form.formState.errors.title && (
               <p className="text-xs text-destructive">{form.formState.errors.title.message}</p>
             )}
@@ -134,17 +158,20 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
                 })
               }
             >
-              <SelectTrigger id="category">
-                <SelectValue />
+              <SelectTrigger id="category" className="w-full justify-between">
+                <SelectValue placeholder="select a category" className="lowercase" />
               </SelectTrigger>
               <SelectContent>
                 {RFP_CATEGORIES.map((c) => (
-                  <SelectItem key={c} value={c}>
+                  <SelectItem key={c} value={c} className="lowercase">
                     {c.replace('_', ' ')}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {form.formState.errors.category && (
+              <p className="text-xs text-destructive">{form.formState.errors.category.message}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -155,6 +182,7 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
               placeholder="What you need delivered, success criteria, exclusions, deadlines."
               {...form.register('scope_summary')}
             />
+            <CharCounter value={form.watch('scope_summary') ?? ''} min={20} max={4000} />
             {form.formState.errors.scope_summary && (
               <p className="text-xs text-destructive">
                 {form.formState.errors.scope_summary.message}
@@ -162,21 +190,7 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="budget_max_usdc">Budget cap (USDC)</Label>
-              <Input
-                id="budget_max_usdc"
-                type="text"
-                inputMode="decimal"
-                {...form.register('budget_max_usdc')}
-              />
-              {form.formState.errors.budget_max_usdc && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.budget_max_usdc.message}
-                </p>
-              )}
-            </div>
+          <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="bid_window_hours">Bid window (hours)</Label>
               <Input
@@ -186,6 +200,9 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
                 max={336}
                 {...form.register('bid_window_hours', { valueAsNumber: true })}
               />
+              <p className="text-xs text-muted-foreground">
+                How long providers can submit sealed bids.
+              </p>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="reveal_window_hours">Reveal window (hours)</Label>
@@ -196,22 +213,33 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
                 max={336}
                 {...form.register('reveal_window_hours', { valueAsNumber: true })}
               />
+              <p className="text-xs text-muted-foreground">
+                How long you have to review + award after bidding closes.
+              </p>
             </div>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="milestone_count">Milestones</Label>
+            <Label htmlFor="reserve_price_usdc">
+              Reserve price <span className="text-muted-foreground">(optional, sealed)</span>
+            </Label>
             <Input
-              id="milestone_count"
-              type="number"
-              min={1}
-              max={8}
-              {...form.register('milestone_count', { valueAsNumber: true })}
+              id="reserve_price_usdc"
+              type="text"
+              inputMode="decimal"
+              placeholder="e.g. 30000 (USDC) - leave empty for no reserve"
+              {...form.register('reserve_price_usdc')}
             />
             <p className="text-xs text-muted-foreground">
-              Even-split percentages for v1; per-milestone customization arrives in the escrow-fund
-              flow.
+              Maximum you'll accept. Sealed during bidding (only a SHA-256 commitment goes
+              on-chain); revealed when you award. The program rejects winning bids over the reserve.
+              No reserve = you may award at any price.
             </p>
+            {form.formState.errors.reserve_price_usdc && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.reserve_price_usdc.message}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -223,12 +251,13 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
         <CardContent className="flex flex-col gap-4">
           <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3 text-xs leading-relaxed">
             <p className="font-medium text-foreground">
-              Bid contents are always sealed until the bid window closes — even from you.
+              Bid contents are sealed until the bid window closes - even from you.
             </p>
             <p className="mt-1 text-muted-foreground">
-              This is enforced cryptographically by the MagicBlock TEE-backed validator, not by
-              policy. The toggle below only controls whether the BIDDER LIST itself is publicly
-              enumerable; bid amounts, scope, and milestones stay sealed in either mode.{' '}
+              Enforced cryptographically by the MagicBlock TEE-backed validator, not by policy. Once
+              bidding closes, you decrypt bids in your browser (one wallet signature) to evaluate
+              them, then award the winner. The choice below adds a second privacy layer: keep bidder
+              identities anonymous too.{' '}
               <a
                 href="https://github.com/0xharp/tender/blob/main/docs/PRIVACY-MODEL.md"
                 target="_blank"
@@ -241,7 +270,7 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
           </div>
 
           <fieldset className="flex flex-col gap-2.5" aria-describedby="visibility-help">
-            <legend className="mb-1 text-sm font-medium">Bidder list visibility</legend>
+            <legend className="mb-1 text-sm font-medium">Privacy mode</legend>
             <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-card/40 p-3 transition-colors has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5">
               <input
                 type="radio"
@@ -249,14 +278,13 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
                 {...form.register('bidder_visibility')}
                 className="mt-0.5 size-4 cursor-pointer accent-primary"
               />
-              <span className="flex flex-col gap-1">
-                <span className="text-sm font-medium">
-                  Public bidder list <span className="text-muted-foreground">(recommended)</span>
-                </span>
+              <span className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">Bid contents private</span>
                 <span className="text-xs leading-relaxed text-muted-foreground">
-                  Each bid stores the provider's wallet address on-chain. Anyone scanning the
-                  program can list every wallet that bid on this RFP. Standard for most
-                  procurement; helps build vendor reputation visibility.
+                  Bid amount, scope, and milestones stay sealed in the TEE until you award. Each bid
+                  is signed by the provider's main wallet, so anyone scanning the program can list{' '}
+                  <em>who</em> bid (but never <em>what</em> they bid). Builds public vendor
+                  reputation.
                 </span>
               </span>
             </label>
@@ -267,15 +295,13 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
                 {...form.register('bidder_visibility')}
                 className="mt-0.5 size-4 cursor-pointer accent-primary"
               />
-              <span className="flex flex-col gap-1">
-                <span className="text-sm font-medium">Private bidder list</span>
+              <span className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">Bid contents + bidder identity private</span>
                 <span className="text-xs leading-relaxed text-muted-foreground">
-                  Each bid stores only a <span className="font-mono">sha256</span> hash of the
-                  provider's wallet — the bidder list is not enumerable. The winner's wallet
-                  becomes public when you select them (because payment must flow); losers stay
-                  anonymous forever. An observer with a specific wallet to suspect can still hash
-                  and check it — this resists enumeration, not pointed lookup with a candidate
-                  set.
+                  Same content sealing, plus each bid is signed by a per-RFP ephemeral wallet
+                  derived deterministically from the provider's main-wallet signature. No on-chain
+                  link from bid back to main wallet - until the provider wins and reveals. Losers
+                  stay anonymous forever.
                 </span>
               </span>
             </label>

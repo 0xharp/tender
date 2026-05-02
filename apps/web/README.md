@@ -1,6 +1,6 @@
 # @tender/web
 
-The Tender frontend — Next.js 16 + Tailwind 4 + (shadcn/ui to be added). All buyer and provider flows live here.
+The Tender frontend - Next.js 16 + Tailwind 4 + (shadcn/ui to be added). All buyer and provider flows live here.
 
 From the monorepo root:
 

@@ -1,6 +1,4 @@
-import { sha256 } from '@noble/hashes/sha2.js';
-import bs58 from 'bs58';
-import { type Address } from '@solana/kit';
+import type { Address } from '@solana/kit';
 import { ArrowUpRightIcon, FileTextIcon, GavelIcon, ScaleIcon } from 'lucide-react';
 import Link from 'next/link';
 
@@ -15,19 +13,19 @@ export const dynamic = 'force-dynamic';
 export default async function DashboardHome() {
   const wallet = (await getCurrentWallet()) as string;
 
-  // Read on-chain — single source of truth.
-  // For the bidding count we union L0 (Plain provider) and L1 (Hashed provider) counts.
+  // On-chain reads - single source of truth. The "bids you've committed"
+  // count covers PUBLIC-mode bids only: bid.provider == this wallet. Private
+  // bids are signed by per-RFP ephemeral keypairs and are intentionally not
+  // enumerable from the main wallet (that's the privacy property).
   const walletAddr = wallet as Address;
-  const walletHash = sha256(bs58.decode(wallet));
-  const [allRfps, l0Bids, l1Bids] = await Promise.all([
+  const [allRfps, ownBids] = await Promise.all([
     listRfps(),
     listBids({ providerWallet: walletAddr }),
-    listBids({ providerWalletHash: walletHash }),
   ]);
 
   const myRfps = allRfps.filter((r) => r.data.buyer === walletAddr);
   const rfpsPosted = myRfps.length;
-  const bidsCommitted = l0Bids.length + l1Bids.length;
+  const bidsCommitted = ownBids.length;
   const openRfps = allRfps.filter((r) => {
     const s = rfpStatusToString(r.data.status);
     return s === 'open' || s === 'reveal';

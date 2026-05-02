@@ -1,14 +1,12 @@
 import { ArrowUpRightIcon } from 'lucide-react';
 import Link from 'next/link';
 
-import { Stagger, StaggerItem } from '@/components/motion/stagger';
 import { SectionHeader } from '@/components/primitives/section-header';
-import { RfpCard } from '@/components/rfp/rfp-card';
+import { RfpMarketplaceGrid } from '@/components/rfp/rfp-marketplace-grid';
 import { buttonVariants } from '@/components/ui/button';
 import {
   bidderVisibilityToString,
   listRfps,
-  microUsdcToDecimal,
   rfpStatusToString,
   unixSecondsToIso,
 } from '@/lib/solana/chain-reads';
@@ -20,14 +18,14 @@ export const dynamic = 'force-dynamic';
 export default async function Page() {
   // Read both sources in parallel: on-chain Rfp accounts (status, windows,
   // bid_count, etc.) + supabase metadata (title, scope_summary). Join by
-  // on_chain_pda. On-chain is the source of truth — supabase rows that don't
+  // on_chain_pda. On-chain is the source of truth - supabase rows that don't
   // have a matching on-chain account are skipped (stale).
   const supabase = await serverSupabase();
   const [chainRfpsResult, metaResult] = await Promise.all([
     listRfps(),
     supabase
       .from('rfps')
-      .select('on_chain_pda, title, scope_summary, milestone_template, created_at')
+      .select('on_chain_pda, title, scope_summary, created_at')
       .order('created_at', { ascending: false })
       .limit(200),
   ]);
@@ -45,21 +43,38 @@ export default async function Page() {
         title: meta.title,
         category: 'engineering', // category is on-chain (u8); kept generic in card for now
         scope_summary: meta.scope_summary,
-        budget_max_usdc: microUsdcToDecimal(data.budgetMax),
+        bid_open_at: unixSecondsToIso(data.bidOpenAt),
         bid_close_at: unixSecondsToIso(data.bidCloseAt),
+        reveal_close_at: unixSecondsToIso(data.revealCloseAt),
         bid_count: data.bidCount,
         status: rfpStatusToString(data.status),
         bidder_visibility: bidderVisibilityToString(data.bidderVisibility),
+        has_reserve: !data.reservePriceCommitment.every((b: number) => b === 0),
+        reserve_price_revealed_micro: data.reservePriceRevealed,
       };
     })
-    .filter((c): c is NonNullable<typeof c> => c != null && (c.status === 'open' || c.status === 'reveal'));
+    // Hand off ALL status'd RFPs to the client grid - the lifecycle pill
+    // there decides which subset to render. Drop only the orphans (no
+    // metadata) and the reveal-lapsed dead ones (which never have a useful
+    // landing experience). The settled set (awarded / funded / inprogress /
+    // completed) flows through so the "Include settled" pill can surface them.
+    .filter((c): c is NonNullable<typeof c> => {
+      if (c == null) return false;
+      if (
+        (c.status === 'reveal' || c.status === 'bidsclosed') &&
+        new Date(c.reveal_close_at).getTime() <= Date.now()
+      ) {
+        return false;
+      }
+      return true;
+    });
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
       <SectionHeader
         eyebrow="Marketplace"
         title="Browse open RFPs"
-        description="Sealed-bid procurement requests from crypto-native organizations. Bids are sealed cryptographically until the bid window closes — even from the buyer."
+        description="Sealed-bid procurement requests from crypto-native organizations. Bids are sealed cryptographically until the bid window closes - even from the buyer."
         actions={
           <Link
             href="/rfps/new"
@@ -82,7 +97,7 @@ export default async function Page() {
             empty marketplace
           </div>
           <p className="max-w-md text-sm text-muted-foreground">
-            No open RFPs yet. Be the first to post — the on-chain account is created in a single
+            No open RFPs yet. Be the first to post - the on-chain account is created in a single
             transaction.
           </p>
           <Link
@@ -94,19 +109,7 @@ export default async function Page() {
         </div>
       )}
 
-      {cards.length > 0 && (
-        <Stagger
-          className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-          step={0.05}
-          delay={0.1}
-        >
-          {cards.map((r) => (
-            <StaggerItem key={r.on_chain_pda}>
-              <RfpCard rfp={r} />
-            </StaggerItem>
-          ))}
-        </Stagger>
-      )}
+      {cards.length > 0 && <RfpMarketplaceGrid rfps={cards} />}
     </main>
   );
 }

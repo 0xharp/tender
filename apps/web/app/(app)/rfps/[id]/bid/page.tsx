@@ -1,15 +1,12 @@
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex as bytesToHexNoble } from '@noble/hashes/utils.js';
-import { type Address } from '@solana/kit';
-import bs58 from 'bs58';
+import type { Address } from '@solana/kit';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 import { LocalTime } from '@/components/local-time';
 import { SectionHeader } from '@/components/primitives/section-header';
 import { StatusPill } from '@/components/primitives/status-pill';
 import { BidComposer } from '@/components/rfp/bid-composer';
-import { ExistingBidGate } from '@/components/rfp/existing-bid-gate';
+import { PrivateBidComposeGate } from '@/components/rfp/private-bid-compose-gate';
 import { buttonVariants } from '@/components/ui/button';
 import { getCurrentWallet } from '@/lib/auth/session';
 import {
@@ -17,7 +14,6 @@ import {
   bytesToHex,
   fetchRfp,
   listBids,
-  microUsdcToDecimal,
   rfpStatusToString,
   unixSecondsToIso,
 } from '@/lib/solana/chain-reads';
@@ -30,18 +26,27 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+/**
+ * Pure new-bid composer. Existing-bid management lives on the RFP detail
+ * page (`/rfps/[id]`) via `YourBidPanel` - that's the canonical surface.
+ *
+ * Routing:
+ *   - Buyer / closed RFP → "bid not available" message.
+ *   - Public mode + existing bid → redirect to /rfps/[id] (server-side).
+ *   - Private mode → render PrivateBidComposeGate (client checks localStorage
+ *     cache; redirects if a bid exists, otherwise renders the composer).
+ *   - Public mode + no bid → render BidComposer.
+ */
 export default async function Page({ params }: PageProps) {
   const { id } = await params;
   const wallet = await getCurrentWallet();
   const supabase = await serverSupabase();
 
-  // Authoritative state from chain; title/scope/milestones + rfp_nonce_hex
-  // (needed by L1 providers to derive bid_pda_seed) from supabase.
   const [chainRfp, metaResult] = await Promise.all([
     fetchRfp(id as Address),
     supabase
       .from('rfps')
-      .select('id, on_chain_pda, rfp_nonce_hex, title, milestone_template')
+      .select('id, on_chain_pda, rfp_nonce_hex, title')
       .eq('on_chain_pda', id)
       .maybeSingle(),
   ]);
@@ -62,9 +67,10 @@ export default async function Page({ params }: PageProps) {
   const visibility = bidderVisibilityToString(chainRfp.bidderVisibility);
   const buyerWallet = chainRfp.buyer;
   const bidCloseAtIso = unixSecondsToIso(chainRfp.bidCloseAt);
-  const budgetUsdc = microUsdcToDecimal(chainRfp.budgetMax);
   const buyerEncryptionPubkeyHex = bytesToHex(chainRfp.buyerEncryptionPubkey);
   const rfpNonceHex = meta.rfp_nonce_hex;
+  const hasReserve = !chainRfp.reservePriceCommitment.every((b: number) => b === 0);
+  const feeBps = chainRfp.feeBps;
 
   const isBuyer = wallet === buyerWallet;
   const isOpen = status === 'open' && new Date(bidCloseAtIso).getTime() > Date.now();
@@ -79,7 +85,7 @@ export default async function Page({ params }: PageProps) {
           description={
             isBuyer
               ? 'You posted this RFP, so you cannot bid on it.'
-              : 'This RFP is no longer accepting bids — status is not Open or the bid window has closed.'
+              : 'This RFP is no longer accepting bids - status is not Open or the bid window has closed.'
           }
         />
         <Link
@@ -95,33 +101,18 @@ export default async function Page({ params }: PageProps) {
     );
   }
 
-  // Has the viewer already bid here? Look on-chain (handles both L0 and L1).
-  let existingBid: {
-    on_chain_pda: string;
-    commit_hash_hex: string;
-    submitted_at: string;
-  } | null = null;
-  if (wallet) {
-    const walletAddr = wallet as Address;
-    const walletHash = sha256(bs58.decode(wallet));
-    const [l0, l1] = await Promise.all([
-      listBids({ rfpPda: id as Address, providerWallet: walletAddr }),
-      listBids({ rfpPda: id as Address, providerWalletHash: walletHash }),
-    ]);
-    const found = l0[0] ?? l1[0];
-    if (found) {
-      existingBid = {
-        on_chain_pda: found.address,
-        commit_hash_hex: bytesToHexNoble(new Uint8Array(found.data.commitHash)),
-        submitted_at: unixSecondsToIso(found.data.submittedAt),
-      };
+  // Public mode + existing bid → redirect to RFP page (canonical management).
+  if (wallet && visibility === 'public') {
+    const matches = await listBids({ rfpPda: id as Address, providerWallet: wallet as Address });
+    if (matches.length > 0) {
+      redirect(`/rfps/${id}`);
     }
   }
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
       <SectionHeader
-        eyebrow={existingBid ? 'Provider · your bid' : 'Provider · submit bid'}
+        eyebrow="Provider · submit bid"
         title={meta.title}
         size="sm"
         description={
@@ -132,13 +123,14 @@ export default async function Page({ params }: PageProps) {
         actions={<StatusPill tone="sealed">sealed</StatusPill>}
       />
 
-      {existingBid && wallet ? (
-        <ExistingBidGate
+      {visibility === 'buyer_only' ? (
+        <PrivateBidComposeGate
+          rfpId={meta.id}
           rfpPda={meta.on_chain_pda}
-          bidPda={existingBid.on_chain_pda}
-          commitHashHex={existingBid.commit_hash_hex}
-          submittedAt={existingBid.submitted_at}
-          expectedProviderWallet={wallet}
+          rfpNonceHex={rfpNonceHex}
+          buyerEncryptionPubkeyHex={buyerEncryptionPubkeyHex}
+          hasReserve={hasReserve}
+          feeBps={feeBps}
         />
       ) : (
         <BidComposer
@@ -147,8 +139,8 @@ export default async function Page({ params }: PageProps) {
           rfpNonceHex={rfpNonceHex}
           bidderVisibility={visibility}
           buyerEncryptionPubkeyHex={buyerEncryptionPubkeyHex}
-          budgetMaxUsdc={budgetUsdc}
-          milestoneCount={meta.milestone_template.length}
+          hasReserve={hasReserve}
+          feeBps={feeBps}
         />
       )}
     </main>

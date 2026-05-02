@@ -1,5 +1,5 @@
 /**
- * Session helpers — verify the SIWS-issued JWT from cookies.
+ * Session helpers - verify the SIWS-issued JWT from cookies.
  *
  * The JWT is signed with SUPABASE_JWT_SECRET so Supabase's RLS engine accepts
  * it as a valid auth context (`auth.jwt() ->> 'sub'` returns the wallet

@@ -8,7 +8,7 @@ export type GradientTextProps = ComponentPropsWithoutRef<'span'> & {
 };
 
 /**
- * Inline gradient text. Reserve for hero headlines and chromatic moments —
+ * Inline gradient text. Reserve for hero headlines and chromatic moments -
  * never use on body copy.
  */
 export function GradientText({ className, variant = 'accent', ...props }: GradientTextProps) {

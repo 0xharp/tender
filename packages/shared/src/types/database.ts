@@ -38,25 +38,24 @@ export type ProviderUpdate = Partial<Omit<ProviderRow, 'wallet' | 'created_at'>>
 // rfps
 // ---------------------------------------------------------------------------
 
-export type MilestoneTemplateEntry = {
-  name: string;
-  description: string;
-  percentage: number;
-};
-
 /** Per-RFP bidder identity privacy level — see docs/PRIVACY-MODEL.md. Lives
  *  on-chain on the Rfp account; the type is exported here for callers that
  *  decode chain state into TS. */
 export type BidderVisibility = 'public' | 'buyer_only';
 
 /**
- * Rfp metadata row (post-migration 0006). The on-chain Rfp account is the
+ * Rfp metadata row (post-migration 0007). The on-chain Rfp account is the
  * source of truth for everything else (status, bid_count, winner, windows,
- * identity, visibility, budget).
+ * identity, visibility, milestone_count + percentages once awarded).
  *
  * `rfp_nonce_hex` is kept off-chain because the on-chain Rfp account doesn't
- * store the nonce (it only appears in the PDA seed) — and L1 providers need
- * the exact 8 bytes to deterministically derive their bid_pda_seed.
+ * store the nonce (it only appears in the PDA seed) — and providers need the
+ * exact 8 bytes to deterministically derive PDAs.
+ *
+ * Migration 0007 dropped `milestone_template` (placeholder names that weren't
+ * used downstream) and `scope_detail_encrypted` (never wired up — encrypted
+ * scope flow was deferred). Milestones now live entirely inside the encrypted
+ * winning-bid envelope; on-chain stores count + percentages only.
  */
 export type RfpRow = {
   id: string;
@@ -64,8 +63,6 @@ export type RfpRow = {
   rfp_nonce_hex: string;
   title: string;
   scope_summary: string;
-  scope_detail_encrypted: Uint8Array | null;
-  milestone_template: MilestoneTemplateEntry[];
   tx_signature: string | null;
   created_at: string;
   updated_at: string;

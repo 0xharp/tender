@@ -2,9 +2,9 @@ import { ArrowUpRightIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { SVGProps } from 'react';
 
-import { TenderMark } from '@/components/nav/tender-mark';
+import { TendrMark } from '@/components/nav/tendr-mark';
 
-const TENDER_REPO = 'https://github.com/0xharp/tender';
+const TENDR_REPO = 'https://github.com/0xharp/tender';
 const X_HANDLE = 'https://x.com/0xharp';
 const PORTFOLIO = 'https://0xharp.dev';
 
@@ -16,28 +16,24 @@ export function SiteFooter() {
           <Link
             href="/"
             className="inline-flex items-center gap-2 text-foreground transition-colors hover:text-primary"
-            aria-label="Tender — home"
+            aria-label="tendr.bid - home"
           >
-            <TenderMark className="size-5 text-primary" />
-            <span className="font-display text-sm font-semibold tracking-tight">Tender</span>
+            <TendrMark className="size-5 text-primary" />
+            <span className="font-display text-sm font-semibold tracking-tight">tendr.bid</span>
           </Link>
           <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
             Built on Solana for the{' '}
             <ExternalText href="https://www.colosseum.org/frontier">
               Colosseum Frontier Hackathon
             </ExternalText>{' '}
-            by{' '}
-            <ExternalText href={X_HANDLE}>0xharp</ExternalText>
+            by <ExternalText href={X_HANDLE}>0xharp</ExternalText>
             <span aria-hidden> · </span>
             <ExternalText href={PORTFOLIO}>0xharp.dev</ExternalText>
           </p>
         </div>
 
-        <nav
-          className="flex flex-wrap items-center gap-2"
-          aria-label="External links"
-        >
-          <FooterIconLink href={TENDER_REPO} label="Source on GitHub">
+        <nav className="flex flex-wrap items-center gap-2" aria-label="External links">
+          <FooterIconLink href={TENDR_REPO} label="Source on GitHub">
             <GithubIcon className="size-3.5" />
             github
           </FooterIconLink>
@@ -90,7 +86,7 @@ function FooterIconLink({
   );
 }
 
-/** Inline GitHub mark — Lucide dropped brand icons. */
+/** Inline GitHub mark - Lucide dropped brand icons. */
 function GithubIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
@@ -99,7 +95,7 @@ function GithubIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Inline X (Twitter) mark — Lucide dropped brand icons. */
+/** Inline X (Twitter) mark - Lucide dropped brand icons. */
 function XBrandIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>

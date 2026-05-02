@@ -1,7 +1,7 @@
 'use client';
 
-import { AnimatePresence, motion } from 'motion/react';
 import { ArrowUpRightIcon, CheckIcon, CopyIcon } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -57,7 +57,7 @@ export function HashLink({
   const resolvedHref =
     href ?? (kind === 'none' ? null : `https://solscan.io/${kind}/${hash}?cluster=${cluster}`);
   const showLink = linkable && resolvedHref !== null;
-  const opensExternal = external ?? (href ? false : true);
+  const opensExternal = external ?? !href;
 
   const display =
     hash.length <= visibleChars * 2 + 1
@@ -72,7 +72,7 @@ export function HashLink({
       setCopied(true);
       window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
     } catch {
-      // Clipboard API can fail in insecure contexts or denied permissions —
+      // Clipboard API can fail in insecure contexts or denied permissions -
       // fail silently rather than throwing into a UI we can't control here.
     }
   };
@@ -111,7 +111,8 @@ export function HashLink({
             'inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-all',
             'hover:border-border hover:bg-card hover:text-foreground',
             'focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none',
-            copied && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+            copied &&
+              'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
           )}
         >
           <AnimatePresence mode="wait" initial={false}>

@@ -1,8 +1,8 @@
 import { TrendingUpIcon } from 'lucide-react';
 
 export const metadata = {
-  title: 'Leaderboard — Tender',
-  description: 'Provider reputation rankings on the Tender procurement marketplace.',
+  title: 'Leaderboard - tendr.bid',
+  description: 'Provider reputation rankings on the tendr.bid procurement marketplace.',
 };
 
 export default function LeaderboardPage() {
@@ -16,8 +16,8 @@ export default function LeaderboardPage() {
           Provider leaderboard
         </h1>
         <p className="max-w-2xl text-base text-muted-foreground">
-          On-chain reputation accrues as providers bid, win, and ship milestones. The registry
-          ships in the next phase — for now, the marketplace shows you what's open.
+          On-chain reputation accrues as providers bid, win, and ship milestones. The registry ships
+          in the next phase - for now, the marketplace shows you what's open.
         </p>
       </header>
 
@@ -27,11 +27,11 @@ export default function LeaderboardPage() {
         </div>
         <div className="flex flex-col gap-2">
           <p className="font-display text-xl font-semibold tracking-tight">
-            Reputation registry — coming soon
+            Reputation registry - coming soon
           </p>
           <p className="max-w-md text-sm text-muted-foreground">
-            On-chain provider scores from completed milestones, win rate, and dispute history.
-            Ships alongside the milestone state machine.
+            On-chain provider scores from completed milestones, win rate, and dispute history. Ships
+            alongside the milestone state machine.
           </p>
         </div>
       </div>

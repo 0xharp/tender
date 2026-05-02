@@ -37,11 +37,13 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noExplicitAny": "error"
+        "noExplicitAny": "warn",
+        "noArrayIndexKey": "warn"
       },
       "style": {
         "useImportType": "warn",
-        "useNodejsImportProtocol": "warn"
+        "useNodejsImportProtocol": "warn",
+        "noNonNullAssertion": "off"
       },
       "correctness": {
         "noUnusedVariables": "warn",

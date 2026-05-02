@@ -1,6 +1,4 @@
-import { sha256 } from '@noble/hashes/sha2.js';
-import bs58 from 'bs58';
-import { type Address } from '@solana/kit';
+import type { Address } from '@solana/kit';
 import { ArrowUpRightIcon } from 'lucide-react';
 import Link from 'next/link';
 
@@ -13,7 +11,6 @@ import {
   bidderVisibilityToString,
   listBids,
   listRfps,
-  microUsdcToDecimal,
   rfpStatusToString,
   unixSecondsToIso,
 } from '@/lib/solana/chain-reads';
@@ -26,23 +23,21 @@ export default async function DashboardBuying() {
   const wallet = (await getCurrentWallet()) as string;
   const walletAddr = wallet as Address;
 
-  // On-chain reads + supabase metadata join. listRfps with the buyer filter
-  // hits getProgramAccounts with a memcmp at offset 8 (buyer pubkey).
+  // On-chain reads + supabase metadata join. The bid count is public-mode only;
+  // private bids are intentionally not enumerable from the main wallet.
   const supabase = await serverSupabase();
-  const walletHash = sha256(bs58.decode(wallet));
-  const [chainRfps, l0Bids, l1Bids, metaResult] = await Promise.all([
+  const [chainRfps, ownBids, metaResult] = await Promise.all([
     listRfps({ buyer: walletAddr }),
     listBids({ providerWallet: walletAddr }),
-    listBids({ providerWalletHash: walletHash }),
     supabase
       .from('rfps')
-      .select('on_chain_pda, title, scope_summary, milestone_template, created_at')
+      .select('on_chain_pda, title, scope_summary, created_at')
       .order('created_at', { ascending: false }),
   ]);
 
   const error = metaResult.error;
   const metaByPda = new Map((metaResult.data ?? []).map((r) => [r.on_chain_pda, r]));
-  const bidsCount = l0Bids.length + l1Bids.length;
+  const bidsCount = ownBids.length;
 
   const rfps = chainRfps
     .map(({ address, data }) => {
@@ -53,11 +48,12 @@ export default async function DashboardBuying() {
         title: meta.title,
         category: 'engineering',
         scope_summary: meta.scope_summary,
-        budget_max_usdc: microUsdcToDecimal(data.budgetMax),
         bid_close_at: unixSecondsToIso(data.bidCloseAt),
         bid_count: data.bidCount,
         status: rfpStatusToString(data.status),
         bidder_visibility: bidderVisibilityToString(data.bidderVisibility),
+        has_reserve: !data.reservePriceCommitment.every((b: number) => b === 0),
+        reserve_price_revealed_micro: data.reservePriceRevealed,
       };
     })
     .filter((r): r is NonNullable<typeof r> => r != null);
@@ -111,8 +107,8 @@ function EmptyBuying() {
         no RFPs yet
       </div>
       <p className="max-w-md text-sm text-muted-foreground">
-        Posting an RFP derives an RFP-specific X25519 keypair from your wallet signature, mints
-        the on-chain account, and opens it for sealed bids.
+        Posting an RFP derives an RFP-specific X25519 keypair from your wallet signature, mints the
+        on-chain account, and opens it for sealed bids.
       </p>
       <Link
         href="/rfps/new"

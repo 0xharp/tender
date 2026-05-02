@@ -4,7 +4,7 @@ import type { Database } from '@tender/shared';
 import { publicSupabaseUrl, supabaseServiceRoleKey } from './env';
 
 /**
- * Service-role Supabase client. Bypasses RLS — server-only.
+ * Service-role Supabase client. Bypasses RLS - server-only.
  *
  * NEVER import this from a 'use client' module or expose it to the browser.
  * Use only from /api/* route handlers or Server Actions where you've already

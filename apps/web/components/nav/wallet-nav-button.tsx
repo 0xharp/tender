@@ -49,14 +49,14 @@ export function WalletNavButton({ signedInWallet }: WalletNavButtonProps) {
  * the SIWS session was minted for, and clears the session cookie so the user
  * gets prompted to sign in again with the new wallet. Without this, RLS-gated
  * reads/writes silently fail because the JWT sub no longer matches the wallet
- * doing the action — confusing both for the user and for our analytics.
+ * doing the action - confusing both for the user and for our analytics.
  *
  * Renders nothing; pure side effect.
  */
 function WalletSessionSync({ signedInWallet }: { signedInWallet: string | null }) {
   const [account] = useSelectedWalletAccount();
   const router = useRouter();
-  // Throttle: don't fire DELETE on every render — only on actual mismatch transitions.
+  // Throttle: don't fire DELETE on every render - only on actual mismatch transitions.
   const lastSyncedFor = useRef<string | null>(null);
 
   useEffect(() => {
@@ -67,12 +67,12 @@ function WalletSessionSync({ signedInWallet }: { signedInWallet: string | null }
       lastSyncedFor.current = null;
       return;
     }
-    // Already synced this exact mismatch — don't re-fire.
+    // Already synced this exact mismatch - don't re-fire.
     const mismatchKey = `${signedInWallet}::${connected ?? 'disconnected'}`;
     if (lastSyncedFor.current === mismatchKey) return;
     lastSyncedFor.current = mismatchKey;
 
-    // Wallet swapped (or disconnected) without signing out — nuke the session.
+    // Wallet swapped (or disconnected) without signing out - nuke the session.
     void fetch('/api/auth/siws', { method: 'DELETE' }).then(() => router.refresh());
   }, [account, signedInWallet, router]);
 
@@ -234,7 +234,7 @@ function ConnectWalletModal() {
       />
       <DialogContent className="max-w-md gap-5">
         <DialogHeader>
-          <DialogTitle>Sign in to Tender</DialogTitle>
+          <DialogTitle>Sign in to tendr.bid</DialogTitle>
           <DialogDescription>
             {isConnectedButUnauthed
               ? 'Sign a one-time message to authorize a session for this wallet. No funds move.'
@@ -267,9 +267,7 @@ function ConnectFlow({ onSignedIn }: { onSignedIn: () => void }) {
       <section
         className={cn(
           'flex flex-col gap-3 rounded-xl border p-4 backdrop-blur-sm transition-colors',
-          account
-            ? 'border-border bg-card/50'
-            : 'border-dashed border-border/60 bg-muted/30',
+          account ? 'border-border bg-card/50' : 'border-dashed border-border/60 bg-muted/30',
         )}
       >
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -279,7 +277,7 @@ function ConnectFlow({ onSignedIn }: { onSignedIn: () => void }) {
           <SignInButton account={account} onSignedIn={onSignedIn} />
         ) : (
           <p className="text-xs text-muted-foreground">
-            Pick a wallet above. The signature is local — no funds move.
+            Pick a wallet above. The signature is local - no funds move.
           </p>
         )}
       </section>

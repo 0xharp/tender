@@ -1,16 +1,18 @@
 /**
  * RFP metadata API.
  *
- * After the Day 6.5 supabase shrink, supabase only stores the human-readable
- * text fields we never put on-chain (title, scope, milestone descriptions).
- * Everything else (windows, status, bid_count, winner, identity, visibility,
- * budget, category) lives on the on-chain Rfp account at `on_chain_pda`.
+ * After the Day 6.5 supabase shrink + the milestone-removal pass, supabase
+ * only stores the human-readable scope text we never put on-chain (title,
+ * scope_summary). Milestones are entirely a bid-side concern now (they live
+ * inside the encrypted bid envelope). Everything else (windows, status,
+ * bid_count, winner, identity, visibility, category, milestone count once
+ * awarded) lives on the on-chain Rfp account at `on_chain_pda`.
  *
- *   POST  — write metadata after the on-chain rfp_create tx confirms. Caller
+ *   POST  - write metadata after the on-chain rfp_create tx confirms. Caller
  *           must be SIWS-signed (any wallet can pin metadata for an RFP they
- *           created on-chain — the on-chain account itself enforces buyer
+ *           created on-chain - the on-chain account itself enforces buyer
  *           identity).
- *   GET   — list metadata rows. Clients enrich by reading on-chain Rfp
+ *   GET   - list metadata rows. Clients enrich by reading on-chain Rfp
  *           accounts via `lib/solana/chain-reads.ts`.
  */
 import { type NextRequest, NextResponse } from 'next/server';
@@ -41,14 +43,6 @@ export async function POST(req: NextRequest) {
   }
   const payload = parsed.data;
 
-  const sum = payload.milestone_template.reduce((acc, m) => acc + m.percentage, 0);
-  if (sum !== 100) {
-    return NextResponse.json(
-      { error: `milestone percentages must sum to 100; got ${sum}` },
-      { status: 400 },
-    );
-  }
-
   const supabase = await serverSupabase();
   const { data, error } = await supabase
     .from('rfps')
@@ -57,8 +51,6 @@ export async function POST(req: NextRequest) {
       rfp_nonce_hex: payload.rfp_nonce_hex,
       title: payload.title,
       scope_summary: payload.scope_summary,
-      scope_detail_encrypted: null,
-      milestone_template: payload.milestone_template,
       tx_signature: payload.tx_signature,
     })
     .select('id, on_chain_pda')
@@ -77,7 +69,7 @@ export async function GET(req: NextRequest) {
   const supabase = await serverSupabase();
   const { data, error } = await supabase
     .from('rfps')
-    .select('id, on_chain_pda, title, scope_summary, milestone_template, tx_signature, created_at')
+    .select('id, on_chain_pda, title, scope_summary, tx_signature, created_at')
     .order('created_at', { ascending: false })
     .limit(limit);
 

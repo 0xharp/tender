@@ -1,5 +1,17 @@
+import {
+  DELEGATION_PROGRAM_ID,
+  MAGIC_CONTEXT_ID,
+  MAGIC_PROGRAM_ID,
+  PERMISSION_PROGRAM_ID,
+  createTopUpEscrowInstruction,
+  delegateBufferPdaFromDelegatedAccountAndOwnerProgram,
+  delegationMetadataPdaFromDelegatedAccount,
+  delegationRecordPdaFromDelegatedAccount,
+  getAuthToken,
+  permissionPdaFromAccount,
+} from '@magicblock-labs/ephemeral-rollups-kit';
 /**
- * MagicBlock Private Ephemeral Rollup (PER) — client-side wrapper.
+ * MagicBlock Private Ephemeral Rollup (PER) - client-side wrapper.
  *
  * Provides:
  *   - Dual-connection RPC setup (base layer + ER)
@@ -20,29 +32,17 @@ import {
   getAddressEncoder,
   getProgramDerivedAddress,
 } from '@solana/kit';
-import {
-  DELEGATION_PROGRAM_ID,
-  MAGIC_CONTEXT_ID,
-  MAGIC_PROGRAM_ID,
-  PERMISSION_PROGRAM_ID,
-  createTopUpEscrowInstruction,
-  delegateBufferPdaFromDelegatedAccountAndOwnerProgram,
-  delegationMetadataPdaFromDelegatedAccount,
-  delegationRecordPdaFromDelegatedAccount,
-  getAuthToken,
-  permissionPdaFromAccount,
-} from '@magicblock-labs/ephemeral-rollups-kit';
 
 import { tenderProgramId } from '@/lib/solana/client';
 
 /* -------------------------------------------------------------------------- */
-/* Constants — devnet endpoints for PER.                                      */
+/* Constants - devnet endpoints for PER.                                      */
 /* -------------------------------------------------------------------------- */
 
 /**
  * TEE-capable validator pubkey for PER on devnet. We pass this as the
  * `validator` arg to `delegate_bid` so the bid lands on a TEE-backed validator
- * (PER privacy guarantee requires this — non-TEE validators can read account
+ * (PER privacy guarantee requires this - non-TEE validators can read account
  * data unprotected).
  */
 export const PER_DEVNET_TEE_VALIDATOR: Address =
@@ -52,21 +52,16 @@ export const PER_DEVNET_TEE_VALIDATOR: Address =
 export const PER_DEVNET_TEE_RPC_URL =
   process.env.NEXT_PUBLIC_MAGICBLOCK_TEE_RPC_URL ?? 'https://devnet-tee.magicblock.app';
 
-/** Re-exports — programs we reference in our instructions. */
-export {
-  DELEGATION_PROGRAM_ID,
-  MAGIC_CONTEXT_ID,
-  MAGIC_PROGRAM_ID,
-  PERMISSION_PROGRAM_ID,
-};
+/** Re-exports - programs we reference in our instructions. */
+export { DELEGATION_PROGRAM_ID, MAGIC_CONTEXT_ID, MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID };
 
 /* -------------------------------------------------------------------------- */
-/* PDA helpers — Tender-specific wrappers.                                    */
+/* PDA helpers - Tender-specific wrappers.                                    */
 /* -------------------------------------------------------------------------- */
 
 /**
  * The full set of PER infrastructure account addresses needed for a single bid
- * delegation. Derived from the bid PDA — caller constructs this once per bid
+ * delegation. Derived from the bid PDA - caller constructs this once per bid
  * and passes ALL of them explicitly to the delegate / withdraw / select ix
  * builders. We can't rely on codama's auto-derivation because it defaults all
  * `seeds::program` overrides to our program ID; the actual seeds are scoped
@@ -125,7 +120,7 @@ export async function derivePerBidAccounts(
 }
 
 /* -------------------------------------------------------------------------- */
-/* TEE auth — token cache + sign-on-demand.                                   */
+/* TEE auth - token cache + sign-on-demand.                                   */
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -167,36 +162,39 @@ export async function ensureTeeAuthToken(
   return fresh.token;
 }
 
-/** Drop the cached token for a wallet — forces a re-sign on next call. */
+/** Drop the cached token for a wallet - forces a re-sign on next call. */
 export function clearTeeAuthToken(wallet: Address, rpcUrl: string = PER_DEVNET_TEE_RPC_URL): void {
   tokenCache.delete(cacheKey(rpcUrl, wallet));
 }
 
 /* -------------------------------------------------------------------------- */
-/* ER RPC client — token-bearing.                                             */
+/* ER RPC client - token-bearing.                                             */
 /* -------------------------------------------------------------------------- */
 
 /**
  * Build an `@solana/kit` RPC client pointed at the ER endpoint with the auth
  * token attached as a query param. The returned RPC behaves identically to a
- * base-layer RPC for read calls (`getAccountInfo`, etc.) — the difference is
+ * base-layer RPC for read calls (`getAccountInfo`, etc.) - the difference is
  * that it routes against the ER and respects PER permission gating.
  */
-export function ephemeralRpc(authToken: string, rpcUrl: string = PER_DEVNET_TEE_RPC_URL): Rpc<SolanaRpcApi> {
+export function ephemeralRpc(
+  authToken: string,
+  rpcUrl: string = PER_DEVNET_TEE_RPC_URL,
+): Rpc<SolanaRpcApi> {
   return createSolanaRpc(`${rpcUrl}?token=${authToken}`);
 }
 
 /* -------------------------------------------------------------------------- */
-/* Account fetch — ER-aware getAccountInfo with raw bytes.                    */
+/* Account fetch - ER-aware getAccountInfo with raw bytes.                    */
 /* -------------------------------------------------------------------------- */
 
 /**
  * Fetch a delegated account's raw data bytes from the ER. The PER permission
- * program enforces read access — if the caller's wallet isn't in the permission
+ * program enforces read access - if the caller's wallet isn't in the permission
  * set, the RPC returns `null` (account "not found" from their POV).
  *
  * Returns `null` if the account doesn't exist OR if the caller lacks read access.
- * Both cases are indistinguishable to the client — that's the privacy property.
+ * Both cases are indistinguishable to the client - that's the privacy property.
  */
 export async function fetchDelegatedAccountBytes(
   address: Address,
@@ -226,7 +224,7 @@ export const TENDER_OWNER_PROGRAM_ID = tenderProgramId;
  * interaction. The escrow pays for post-commit Magic Action base-layer fees
  * (e.g. our `withdraw_bid_finalize` close + bid_count decrement).
  *
- * 0.01 SOL = 10_000_000 lamports — enough for ~2000 actions at ~5000 lamports
+ * 0.01 SOL = 10_000_000 lamports - enough for ~2000 actions at ~5000 lamports
  * each. Empirically tiny but generous; can refund the rest by closing escrow.
  */
 export const DEFAULT_ESCROW_TOPUP_LAMPORTS = 10_000_000;
@@ -236,7 +234,7 @@ export const DEFAULT_ESCROW_TOPUP_LAMPORTS = 10_000_000;
  *
  * Hand-rolled because @magicblock-labs/ephemeral-rollups-kit@0.12.0 has a bug:
  * its `escrowPdaFromEscrowAuthority` derives under the escrow AUTHORITY's
- * address as the program — but the on-chain delegation program (and the
+ * address as the program - but the on-chain delegation program (and the
  * web3.js SDK) derive under `DELEGATION_PROGRAM_ID`. The kit helper produces
  * a different address than the topup ix expects, leading to `InvalidSeeds`
  * errors. Track upstream fix; remove this hand-roll when kit is patched.
@@ -260,7 +258,7 @@ async function deriveEscrowPda(escrowAuthority: Address, index = 255): Promise<A
  * Include this in the same base-layer tx that does `delegate_bid` so the
  * escrow is funded before any Magic Action it scheduled needs to run.
  *
- * Idempotent on the lamports balance side — if the escrow is already funded,
+ * Idempotent on the lamports balance side - if the escrow is already funded,
  * the topup just adds more (small waste, but reliable).
  */
 export async function buildEscrowTopupIx(

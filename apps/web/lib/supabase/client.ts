@@ -6,7 +6,7 @@ import type { Database } from '@tender/shared';
 import { publicSupabaseAnonKey, publicSupabaseUrl } from './env';
 
 /**
- * Browser-side Supabase client — anonymous only.
+ * Browser-side Supabase client - anonymous only.
  *
  * The session JWT lives in an httpOnly cookie that JS can't read, so the
  * browser client cannot impersonate the signed-in wallet directly.

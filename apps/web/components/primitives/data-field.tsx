@@ -38,9 +38,7 @@ export function DataField({
   return (
     <div
       className={cn(
-        layout === 'inline'
-          ? 'flex items-baseline justify-between gap-3'
-          : 'flex flex-col gap-1',
+        layout === 'inline' ? 'flex items-baseline justify-between gap-3' : 'flex flex-col gap-1',
         className,
       )}
     >

@@ -6,7 +6,7 @@ import { ThemeToggle } from '@/components/nav/theme-toggle';
 import { WalletNavButton } from '@/components/nav/wallet-nav-button';
 import { getCurrentWallet } from '@/lib/auth/session';
 
-import { TenderMark } from './tender-mark';
+import { TendrMark } from './tendr-mark';
 
 export async function TopNav() {
   const wallet = await getCurrentWallet();
@@ -19,10 +19,10 @@ export async function TopNav() {
           <Link
             href="/"
             className="group flex items-center gap-2 text-foreground transition-colors"
-            aria-label="Tender — home"
+            aria-label="tendr.bid - home"
           >
-            <TenderMark className="size-6 text-primary transition-transform group-hover:scale-110" />
-            <span className="font-display text-base font-semibold tracking-tight">Tender</span>
+            <TendrMark className="size-6 text-primary transition-transform group-hover:scale-110" />
+            <span className="font-display text-base font-semibold tracking-tight">tendr.bid</span>
           </Link>
           <NavLinks signedIn={signedIn} />
         </div>

@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 // Phantom is strict about SIWS message rendering: keep the statement plain
 // ASCII (no em-dash, no fancy punctuation) and short. See:
 // https://docs.phantom.app/solana/sign-in-with-solana
-const STATEMENT = 'Sign in to Tender. This authorizes a 24-hour session. No funds will move.';
+const STATEMENT = 'Sign in to tendr.bid. This authorizes a 24-hour session. No funds will move.';
 
 function bytesToBase64(input: { length: number; [n: number]: number }): string {
   let binary = '';

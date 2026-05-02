@@ -16,7 +16,7 @@ export interface RevealGlowProps {
  * violet beam that sweeps left-to-right across the children when `active`
  * flips from false → true.
  *
- * Use this around the bid-card list when the user clicks "Reveal my bids" —
+ * Use this around the bid-card list when the user clicks "Reveal my bids" -
  * the glow lands as the plaintext fields fade in.
  */
 export function RevealGlow({ active, children }: RevealGlowProps) {
@@ -64,12 +64,7 @@ const itemVariants = {
  */
 export function UnlockField({ children, delay = 0 }: { children: ReactNode; delay?: number }) {
   return (
-    <motion.div
-      initial="sealed"
-      animate="revealed"
-      variants={itemVariants}
-      transition={{ delay }}
-    >
+    <motion.div initial="sealed" animate="revealed" variants={itemVariants} transition={{ delay }}>
       {children}
     </motion.div>
   );

@@ -21,15 +21,15 @@ import {
   type RpcSubscriptions,
   type SolanaRpcApi,
   type SolanaRpcSubscriptionsApi,
-  type TransactionSendingSigner,
   appendTransactionMessageInstruction,
+  compileTransaction,
+  createNoopSigner,
   createTransactionMessage,
-  getBase58Decoder,
+  getBase64Decoder,
+  getTransactionEncoder,
   pipe,
-  sendAndConfirmTransactionFactory,
-  setTransactionMessageFeePayerSigner,
+  setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
-  signAndSendTransactionMessageWithSigners,
 } from '@solana/kit';
 import { USDC_DECIMALS } from '@tender/shared';
 import { findRfpPda, instructions, types } from '@tender/tender-client';
@@ -73,27 +73,21 @@ export function usdcToBaseUnits(decimal: string): bigint {
   return BigInt(whole ?? '0') * BigInt(10) ** BigInt(USDC_DECIMALS) + BigInt(fracPadded || '0');
 }
 
-export function evenMilestoneSplit(
-  count: number,
-): { name: string; description: string; percentage: number }[] {
-  const base = Math.floor(100 / count);
-  const remainder = 100 - base * count;
-  return Array.from({ length: count }, (_, i) => ({
-    name: `Milestone ${i + 1}`,
-    description: `Milestone ${i + 1} deliverable`,
-    percentage: i === count - 1 ? base + remainder : base,
-  }));
-}
-
 export function isoToUnixSeconds(iso: string): bigint {
   return BigInt(Math.floor(new Date(iso).getTime() / 1000));
 }
+
+/** Wallet-standard sign-transactions feature (one batched popup for many txs). */
+export type SignTransactions = (
+  ...inputs: ReadonlyArray<{ transaction: Uint8Array }>
+) => Promise<ReadonlyArray<{ signedTransaction: Uint8Array }>>;
 
 export interface SubmitRfpCreateInput {
   wallet: Address;
   values: RfpFormValues;
   signMessage: (input: { message: Uint8Array }) => Promise<{ signature: Uint8Array }>;
-  sendingSigner: TransactionSendingSigner;
+  /** Sign-only path - bypasses Phantom's preflight simulator (rejects unknown CPIs). */
+  signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
   rpcSubscriptions: RpcSubscriptions<SolanaRpcSubscriptionsApi>;
   onProgress?: (stage: SubmitStage) => void;
@@ -113,26 +107,30 @@ export interface SubmitRfpCreateResult {
   rfpNonceHex: string;
 }
 
+const txEncoder = getTransactionEncoder();
+const b64Decoder = getBase64Decoder();
+
 export async function submitRfpCreate({
   wallet,
   values,
   signMessage,
-  sendingSigner,
+  signTransactions,
   rpc,
   rpcSubscriptions,
   onProgress,
 }: SubmitRfpCreateInput): Promise<SubmitRfpCreateResult> {
-  // Step 1 — derive the buyer's RFP encryption keypair
+  void rpcSubscriptions; // currently unused - kept for future explicit confirm path
+  // Step 1 - derive the buyer's RFP encryption keypair
   onProgress?.('deriving_keypair');
   const rfpNonce = generateRfpNonce();
   const seedMessage = deriveSeedMessage(rfpNonce);
   const { signature } = await signMessage({ message: seedMessage });
   const buyerKeypair: DerivedRfpKeypair = deriveRfpKeypair(signature);
 
-  // Step 2 — derive on-chain Rfp PDA
+  // Step 2 - derive on-chain Rfp PDA
   const [rfpPda] = await findRfpPda({ buyer: wallet, rfpNonce });
 
-  // Step 3 — build the instruction
+  // Step 3 - build the instruction
   onProgress?.('building_tx');
   const now = Date.now();
   const bidOpenAt = BigInt(Math.floor(now / 1000));
@@ -140,48 +138,86 @@ export async function submitRfpCreate({
   const revealCloseAt = bidCloseAt + BigInt(values.reveal_window_hours * 3600);
 
   const titleHash = sha256(new TextEncoder().encode(values.title));
-  const budgetMax = usdcToBaseUnits(values.budget_max_usdc);
-  const milestoneTemplate = evenMilestoneSplit(values.milestone_count);
 
+  // Reserve commitment: SHA256(amount_le_bytes(8) || nonce(32)). All zeros = no reserve.
+  let reservePriceCommitment = new Uint8Array(32);
+  if (values.reserve_price_usdc && values.reserve_price_usdc.trim() !== '') {
+    const reserveAmount = usdcToBaseUnits(values.reserve_price_usdc);
+    const reserveNonce = new Uint8Array(32);
+    crypto.getRandomValues(reserveNonce);
+    const amountLe = new Uint8Array(8);
+    const dv = new DataView(amountLe.buffer);
+    dv.setBigUint64(0, reserveAmount, true);
+    const buf = new Uint8Array(8 + 32);
+    buf.set(amountLe, 0);
+    buf.set(reserveNonce, 8);
+    reservePriceCommitment = sha256(buf);
+    // Stash the reveal info locally so the buyer can later call reveal_reserve.
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(
+          `tender:reserve:${rfpPda}`,
+          JSON.stringify({
+            amount: reserveAmount.toString(),
+            nonce: bytesToHex(reserveNonce),
+          }),
+        );
+      } catch {
+        /* ignore quota errors - buyer can re-create */
+      }
+    }
+  }
+
+  // Sign-only flow - `createNoopSigner` lets the ix builder produce an unsigned
+  // tx without requiring a real signer at build time. The wallet signs the bytes
+  // via `signTransactions`, then we dispatch with `skipPreflight: true` to
+  // bypass Phantom's tx simulator (which mis-rejects our larger args + future
+  // unknown CPIs).
+  const buyerSigner = createNoopSigner(wallet);
   const ix = instructions.getRfpCreateInstruction({
-    buyer: sendingSigner,
+    buyer: buyerSigner,
     rfp: rfpPda,
     rfpNonce,
     buyerEncryptionPubkey: buyerKeypair.x25519PublicKey,
     titleHash,
     category: CATEGORY_ENUM_INDEX[values.category],
-    budgetMax,
     bidOpenAt,
     bidCloseAt,
     revealCloseAt,
-    milestoneCount: values.milestone_count,
     bidderVisibility: bidderVisibilityToOnChain(values.bidder_visibility),
+    reservePriceCommitment,
+    fundingWindowSecs: 0n,
+    reviewWindowSecs: 0n,
+    disputeCooloffSecs: 0n,
+    cancelNoticeSecs: 0n,
+    maxIterations: 0,
   });
 
-  // Step 4 — build + sign + send via wallet
+  // Step 4 - sign-only via wallet, dispatch manually with skipPreflight.
   onProgress?.('awaiting_signature');
   const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
-
   const message = pipe(
     createTransactionMessage({ version: 0 }),
-    (m) => setTransactionMessageFeePayerSigner(sendingSigner, m),
+    (m) => setTransactionMessageFeePayer(wallet, m),
     (m) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
     (m) => appendTransactionMessageInstruction(ix, m),
   );
+  const compiled = compileTransaction(message);
+  const txBytes = new Uint8Array(txEncoder.encode(compiled));
+  const [signed] = await signTransactions({ transaction: txBytes });
+  if (!signed) throw new Error('signTransactions returned no outputs');
 
-  const signatureBytes = await signAndSendTransactionMessageWithSigners(message);
-  const txSignature = getBase58Decoder().decode(signatureBytes);
-
-  // Step 5 — confirm
   onProgress?.('confirming_tx');
-  const sendAndConfirm = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions });
-  // Already sent above; explicitly poll for confirmation via the same factory
-  // (awaiting via getSignatureStatuses since we sent without confirm above).
+  const b64 = b64Decoder.decode(signed.signedTransaction);
+  const sig = await rpc
+    // biome-ignore lint/suspicious/noExplicitAny: kit base64 branding
+    .sendTransaction(b64 as any, { encoding: 'base64', skipPreflight: true })
+    .send();
+  const txSignature = sig as string;
   await waitForSignatureConfirmed({ rpc, signature: txSignature });
-  void sendAndConfirm; // keep import wired for tree-shaking — used in future ix flows
 
-  // Step 6 — POST off-chain metadata (only the human-readable fields we don't
-  // put on-chain, plus rfp_nonce_hex for L1 bid seed derivation). Everything
+  // Step 6 - POST off-chain metadata (only the human-readable fields we don't
+  // put on-chain, plus rfp_nonce_hex for PDA seed derivation). Everything
   // else lives on the on-chain Rfp account; clients enrich via
   // lib/solana/chain-reads.ts.
   onProgress?.('saving_metadata');
@@ -190,7 +226,6 @@ export async function submitRfpCreate({
     rfp_nonce_hex: bytesToHex(rfpNonce),
     title: values.title,
     scope_summary: values.scope_summary,
-    milestone_template: milestoneTemplate,
     tx_signature: txSignature,
   };
 

@@ -25,7 +25,7 @@ export function SignInGate() {
             <span className="flex size-9 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary">
               <LockKeyholeIcon className="size-4" />
             </span>
-            Sign in to Tender
+            Sign in to tendr.bid
           </span>
         }
         description="Connect a Solana wallet, then sign a one-time message to authorize a 24-hour session. No funds move."
@@ -60,7 +60,7 @@ function GateInner() {
           <SignInButton account={account} onSignedIn={() => router.refresh()} />
         ) : (
           <p className="text-xs text-muted-foreground">
-            Pick a wallet above. The signature is local — no funds move.
+            Pick a wallet above. The signature is local - no funds move.
           </p>
         )}
       </Step>

@@ -7,8 +7,7 @@ export type StatusTone = 'open' | 'reveal' | 'awarded' | 'closed' | 'sealed' | '
 const TONE_STYLES: Record<StatusTone, string> = {
   open: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   reveal: 'border-primary/40 bg-primary/15 text-primary',
-  awarded:
-    'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300',
+  awarded: 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300',
   closed: 'border-border bg-muted/60 text-muted-foreground',
   sealed: 'border-primary/40 bg-primary/10 text-primary',
   live: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
@@ -29,7 +28,7 @@ export interface StatusPillProps {
   tone: StatusTone;
   /** Show the leading status dot (default true). */
   dot?: boolean;
-  /** Compact size — smaller padding + text. */
+  /** Compact size - smaller padding + text. */
   size?: 'sm' | 'md';
   /** Render UPPERCASE with wide tracking (default true). */
   caps?: boolean;

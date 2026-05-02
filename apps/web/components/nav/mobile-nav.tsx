@@ -35,7 +35,7 @@ export function MobileNav({ signedIn }: { signedIn: boolean }) {
 
       <SheetContent side="right" className="w-full pt-2 sm:max-w-xs">
         <SheetHeader>
-          <SheetTitle className="font-display text-lg">Tender</SheetTitle>
+          <SheetTitle className="font-display text-lg">tendr.bid</SheetTitle>
           <SheetDescription className="sr-only">Site navigation</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-4">

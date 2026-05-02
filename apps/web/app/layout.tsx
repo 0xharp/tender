@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 
+import { BufferPolyfillProvider } from '@/components/buffer-polyfill-provider';
+import { DotMatrix } from '@/components/effects/dot-matrix';
 import { PageTransition } from '@/components/motion/page-transition';
 import { SiteFooter } from '@/components/nav/site-footer';
 import { TopNav } from '@/components/nav/top-nav';
@@ -22,9 +24,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Tender — private procurement for crypto-native organizations',
+  title: 'tendr.bid - private procurement for crypto-native organizations',
   description:
     'Sealed-bid RFPs, on-chain escrow with milestone-based release, cross-chain payouts, and portable on-chain reputation. Built on Solana.',
+  openGraph: {
+    title: 'tendr.bid',
+    description: 'Sealed-bid procurement on Solana - privacy, escrow, reputation.',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'tendr.bid',
+    description: 'Sealed-bid procurement on Solana - privacy, escrow, reputation.',
+  },
 };
 
 export default function RootLayout({
@@ -39,7 +51,14 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <BufferPolyfillProvider />
+        <DotMatrix />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
           <TooltipProvider>
             <WalletProviders>
               <div className="flex min-h-screen flex-col">

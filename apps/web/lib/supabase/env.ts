@@ -1,5 +1,5 @@
 /**
- * Supabase env access — fail loud at module load if any required var is missing.
+ * Supabase env access - fail loud at module load if any required var is missing.
  *
  * Browser-safe vars use the NEXT_PUBLIC_ prefix and are bundled into the
  * client. The service-role key is intentionally NOT prefixed and must only

@@ -11,13 +11,13 @@ export type GlassPanelProps = ComponentPropsWithoutRef<'div'> & {
 
 /**
  * Glass surface with backdrop-blur + theme-aware tinted background. Reserved
- * for hero / landing / decryption-reveal moments per brand.md — do NOT apply
+ * for hero / landing / decryption-reveal moments per brand.md - do NOT apply
  * to dense working surfaces.
  *
  * Variants:
- * · `subtle` — quiet card glass for marketing trust strips, modals, sheet
+ * · `subtle` - quiet card glass for marketing trust strips, modals, sheet
  *   panels (default).
- * · `chromatic` — primary-tinted glass with a violet edge glow. Reserve for
+ * · `chromatic` - primary-tinted glass with a violet edge glow. Reserve for
  *   hero CTAs and the decryption-reveal hero card.
  */
 export function GlassPanel({

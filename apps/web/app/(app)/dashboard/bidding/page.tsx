@@ -1,11 +1,9 @@
-import { sha256 } from '@noble/hashes/sha2.js';
-import bs58 from 'bs58';
-import { type Address } from '@solana/kit';
+import type { Address } from '@solana/kit';
 import { ArrowUpRightIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { DashboardShell } from '@/components/dashboard/dashboard-shell';
-import { ProviderBidsPanel } from '@/components/rfp/provider-bids-panel';
+import { YourBidsList } from '@/components/rfp/your-bids-list';
 import { buttonVariants } from '@/components/ui/button';
 import { getCurrentWallet } from '@/lib/auth/session';
 import { listBids, listRfps } from '@/lib/solana/chain-reads';
@@ -16,16 +14,17 @@ export const dynamic = 'force-dynamic';
 export default async function DashboardBidding() {
   const wallet = (await getCurrentWallet()) as string;
   const walletAddr = wallet as Address;
-  const walletHash = sha256(bs58.decode(wallet));
 
-  // Counts come from on-chain getProgramAccounts.
-  const [myRfps, l0Bids, l1Bids] = await Promise.all([
+  // Public-mode bids only - private bids are signed by per-RFP ephemeral
+  // wallets that aren't enumerable from the main wallet (the privacy property).
+  // They surface on the relevant RFP page once the provider verifies bidder
+  // identity there.
+  const [myRfps, ownBids] = await Promise.all([
     listRfps({ buyer: walletAddr }),
     listBids({ providerWallet: walletAddr }),
-    listBids({ providerWalletHash: walletHash }),
   ]);
   const rfpsPosted = myRfps.length;
-  const bidsCommitted = l0Bids.length + l1Bids.length;
+  const bidsCommitted = ownBids.length;
 
   const tabs = [
     { href: '/dashboard', label: 'Overview' },
@@ -36,7 +35,7 @@ export default async function DashboardBidding() {
   return (
     <DashboardShell
       title="Bids you've committed"
-      description="Sealed by default. Reveal in browser memory with a single wallet signature."
+      description="One row per public-mode bid. Click through to manage (reveal · withdraw) on the RFP page."
       tabs={tabs}
       activeHref="/dashboard/bidding"
       actions={
@@ -51,7 +50,18 @@ export default async function DashboardBidding() {
         </Link>
       }
     >
-      <ProviderBidsPanel profileWallet={wallet} />
+      <YourBidsList
+        bids={ownBids}
+        emptyTitle="No public bids yet"
+        emptyBody="Browse the marketplace and submit a sealed bid to see it here."
+        notice={
+          <>
+            <strong className="text-foreground">Heads up:</strong> private-mode bids don't appear in
+            this list - they're signed by per-RFP ephemeral wallets. Open the relevant RFP page and
+            click "Check on-chain" to surface them.
+          </>
+        }
+      />
     </DashboardShell>
   );
 }

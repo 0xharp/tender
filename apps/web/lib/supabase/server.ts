@@ -15,7 +15,7 @@ import { publicSupabaseAnonKey, publicSupabaseUrl } from './env';
  *
  * Implementation note: we use raw `@supabase/supabase-js` (not `@supabase/ssr`)
  * because ssr's cookie-based session sync conflicts with the custom
- * `accessToken` option — we manage the JWT cookie ourselves in /api/auth/siws.
+ * `accessToken` option - we manage the JWT cookie ourselves in /api/auth/siws.
  *
  * If no session cookie is present, requests go through anonymously.
  */
