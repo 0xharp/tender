@@ -117,7 +117,6 @@ export type CloseWithdrawnBidAsyncInput<
   provider: TransactionSigner<TAccountProvider>;
   rfp: Address<TAccountRfp>;
   bid: Address<TAccountBid>;
-  /** Closed via CPI below to refund the rent (~0.0048 SOL) to the provider. */
   permission?: Address<TAccountPermission>;
   permissionProgram?: Address<TAccountPermissionProgram>;
 };
@@ -209,7 +208,6 @@ export type CloseWithdrawnBidInput<
   provider: TransactionSigner<TAccountProvider>;
   rfp: Address<TAccountRfp>;
   bid: Address<TAccountBid>;
-  /** Closed via CPI below to refund the rent (~0.0048 SOL) to the provider. */
   permission: Address<TAccountPermission>;
   permissionProgram?: Address<TAccountPermissionProgram>;
 };
@@ -293,7 +291,6 @@ export type ParsedCloseWithdrawnBidInstruction<
     provider: TAccountMetas[0];
     rfp: TAccountMetas[1];
     bid: TAccountMetas[2];
-    /** Closed via CPI below to refund the rent (~0.0048 SOL) to the provider. */
     permission: TAccountMetas[3];
     permissionProgram: TAccountMetas[4];
   };

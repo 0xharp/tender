@@ -17,6 +17,8 @@ import {
   fixEncoderSize,
   getAddressDecoder,
   getAddressEncoder,
+  getArrayDecoder,
+  getArrayEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getI64Decoder,
@@ -25,6 +27,8 @@ import {
   getOptionEncoder,
   getStructDecoder,
   getStructEncoder,
+  getU16Decoder,
+  getU16Encoder,
   getU32Decoder,
   getU32Encoder,
   getU64Decoder,
@@ -71,7 +75,6 @@ export type Rfp = {
   buyerEncryptionPubkey: ReadonlyUint8Array;
   titleHash: ReadonlyUint8Array;
   category: number;
-  budgetMax: bigint;
   bidOpenAt: bigint;
   bidCloseAt: bigint;
   revealCloseAt: bigint;
@@ -79,10 +82,55 @@ export type Rfp = {
   bidderVisibility: BidderVisibility;
   status: RfpStatus;
   winner: Option<Address>;
-  escrowVault: Address;
+  winnerProvider: Option<Address>;
+  contractValue: bigint;
   bidCount: number;
   createdAt: bigint;
   bump: number;
+  /**
+   * SHA-256 commitment of the buyer's reserve price + nonce (sealed during bidding,
+   * revealed at `open_reveal_window`). 32 bytes of zero = no reserve.
+   */
+  reservePriceCommitment: ReadonlyUint8Array;
+  /** Revealed reserve price (after open_reveal_window). 0 if no reserve. */
+  reservePriceRevealed: bigint;
+  /** Per-RFP windows. Set at create with sane defaults. */
+  fundingWindowSecs: bigint;
+  reviewWindowSecs: bigint;
+  disputeCooloffSecs: bigint;
+  cancelNoticeSecs: bigint;
+  maxIterations: number;
+  /**
+   * Per-milestone payout amounts (USDC base units). Sum equals
+   * `contract_value`. Length is `milestone_count`; padded with zeros to
+   * `MAX_MILESTONE_COUNT`. Sourced from the winning bid's plaintext at
+   * `select_bid` time and used directly by `fund_project` to initialize
+   * each milestone's amount — no percentage-rounding loss.
+   */
+  milestoneAmounts: Array<bigint>;
+  /**
+   * Per-milestone delivery deadline duration (seconds, from the moment the
+   * provider calls `start_milestone`). Sourced from the winning bid's
+   * plaintext at `select_bid` time. Length is `milestone_count`; padded
+   * with zeros. A value of 0 means "no deadline enforced" — the
+   * `cancel_late_milestone` path is unavailable for that milestone.
+   */
+  milestoneDurationsSecs: Array<bigint>;
+  /**
+   * Sentinel pointer to the milestone currently in flight (Started OR
+   * Submitted). Provider can only have ONE milestone active at a time;
+   * `start_milestone` requires this == NO_ACTIVE_MILESTONE and sets it to
+   * the index. `accept_milestone` / cancel paths / dispute resolve clear
+   * it back. Use `NO_ACTIVE_MILESTONE` (255) since valid indices are 0..8.
+   */
+  activeMilestoneIndex: number;
+  /** Set when status -> Awarded; deadline for buyer to call fund_project. */
+  fundingDeadline: bigint;
+  /**
+   * Take rate at which milestone releases route to Treasury (basis points).
+   * Stored per-RFP so buyer can be on a different tier in the future.
+   */
+  feeBps: number;
 };
 
 export type RfpArgs = {
@@ -90,7 +138,6 @@ export type RfpArgs = {
   buyerEncryptionPubkey: ReadonlyUint8Array;
   titleHash: ReadonlyUint8Array;
   category: number;
-  budgetMax: number | bigint;
   bidOpenAt: number | bigint;
   bidCloseAt: number | bigint;
   revealCloseAt: number | bigint;
@@ -98,10 +145,55 @@ export type RfpArgs = {
   bidderVisibility: BidderVisibilityArgs;
   status: RfpStatusArgs;
   winner: OptionOrNullable<Address>;
-  escrowVault: Address;
+  winnerProvider: OptionOrNullable<Address>;
+  contractValue: number | bigint;
   bidCount: number;
   createdAt: number | bigint;
   bump: number;
+  /**
+   * SHA-256 commitment of the buyer's reserve price + nonce (sealed during bidding,
+   * revealed at `open_reveal_window`). 32 bytes of zero = no reserve.
+   */
+  reservePriceCommitment: ReadonlyUint8Array;
+  /** Revealed reserve price (after open_reveal_window). 0 if no reserve. */
+  reservePriceRevealed: number | bigint;
+  /** Per-RFP windows. Set at create with sane defaults. */
+  fundingWindowSecs: number | bigint;
+  reviewWindowSecs: number | bigint;
+  disputeCooloffSecs: number | bigint;
+  cancelNoticeSecs: number | bigint;
+  maxIterations: number;
+  /**
+   * Per-milestone payout amounts (USDC base units). Sum equals
+   * `contract_value`. Length is `milestone_count`; padded with zeros to
+   * `MAX_MILESTONE_COUNT`. Sourced from the winning bid's plaintext at
+   * `select_bid` time and used directly by `fund_project` to initialize
+   * each milestone's amount — no percentage-rounding loss.
+   */
+  milestoneAmounts: Array<number | bigint>;
+  /**
+   * Per-milestone delivery deadline duration (seconds, from the moment the
+   * provider calls `start_milestone`). Sourced from the winning bid's
+   * plaintext at `select_bid` time. Length is `milestone_count`; padded
+   * with zeros. A value of 0 means "no deadline enforced" — the
+   * `cancel_late_milestone` path is unavailable for that milestone.
+   */
+  milestoneDurationsSecs: Array<number | bigint>;
+  /**
+   * Sentinel pointer to the milestone currently in flight (Started OR
+   * Submitted). Provider can only have ONE milestone active at a time;
+   * `start_milestone` requires this == NO_ACTIVE_MILESTONE and sets it to
+   * the index. `accept_milestone` / cancel paths / dispute resolve clear
+   * it back. Use `NO_ACTIVE_MILESTONE` (255) since valid indices are 0..8.
+   */
+  activeMilestoneIndex: number;
+  /** Set when status -> Awarded; deadline for buyer to call fund_project. */
+  fundingDeadline: number | bigint;
+  /**
+   * Take rate at which milestone releases route to Treasury (basis points).
+   * Stored per-RFP so buyer can be on a different tier in the future.
+   */
+  feeBps: number;
 };
 
 /** Gets the encoder for {@link RfpArgs} account data. */
@@ -113,7 +205,6 @@ export function getRfpEncoder(): Encoder<RfpArgs> {
       ["buyerEncryptionPubkey", fixEncoderSize(getBytesEncoder(), 32)],
       ["titleHash", fixEncoderSize(getBytesEncoder(), 32)],
       ["category", getU8Encoder()],
-      ["budgetMax", getU64Encoder()],
       ["bidOpenAt", getI64Encoder()],
       ["bidCloseAt", getI64Encoder()],
       ["revealCloseAt", getI64Encoder()],
@@ -121,10 +212,23 @@ export function getRfpEncoder(): Encoder<RfpArgs> {
       ["bidderVisibility", getBidderVisibilityEncoder()],
       ["status", getRfpStatusEncoder()],
       ["winner", getOptionEncoder(getAddressEncoder())],
-      ["escrowVault", getAddressEncoder()],
+      ["winnerProvider", getOptionEncoder(getAddressEncoder())],
+      ["contractValue", getU64Encoder()],
       ["bidCount", getU32Encoder()],
       ["createdAt", getI64Encoder()],
       ["bump", getU8Encoder()],
+      ["reservePriceCommitment", fixEncoderSize(getBytesEncoder(), 32)],
+      ["reservePriceRevealed", getU64Encoder()],
+      ["fundingWindowSecs", getI64Encoder()],
+      ["reviewWindowSecs", getI64Encoder()],
+      ["disputeCooloffSecs", getI64Encoder()],
+      ["cancelNoticeSecs", getI64Encoder()],
+      ["maxIterations", getU8Encoder()],
+      ["milestoneAmounts", getArrayEncoder(getU64Encoder(), { size: 8 })],
+      ["milestoneDurationsSecs", getArrayEncoder(getI64Encoder(), { size: 8 })],
+      ["activeMilestoneIndex", getU8Encoder()],
+      ["fundingDeadline", getI64Encoder()],
+      ["feeBps", getU16Encoder()],
     ]),
     (value) => ({ ...value, discriminator: RFP_DISCRIMINATOR }),
   );
@@ -138,7 +242,6 @@ export function getRfpDecoder(): Decoder<Rfp> {
     ["buyerEncryptionPubkey", fixDecoderSize(getBytesDecoder(), 32)],
     ["titleHash", fixDecoderSize(getBytesDecoder(), 32)],
     ["category", getU8Decoder()],
-    ["budgetMax", getU64Decoder()],
     ["bidOpenAt", getI64Decoder()],
     ["bidCloseAt", getI64Decoder()],
     ["revealCloseAt", getI64Decoder()],
@@ -146,10 +249,23 @@ export function getRfpDecoder(): Decoder<Rfp> {
     ["bidderVisibility", getBidderVisibilityDecoder()],
     ["status", getRfpStatusDecoder()],
     ["winner", getOptionDecoder(getAddressDecoder())],
-    ["escrowVault", getAddressDecoder()],
+    ["winnerProvider", getOptionDecoder(getAddressDecoder())],
+    ["contractValue", getU64Decoder()],
     ["bidCount", getU32Decoder()],
     ["createdAt", getI64Decoder()],
     ["bump", getU8Decoder()],
+    ["reservePriceCommitment", fixDecoderSize(getBytesDecoder(), 32)],
+    ["reservePriceRevealed", getU64Decoder()],
+    ["fundingWindowSecs", getI64Decoder()],
+    ["reviewWindowSecs", getI64Decoder()],
+    ["disputeCooloffSecs", getI64Decoder()],
+    ["cancelNoticeSecs", getI64Decoder()],
+    ["maxIterations", getU8Decoder()],
+    ["milestoneAmounts", getArrayDecoder(getU64Decoder(), { size: 8 })],
+    ["milestoneDurationsSecs", getArrayDecoder(getI64Decoder(), { size: 8 })],
+    ["activeMilestoneIndex", getU8Decoder()],
+    ["fundingDeadline", getI64Decoder()],
+    ["feeBps", getU16Decoder()],
   ]);
 }
 

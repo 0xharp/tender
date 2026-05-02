@@ -23,7 +23,7 @@ use solana_sdk::{
     system_program,
     transaction::Transaction,
 };
-use tender::state::{BidCommit, BidStatus, BidderVisibility, ProviderIdentity, Rfp, RfpStatus};
+use tender::state::{BidCommit, BidStatus, BidderVisibility, Rfp, RfpStatus};
 
 const PROGRAM_SO: &str = "../../target/deploy/tender.so";
 const ONE_SOL: u64 = 1_000_000_000;
@@ -61,12 +61,16 @@ fn default_rfp_args(
         buyer_encryption_pubkey: [1u8; 32],
         title_hash: [2u8; 32],
         category: 0,
-        budget_max: 50_000_000_000,
         bid_open_at: T0,
         bid_close_at: T0 + 86_400,
         reveal_close_at: T0 + 86_400 * 3,
-        milestone_count: 3,
         bidder_visibility,
+        reserve_price_commitment: [0u8; 32],
+        funding_window_secs: 0,
+        review_window_secs: 0,
+        dispute_cooloff_secs: 0,
+        cancel_notice_secs: 0,
+        max_iterations: 0,
     }
 }
 
@@ -109,17 +113,20 @@ fn commit_bid_init(
     svm: &mut LiteSVM,
     rfp: Pubkey,
     provider: &Keypair,
-    seed: [u8; 32],
+    _seed: [u8; 32],   // legacy param - bid PDA now derives from provider.pubkey directly
     buyer_envelope_len: u32,
     provider_envelope_len: u32,
     commit_hash: [u8; 32],
 ) -> std::result::Result<Pubkey, ()> {
-    let (bid, _) = bid_pda(&rfp, &seed);
+    let (bid, _) = bid_pda(&rfp, &provider.pubkey().to_bytes());
     let args = tender::instructions::commit_bid_init::CommitBidInitArgs {
-        bid_pda_seed: seed,
         commit_hash,
         buyer_envelope_len,
         provider_envelope_len,
+        payout_destination: provider.pubkey(),
+        payout_chain: tender::state::PayoutChain::Solana {
+            mint: anchor_spl::token::spl_token::native_mint::id(),
+        },
     };
     let ix = Instruction {
         program_id: tender::ID,
@@ -207,7 +214,7 @@ fn rfp_create_initializes_optional_fields_correctly() {
     let rfp = create_rfp(&mut svm, &buyer, [1u8; 8]);
     let state = read_rfp(&svm, rfp);
     assert_eq!(state.winner, None, "winner must start as None");
-    assert_eq!(state.escrow_vault, Pubkey::default(), "escrow_vault filled at escrow_fund");
+    assert_eq!(state.contract_value, 0, "contract_value set at fund time");
     assert_eq!(state.created_at, T0);
 }
 
@@ -252,46 +259,21 @@ fn commit_bid_init_l0_stores_plain_identity() {
     assert_eq!(state.commit_hash, [9u8; 32]);
     assert_eq!(state.buyer, buyer.pubkey());
     assert_eq!(state.bid_close_at, T0 + 86_400);
-    match state.provider_identity {
-        ProviderIdentity::Plain(pk) => assert_eq!(pk, p.pubkey()),
-        _ => panic!("L0 should produce Plain identity"),
-    }
+    assert_eq!(state.provider, p.pubkey(), "bid.provider == signer pubkey");
 }
 
 #[test]
-fn commit_bid_init_l0_rejects_non_provider_seed() {
-    let (mut svm, buyer) = fresh_svm();
-    let rfp = create_rfp(&mut svm, &buyer, [1u8; 8]);
-    let p = fund(&mut svm);
-    // L0 enforces that bid_pda_seed must equal provider wallet bytes.
-    let bogus_seed = [99u8; 32];
-    let result = commit_bid_init(&mut svm, rfp, &p, bogus_seed, 100, 100, [3u8; 32]);
-    assert!(
-        result.is_err(),
-        "L0 must reject a bid_pda_seed that doesn't match provider wallet bytes"
-    );
-}
-
-#[test]
-fn commit_bid_init_l1_stores_hashed_identity() {
+fn commit_bid_init_buyer_only_mode_uses_signer_as_provider_too() {
+    // After the simplification, both modes store `provider = signer.pubkey`.
+    // The privacy in BuyerOnly mode comes from the client using an ephemeral
+    // wallet to sign - the program doesn't enforce or even know.
     let (mut svm, buyer) = fresh_svm();
     let rfp = create_rfp_with(&mut svm, &buyer, [1u8; 8], BidderVisibility::BuyerOnly);
     let p = fund(&mut svm);
-    // L1 allows any bid_pda_seed (in real flow it's deterministic from the
-    // provider's wallet sig; here we just pass an arbitrary 32-byte value).
-    let opaque_seed = [0xABu8; 32];
-    let bid = commit_bid_init(&mut svm, rfp, &p, opaque_seed, 100, 100, [4u8; 32])
-        .expect("L1 init with opaque seed should succeed");
-
+    let bid = commit_bid_init(&mut svm, rfp, &p, p.pubkey().to_bytes(), 100, 100, [4u8; 32])
+        .expect("BuyerOnly init should succeed");
     let state = read_bid(&svm, bid);
-    let expected_hash = sha256(p.pubkey().as_ref());
-    match state.provider_identity {
-        ProviderIdentity::Hashed(h) => assert_eq!(
-            h, expected_hash,
-            "L1 must store sha256(provider_wallet)"
-        ),
-        _ => panic!("L1 should produce Hashed identity"),
-    }
+    assert_eq!(state.provider, p.pubkey());
 }
 
 // -----------------------------------------------------------------------------
@@ -334,4 +316,173 @@ fn close_bidding_anyone_signer() {
         "non-buyer signer must be allowed to close"
     );
     assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Reveal);
+}
+
+// -----------------------------------------------------------------------------
+// rfp_create input validation (no PER required)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn rfp_create_rejects_inverted_bid_window() {
+    // bid_close_at <= bid_open_at must trip InvalidBidWindow (6023). Catches
+    // a class of UX bugs where the buyer's clock is wrong or the form skips
+    // its zod check.
+    let (mut svm, buyer) = fresh_svm();
+    let nonce = [9u8; 8];
+    let (rfp, _) = rfp_pda(&buyer.pubkey(), &nonce);
+    let mut args = default_rfp_args(nonce, BidderVisibility::Public);
+    args.bid_close_at = args.bid_open_at; // invalid: not strictly greater
+    let ix = Instruction {
+        program_id: tender::ID,
+        accounts: tender::accounts::RfpCreate {
+            buyer: buyer.pubkey(),
+            rfp,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: tender::instruction::RfpCreate { args }.data(),
+    };
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&buyer.pubkey()),
+        &[&buyer],
+        svm.latest_blockhash(),
+    );
+    assert!(svm.send_transaction(tx).is_err(), "inverted window must be rejected");
+}
+
+#[test]
+fn rfp_create_persists_reserve_commitment() {
+    // Foundation for reveal_reserve: a non-zero commitment must be stored
+    // verbatim on the account so reveal_reserve can hash + compare later.
+    let (mut svm, buyer) = fresh_svm();
+    let nonce = [10u8; 8];
+    let (rfp, _) = rfp_pda(&buyer.pubkey(), &nonce);
+    let mut args = default_rfp_args(nonce, BidderVisibility::Public);
+    let commitment = [0xABu8; 32];
+    args.reserve_price_commitment = commitment;
+    let ix = Instruction {
+        program_id: tender::ID,
+        accounts: tender::accounts::RfpCreate {
+            buyer: buyer.pubkey(),
+            rfp,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: tender::instruction::RfpCreate { args }.data(),
+    };
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&buyer.pubkey()),
+        &[&buyer],
+        svm.latest_blockhash(),
+    );
+    svm.send_transaction(tx).expect("rfp_create with reserve must succeed");
+    let stored = read_rfp(&svm, rfp);
+    assert_eq!(stored.reserve_price_commitment, commitment);
+    assert_eq!(stored.reserve_price_revealed, 0, "reveal must start at 0");
+}
+
+// -----------------------------------------------------------------------------
+// reveal_reserve happy path + commitment-mismatch rejection
+// -----------------------------------------------------------------------------
+
+fn reveal_reserve(
+    svm: &mut LiteSVM,
+    rfp: Pubkey,
+    buyer: &Keypair,
+    amount: u64,
+    nonce: [u8; 32],
+) -> std::result::Result<(), ()> {
+    let args = tender::instructions::reveal_reserve::RevealReserveArgs {
+        reserve_amount: amount,
+        reserve_nonce: nonce,
+    };
+    let ix = Instruction {
+        program_id: tender::ID,
+        accounts: tender::accounts::RevealReserve {
+            buyer: buyer.pubkey(),
+            rfp,
+        }
+        .to_account_metas(None),
+        data: tender::instruction::RevealReserve { args }.data(),
+    };
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&buyer.pubkey()),
+        &[buyer],
+        svm.latest_blockhash(),
+    );
+    svm.send_transaction(tx).map(|_| ()).map_err(|_| ())
+}
+
+fn create_rfp_with_reserve(
+    svm: &mut LiteSVM,
+    buyer: &Keypair,
+    nonce_seed: [u8; 8],
+    reserve_amount: u64,
+    reserve_nonce: [u8; 32],
+) -> Pubkey {
+    let (rfp, _) = rfp_pda(&buyer.pubkey(), &nonce_seed);
+    let mut args = default_rfp_args(nonce_seed, BidderVisibility::Public);
+    // Recompute the same commitment hash the client builds:
+    //   SHA256(amount_le(8) || nonce(32))
+    let mut buf = [0u8; 8 + 32];
+    buf[..8].copy_from_slice(&reserve_amount.to_le_bytes());
+    buf[8..].copy_from_slice(&reserve_nonce);
+    args.reserve_price_commitment = sha256(&buf);
+    let ix = Instruction {
+        program_id: tender::ID,
+        accounts: tender::accounts::RfpCreate {
+            buyer: buyer.pubkey(),
+            rfp,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: tender::instruction::RfpCreate { args }.data(),
+    };
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&buyer.pubkey()),
+        &[buyer],
+        svm.latest_blockhash(),
+    );
+    svm.send_transaction(tx).expect("rfp_create with reserve must succeed");
+    rfp
+}
+
+#[test]
+fn reveal_reserve_happy_path() {
+    // Buyer commits a reserve, closes bidding (status -> Reveal), then reveals
+    // with the correct (amount, nonce). The on-chain hash check accepts and
+    // `reserve_price_revealed` reflects the value, enabling select_bid to
+    // enforce `winning_bid <= reserve` later.
+    let (mut svm, buyer) = fresh_svm();
+    let amount: u64 = 500_000_000; // $500 USDC base units
+    let nonce = [0x42u8; 32];
+    let rfp = create_rfp_with_reserve(&mut svm, &buyer, [11u8; 8], amount, nonce);
+    set_clock(&mut svm, T0 + 86_400 + 1);
+    assert!(close_bidding(&mut svm, rfp, &buyer));
+    assert!(reveal_reserve(&mut svm, rfp, &buyer, amount, nonce).is_ok());
+    let r = read_rfp(&svm, rfp);
+    assert_eq!(r.reserve_price_revealed, amount);
+}
+
+#[test]
+fn reveal_reserve_rejects_wrong_amount() {
+    // Wrong amount -> commitment hash mismatch -> ReserveCommitmentMismatch.
+    // Guards against a buyer trying to "lower" the reserve at reveal time
+    // to accept a higher bid than they committed to.
+    let (mut svm, buyer) = fresh_svm();
+    let amount: u64 = 1_000_000_000;
+    let nonce = [0x77u8; 32];
+    let rfp = create_rfp_with_reserve(&mut svm, &buyer, [12u8; 8], amount, nonce);
+    set_clock(&mut svm, T0 + 86_400 + 1);
+    assert!(close_bidding(&mut svm, rfp, &buyer));
+    assert!(
+        reveal_reserve(&mut svm, rfp, &buyer, amount + 1, nonce).is_err(),
+        "wrong amount must be rejected"
+    );
+    // And the on-chain reserve_price_revealed must stay 0 - no partial state.
+    assert_eq!(read_rfp(&svm, rfp).reserve_price_revealed, 0);
 }

@@ -52,7 +52,7 @@ pub fn handler(ctx: Context<WriteBidChunk>, args: WriteBidChunkArgs) -> Result<(
         .checked_add(args.data.len())
         .ok_or(TenderError::ChunkOverrun)?;
     require!(end <= declared_len as usize, TenderError::ChunkOverrun);
-    // Allow writes only at or below the current frontier — prevents leaving
+    // Allow writes only at or below the current frontier - prevents leaving
     // uninitialized gaps that would silently land in the final hash.
     require!(
         offset <= envelope.len(),

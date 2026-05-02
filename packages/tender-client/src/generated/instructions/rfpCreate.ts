@@ -16,8 +16,6 @@ import {
   getI64Encoder,
   getStructDecoder,
   getStructEncoder,
-  getU64Decoder,
-  getU64Encoder,
   getU8Decoder,
   getU8Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
@@ -87,12 +85,18 @@ export type RfpCreateInstructionData = {
   buyerEncryptionPubkey: ReadonlyUint8Array;
   titleHash: ReadonlyUint8Array;
   category: number;
-  budgetMax: bigint;
   bidOpenAt: bigint;
   bidCloseAt: bigint;
   revealCloseAt: bigint;
-  milestoneCount: number;
   bidderVisibility: BidderVisibility;
+  /** SHA-256(reserve_amount_le_bytes || reserve_nonce). All zeros = no reserve. */
+  reservePriceCommitment: ReadonlyUint8Array;
+  /** Per-RFP windows. Pass 0 to use defaults. */
+  fundingWindowSecs: bigint;
+  reviewWindowSecs: bigint;
+  disputeCooloffSecs: bigint;
+  cancelNoticeSecs: bigint;
+  maxIterations: number;
 };
 
 export type RfpCreateInstructionDataArgs = {
@@ -100,12 +104,18 @@ export type RfpCreateInstructionDataArgs = {
   buyerEncryptionPubkey: ReadonlyUint8Array;
   titleHash: ReadonlyUint8Array;
   category: number;
-  budgetMax: number | bigint;
   bidOpenAt: number | bigint;
   bidCloseAt: number | bigint;
   revealCloseAt: number | bigint;
-  milestoneCount: number;
   bidderVisibility: BidderVisibilityArgs;
+  /** SHA-256(reserve_amount_le_bytes || reserve_nonce). All zeros = no reserve. */
+  reservePriceCommitment: ReadonlyUint8Array;
+  /** Per-RFP windows. Pass 0 to use defaults. */
+  fundingWindowSecs: number | bigint;
+  reviewWindowSecs: number | bigint;
+  disputeCooloffSecs: number | bigint;
+  cancelNoticeSecs: number | bigint;
+  maxIterations: number;
 };
 
 export function getRfpCreateInstructionDataEncoder(): FixedSizeEncoder<RfpCreateInstructionDataArgs> {
@@ -116,12 +126,16 @@ export function getRfpCreateInstructionDataEncoder(): FixedSizeEncoder<RfpCreate
       ["buyerEncryptionPubkey", fixEncoderSize(getBytesEncoder(), 32)],
       ["titleHash", fixEncoderSize(getBytesEncoder(), 32)],
       ["category", getU8Encoder()],
-      ["budgetMax", getU64Encoder()],
       ["bidOpenAt", getI64Encoder()],
       ["bidCloseAt", getI64Encoder()],
       ["revealCloseAt", getI64Encoder()],
-      ["milestoneCount", getU8Encoder()],
       ["bidderVisibility", getBidderVisibilityEncoder()],
+      ["reservePriceCommitment", fixEncoderSize(getBytesEncoder(), 32)],
+      ["fundingWindowSecs", getI64Encoder()],
+      ["reviewWindowSecs", getI64Encoder()],
+      ["disputeCooloffSecs", getI64Encoder()],
+      ["cancelNoticeSecs", getI64Encoder()],
+      ["maxIterations", getU8Encoder()],
     ]),
     (value) => ({ ...value, discriminator: RFP_CREATE_DISCRIMINATOR }),
   );
@@ -134,12 +148,16 @@ export function getRfpCreateInstructionDataDecoder(): FixedSizeDecoder<RfpCreate
     ["buyerEncryptionPubkey", fixDecoderSize(getBytesDecoder(), 32)],
     ["titleHash", fixDecoderSize(getBytesDecoder(), 32)],
     ["category", getU8Decoder()],
-    ["budgetMax", getU64Decoder()],
     ["bidOpenAt", getI64Decoder()],
     ["bidCloseAt", getI64Decoder()],
     ["revealCloseAt", getI64Decoder()],
-    ["milestoneCount", getU8Decoder()],
     ["bidderVisibility", getBidderVisibilityDecoder()],
+    ["reservePriceCommitment", fixDecoderSize(getBytesDecoder(), 32)],
+    ["fundingWindowSecs", getI64Decoder()],
+    ["reviewWindowSecs", getI64Decoder()],
+    ["disputeCooloffSecs", getI64Decoder()],
+    ["cancelNoticeSecs", getI64Decoder()],
+    ["maxIterations", getU8Decoder()],
   ]);
 }
 
@@ -165,12 +183,16 @@ export type RfpCreateInput<
   buyerEncryptionPubkey: RfpCreateInstructionDataArgs["buyerEncryptionPubkey"];
   titleHash: RfpCreateInstructionDataArgs["titleHash"];
   category: RfpCreateInstructionDataArgs["category"];
-  budgetMax: RfpCreateInstructionDataArgs["budgetMax"];
   bidOpenAt: RfpCreateInstructionDataArgs["bidOpenAt"];
   bidCloseAt: RfpCreateInstructionDataArgs["bidCloseAt"];
   revealCloseAt: RfpCreateInstructionDataArgs["revealCloseAt"];
-  milestoneCount: RfpCreateInstructionDataArgs["milestoneCount"];
   bidderVisibility: RfpCreateInstructionDataArgs["bidderVisibility"];
+  reservePriceCommitment: RfpCreateInstructionDataArgs["reservePriceCommitment"];
+  fundingWindowSecs: RfpCreateInstructionDataArgs["fundingWindowSecs"];
+  reviewWindowSecs: RfpCreateInstructionDataArgs["reviewWindowSecs"];
+  disputeCooloffSecs: RfpCreateInstructionDataArgs["disputeCooloffSecs"];
+  cancelNoticeSecs: RfpCreateInstructionDataArgs["cancelNoticeSecs"];
+  maxIterations: RfpCreateInstructionDataArgs["maxIterations"];
 };
 
 export function getRfpCreateInstruction<

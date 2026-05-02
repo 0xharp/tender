@@ -10,8 +10,6 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
-  getAddressDecoder,
-  getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getStructDecoder,
@@ -80,27 +78,13 @@ export type OpenRevealWindowInstruction<
 
 export type OpenRevealWindowInstructionData = {
   discriminator: ReadonlyUint8Array;
-  /**
-   * The provider's wallet pubkey. Verified against `bid.provider_identity`
-   * before being included in the new permission set.
-   */
-  providerWallet: Address;
 };
 
-export type OpenRevealWindowInstructionDataArgs = {
-  /**
-   * The provider's wallet pubkey. Verified against `bid.provider_identity`
-   * before being included in the new permission set.
-   */
-  providerWallet: Address;
-};
+export type OpenRevealWindowInstructionDataArgs = {};
 
 export function getOpenRevealWindowInstructionDataEncoder(): FixedSizeEncoder<OpenRevealWindowInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([
-      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["providerWallet", getAddressEncoder()],
-    ]),
+    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
     (value) => ({ ...value, discriminator: OPEN_REVEAL_WINDOW_DISCRIMINATOR }),
   );
 }
@@ -108,7 +92,6 @@ export function getOpenRevealWindowInstructionDataEncoder(): FixedSizeEncoder<Op
 export function getOpenRevealWindowInstructionDataDecoder(): FixedSizeDecoder<OpenRevealWindowInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["providerWallet", getAddressDecoder()],
   ]);
 }
 
@@ -128,12 +111,10 @@ export type OpenRevealWindowAsyncInput<
   TAccountPermission extends string = string,
   TAccountPermissionProgram extends string = string,
 > = {
-  /** Anyone — this ix is permissionless once the time gate is satisfied. */
   payer: TransactionSigner<TAccountPayer>;
   bid: Address<TAccountBid>;
   permission?: Address<TAccountPermission>;
   permissionProgram?: Address<TAccountPermissionProgram>;
-  providerWallet: OpenRevealWindowInstructionDataArgs["providerWallet"];
 };
 
 export async function getOpenRevealWindowInstructionAsync<
@@ -177,9 +158,6 @@ export async function getOpenRevealWindowInstructionAsync<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.permission.value) {
     accounts.permission.value = await findPermissionPda({
@@ -199,9 +177,7 @@ export async function getOpenRevealWindowInstructionAsync<
       getAccountMeta("permission", accounts.permission),
       getAccountMeta("permissionProgram", accounts.permissionProgram),
     ],
-    data: getOpenRevealWindowInstructionDataEncoder().encode(
-      args as OpenRevealWindowInstructionDataArgs,
-    ),
+    data: getOpenRevealWindowInstructionDataEncoder().encode({}),
     programAddress,
   } as OpenRevealWindowInstruction<
     TProgramAddress,
@@ -218,12 +194,10 @@ export type OpenRevealWindowInput<
   TAccountPermission extends string = string,
   TAccountPermissionProgram extends string = string,
 > = {
-  /** Anyone — this ix is permissionless once the time gate is satisfied. */
   payer: TransactionSigner<TAccountPayer>;
   bid: Address<TAccountBid>;
   permission: Address<TAccountPermission>;
   permissionProgram?: Address<TAccountPermissionProgram>;
-  providerWallet: OpenRevealWindowInstructionDataArgs["providerWallet"];
 };
 
 export function getOpenRevealWindowInstruction<
@@ -265,9 +239,6 @@ export function getOpenRevealWindowInstruction<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.permissionProgram.value) {
     accounts.permissionProgram.value =
@@ -282,9 +253,7 @@ export function getOpenRevealWindowInstruction<
       getAccountMeta("permission", accounts.permission),
       getAccountMeta("permissionProgram", accounts.permissionProgram),
     ],
-    data: getOpenRevealWindowInstructionDataEncoder().encode(
-      args as OpenRevealWindowInstructionDataArgs,
-    ),
+    data: getOpenRevealWindowInstructionDataEncoder().encode({}),
     programAddress,
   } as OpenRevealWindowInstruction<
     TProgramAddress,
@@ -301,7 +270,6 @@ export type ParsedOpenRevealWindowInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    /** Anyone — this ix is permissionless once the time gate is satisfied. */
     payer: TAccountMetas[0];
     bid: TAccountMetas[1];
     permission: TAccountMetas[2];

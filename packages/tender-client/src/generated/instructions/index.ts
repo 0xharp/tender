@@ -6,15 +6,29 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./acceptMilestone";
+export * from "./autoReleaseMilestone";
+export * from "./cancelLateMilestone";
+export * from "./cancelWithNotice";
+export * from "./cancelWithPenalty";
 export * from "./closeWithdrawnBid";
 export * from "./commitBidInit";
 export * from "./delegateBid";
+export * from "./disputeDefaultSplit";
 export * from "./finalizeBid";
+export * from "./fundProject";
+export * from "./initTreasury";
+export * from "./markBuyerGhosted";
 export * from "./openRevealWindow";
 export * from "./processUndelegation";
+export * from "./rejectMilestone";
+export * from "./requestChanges";
+export * from "./resolveDispute";
+export * from "./revealReserve";
 export * from "./rfpCloseBidding";
 export * from "./rfpCreate";
 export * from "./selectBid";
-export * from "./selectBidFinalize";
+export * from "./startMilestone";
+export * from "./submitMilestone";
 export * from "./withdrawBid";
 export * from "./writeBidChunk";

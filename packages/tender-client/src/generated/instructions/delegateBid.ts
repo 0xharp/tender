@@ -40,6 +40,7 @@ import {
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
 import {
+  findBidPda,
   findBufferBidPda,
   findDelegationMetadataBidPda,
   findDelegationRecordBidPda,
@@ -131,19 +132,13 @@ export type DelegateBidInstruction<
     ]
   >;
 
-export type DelegateBidInstructionData = {
-  discriminator: ReadonlyUint8Array;
-  bidPdaSeed: ReadonlyUint8Array;
-};
+export type DelegateBidInstructionData = { discriminator: ReadonlyUint8Array };
 
-export type DelegateBidInstructionDataArgs = { bidPdaSeed: ReadonlyUint8Array };
+export type DelegateBidInstructionDataArgs = {};
 
 export function getDelegateBidInstructionDataEncoder(): FixedSizeEncoder<DelegateBidInstructionDataArgs> {
   return transformEncoder(
-    getStructEncoder([
-      ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["bidPdaSeed", fixEncoderSize(getBytesEncoder(), 32)],
-    ]),
+    getStructEncoder([["discriminator", fixEncoderSize(getBytesEncoder(), 8)]]),
     (value) => ({ ...value, discriminator: DELEGATE_BID_DISCRIMINATOR }),
   );
 }
@@ -151,7 +146,6 @@ export function getDelegateBidInstructionDataEncoder(): FixedSizeEncoder<Delegat
 export function getDelegateBidInstructionDataDecoder(): FixedSizeDecoder<DelegateBidInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["bidPdaSeed", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 
@@ -187,22 +181,16 @@ export type DelegateBidAsyncInput<
   bufferBid?: Address<TAccountBufferBid>;
   delegationRecordBid?: Address<TAccountDelegationRecordBid>;
   delegationMetadataBid?: Address<TAccountDelegationMetadataBid>;
-  bid: Address<TAccountBid>;
+  bid?: Address<TAccountBid>;
   permission?: Address<TAccountPermission>;
   bufferPermission?: Address<TAccountBufferPermission>;
   delegationRecordPermission?: Address<TAccountDelegationRecordPermission>;
   delegationMetadataPermission?: Address<TAccountDelegationMetadataPermission>;
   permissionProgram?: Address<TAccountPermissionProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
-  /**
-   * validator pubkey (e.g. `MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo` on
-   * devnet). When `None`, MagicBlock picks a default — fine for ER but may
-   * not satisfy PER's TEE requirement, so the client should always provide it.
-   */
   validator?: Address<TAccountValidator>;
   ownerProgram?: Address<TAccountOwnerProgram>;
   delegationProgram?: Address<TAccountDelegationProgram>;
-  bidPdaSeed: DelegateBidInstructionDataArgs["bidPdaSeed"];
 };
 
 export async function getDelegateBidInstructionAsync<
@@ -308,10 +296,16 @@ export async function getDelegateBidInstructionAsync<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
+  if (!accounts.bid.value) {
+    accounts.bid.value = await findBidPda({
+      rfp: getAddressFromResolvedInstructionAccount("rfp", accounts.rfp.value),
+      provider: getAddressFromResolvedInstructionAccount(
+        "provider",
+        accounts.provider.value,
+      ),
+    });
+  }
   if (!accounts.bufferBid.value) {
     accounts.bufferBid.value = await findBufferBidPda({
       bid: getAddressFromResolvedInstructionAccount("bid", accounts.bid.value),
@@ -427,9 +421,7 @@ export async function getDelegateBidInstructionAsync<
       getAccountMeta("ownerProgram", accounts.ownerProgram),
       getAccountMeta("delegationProgram", accounts.delegationProgram),
     ],
-    data: getDelegateBidInstructionDataEncoder().encode(
-      args as DelegateBidInstructionDataArgs,
-    ),
+    data: getDelegateBidInstructionDataEncoder().encode({}),
     programAddress,
   } as DelegateBidInstruction<
     TProgramAddress,
@@ -480,15 +472,9 @@ export type DelegateBidInput<
   delegationMetadataPermission: Address<TAccountDelegationMetadataPermission>;
   permissionProgram?: Address<TAccountPermissionProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
-  /**
-   * validator pubkey (e.g. `MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo` on
-   * devnet). When `None`, MagicBlock picks a default — fine for ER but may
-   * not satisfy PER's TEE requirement, so the client should always provide it.
-   */
   validator?: Address<TAccountValidator>;
   ownerProgram?: Address<TAccountOwnerProgram>;
   delegationProgram?: Address<TAccountDelegationProgram>;
-  bidPdaSeed: DelegateBidInstructionDataArgs["bidPdaSeed"];
 };
 
 export function getDelegateBidInstruction<
@@ -592,9 +578,6 @@ export function getDelegateBidInstruction<
     ResolvedInstructionAccount
   >;
 
-  // Original args.
-  const args = { ...input };
-
   // Resolve default values.
   if (!accounts.permissionProgram.value) {
     accounts.permissionProgram.value =
@@ -638,9 +621,7 @@ export function getDelegateBidInstruction<
       getAccountMeta("ownerProgram", accounts.ownerProgram),
       getAccountMeta("delegationProgram", accounts.delegationProgram),
     ],
-    data: getDelegateBidInstructionDataEncoder().encode(
-      args as DelegateBidInstructionDataArgs,
-    ),
+    data: getDelegateBidInstructionDataEncoder().encode({}),
     programAddress,
   } as DelegateBidInstruction<
     TProgramAddress,
@@ -680,11 +661,6 @@ export type ParsedDelegateBidInstruction<
     delegationMetadataPermission: TAccountMetas[9];
     permissionProgram: TAccountMetas[10];
     systemProgram: TAccountMetas[11];
-    /**
-     * validator pubkey (e.g. `MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo` on
-     * devnet). When `None`, MagicBlock picks a default — fine for ER but may
-     * not satisfy PER's TEE requirement, so the client should always provide it.
-     */
     validator?: TAccountMetas[12] | undefined;
     ownerProgram: TAccountMetas[13];
     delegationProgram: TAccountMetas[14];

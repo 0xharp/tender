@@ -15,10 +15,6 @@ import {
   type FixedSizeEncoder,
 } from "@solana/kit";
 
-/**
- * Per-RFP bidder identity privacy level.
- * See `docs/PRIVACY-MODEL.md` for the full rationale.
- */
 export enum BidderVisibility {
   Public,
   BuyerOnly,

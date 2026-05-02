@@ -12,19 +12,27 @@ import {
   fixEncoderSize,
   getAddressDecoder,
   getAddressEncoder,
+  getArrayDecoder,
+  getArrayEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getI64Decoder,
+  getI64Encoder,
   getStructDecoder,
   getStructEncoder,
+  getU64Decoder,
+  getU64Encoder,
+  getU8Decoder,
+  getU8Encoder,
   SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
   SolanaError,
   transformEncoder,
   type AccountMeta,
   type AccountSignerMeta,
   type Address,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
+  type Codec,
+  type Decoder,
+  type Encoder,
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
@@ -36,8 +44,10 @@ import {
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
+  getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
+import { findBuyerReputationPda } from "../pdas";
 import { TENDER_PROGRAM_ADDRESS } from "../programs";
 
 export const SELECT_BID_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -51,11 +61,14 @@ export function getSelectBidDiscriminatorBytes(): ReadonlyUint8Array {
 export type SelectBidInstruction<
   TProgram extends string = typeof TENDER_PROGRAM_ADDRESS,
   TAccountBuyer extends string | AccountMeta<string> = string,
+  TAccountRfp extends string | AccountMeta<string> = string,
   TAccountBid extends string | AccountMeta<string> = string,
-  TAccountMagicProgram extends string | AccountMeta<string> =
-    "Magic11111111111111111111111111111111111111",
-  TAccountMagicContext extends string | AccountMeta<string> =
-    "MagicContext1111111111111111111111111111111",
+  TAccountBuyerReputation extends string | AccountMeta<string> = string,
+  TAccountProviderReputation extends string | AccountMeta<string> = string,
+  TAccountInstructionsSysvar extends string | AccountMeta<string> =
+    "Sysvar1nstructions1111111111111111111111111",
+  TAccountSystemProgram extends string | AccountMeta<string> =
+    "11111111111111111111111111111111",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -65,54 +78,97 @@ export type SelectBidInstruction<
         ? WritableSignerAccount<TAccountBuyer> &
             AccountSignerMeta<TAccountBuyer>
         : TAccountBuyer,
-      TAccountBid extends string ? WritableAccount<TAccountBid> : TAccountBid,
-      TAccountMagicProgram extends string
-        ? ReadonlyAccount<TAccountMagicProgram>
-        : TAccountMagicProgram,
-      TAccountMagicContext extends string
-        ? WritableAccount<TAccountMagicContext>
-        : TAccountMagicContext,
+      TAccountRfp extends string ? WritableAccount<TAccountRfp> : TAccountRfp,
+      TAccountBid extends string ? ReadonlyAccount<TAccountBid> : TAccountBid,
+      TAccountBuyerReputation extends string
+        ? WritableAccount<TAccountBuyerReputation>
+        : TAccountBuyerReputation,
+      TAccountProviderReputation extends string
+        ? WritableAccount<TAccountProviderReputation>
+        : TAccountProviderReputation,
+      TAccountInstructionsSysvar extends string
+        ? ReadonlyAccount<TAccountInstructionsSysvar>
+        : TAccountInstructionsSysvar,
+      TAccountSystemProgram extends string
+        ? ReadonlyAccount<TAccountSystemProgram>
+        : TAccountSystemProgram,
       ...TRemainingAccounts,
     ]
   >;
 
 export type SelectBidInstructionData = {
   discriminator: ReadonlyUint8Array;
+  winnerProvider: Address;
+  contractValue: bigint;
   /**
-   * The provider's wallet pubkey. Verified against `bid.provider_identity`.
-   * In L1, the buyer learns this by decrypting the buyer envelope after
-   * `open_reveal_window` adds them to the permission set.
+   * Number of milestones in the winning bid (1..=MAX_MILESTONE_COUNT).
+   * Sourced by the buyer from the decrypted winning bid plaintext.
    */
-  providerWallet: Address;
+  milestoneCount: number;
+  /**
+   * Per-milestone payout amounts (USDC base units). Length equals
+   * `milestone_count`; sum MUST equal `contract_value`. These are the
+   * exact amounts the provider quoted in their bid — no rounding.
+   */
+  milestoneAmounts: Array<bigint>;
+  /**
+   * Per-milestone delivery duration (seconds). Length equals
+   * `milestone_count`. 0 = no deadline (cancel_late_milestone unavailable
+   * for that milestone). Sourced from the bid plaintext if the provider
+   * committed to per-milestone deadlines.
+   */
+  milestoneDurationsSecs: Array<bigint>;
 };
 
 export type SelectBidInstructionDataArgs = {
+  winnerProvider: Address;
+  contractValue: number | bigint;
   /**
-   * The provider's wallet pubkey. Verified against `bid.provider_identity`.
-   * In L1, the buyer learns this by decrypting the buyer envelope after
-   * `open_reveal_window` adds them to the permission set.
+   * Number of milestones in the winning bid (1..=MAX_MILESTONE_COUNT).
+   * Sourced by the buyer from the decrypted winning bid plaintext.
    */
-  providerWallet: Address;
+  milestoneCount: number;
+  /**
+   * Per-milestone payout amounts (USDC base units). Length equals
+   * `milestone_count`; sum MUST equal `contract_value`. These are the
+   * exact amounts the provider quoted in their bid — no rounding.
+   */
+  milestoneAmounts: Array<number | bigint>;
+  /**
+   * Per-milestone delivery duration (seconds). Length equals
+   * `milestone_count`. 0 = no deadline (cancel_late_milestone unavailable
+   * for that milestone). Sourced from the bid plaintext if the provider
+   * committed to per-milestone deadlines.
+   */
+  milestoneDurationsSecs: Array<number | bigint>;
 };
 
-export function getSelectBidInstructionDataEncoder(): FixedSizeEncoder<SelectBidInstructionDataArgs> {
+export function getSelectBidInstructionDataEncoder(): Encoder<SelectBidInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["providerWallet", getAddressEncoder()],
+      ["winnerProvider", getAddressEncoder()],
+      ["contractValue", getU64Encoder()],
+      ["milestoneCount", getU8Encoder()],
+      ["milestoneAmounts", getArrayEncoder(getU64Encoder())],
+      ["milestoneDurationsSecs", getArrayEncoder(getI64Encoder())],
     ]),
     (value) => ({ ...value, discriminator: SELECT_BID_DISCRIMINATOR }),
   );
 }
 
-export function getSelectBidInstructionDataDecoder(): FixedSizeDecoder<SelectBidInstructionData> {
+export function getSelectBidInstructionDataDecoder(): Decoder<SelectBidInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["providerWallet", getAddressDecoder()],
+    ["winnerProvider", getAddressDecoder()],
+    ["contractValue", getU64Decoder()],
+    ["milestoneCount", getU8Decoder()],
+    ["milestoneAmounts", getArrayDecoder(getU64Decoder())],
+    ["milestoneDurationsSecs", getArrayDecoder(getI64Decoder())],
   ]);
 }
 
-export function getSelectBidInstructionDataCodec(): FixedSizeCodec<
+export function getSelectBidInstructionDataCodec(): Codec<
   SelectBidInstructionDataArgs,
   SelectBidInstructionData
 > {
@@ -122,39 +178,70 @@ export function getSelectBidInstructionDataCodec(): FixedSizeCodec<
   );
 }
 
-export type SelectBidInput<
+export type SelectBidAsyncInput<
   TAccountBuyer extends string = string,
+  TAccountRfp extends string = string,
   TAccountBid extends string = string,
-  TAccountMagicProgram extends string = string,
-  TAccountMagicContext extends string = string,
+  TAccountBuyerReputation extends string = string,
+  TAccountProviderReputation extends string = string,
+  TAccountInstructionsSysvar extends string = string,
+  TAccountSystemProgram extends string = string,
 > = {
   buyer: TransactionSigner<TAccountBuyer>;
+  rfp: Address<TAccountRfp>;
   bid: Address<TAccountBid>;
-  magicProgram?: Address<TAccountMagicProgram>;
-  magicContext?: Address<TAccountMagicContext>;
-  providerWallet: SelectBidInstructionDataArgs["providerWallet"];
+  buyerReputation?: Address<TAccountBuyerReputation>;
+  /**
+   * Provider reputation account. Created lazily on first win — buyer pays
+   * rent. Recording the win here (rather than waiting for first milestone
+   * accept) means `total_won_usdc` reflects awarded contracts even if no
+   * milestones have shipped yet.
+   */
+  providerReputation: Address<TAccountProviderReputation>;
+  /**
+   * differs from bid.provider (private-mode binding-signature verification).
+   * Address-checked when accessed.
+   */
+  instructionsSysvar?: Address<TAccountInstructionsSysvar>;
+  systemProgram?: Address<TAccountSystemProgram>;
+  winnerProvider: SelectBidInstructionDataArgs["winnerProvider"];
+  contractValue: SelectBidInstructionDataArgs["contractValue"];
+  milestoneCount: SelectBidInstructionDataArgs["milestoneCount"];
+  milestoneAmounts: SelectBidInstructionDataArgs["milestoneAmounts"];
+  milestoneDurationsSecs: SelectBidInstructionDataArgs["milestoneDurationsSecs"];
 };
 
-export function getSelectBidInstruction<
+export async function getSelectBidInstructionAsync<
   TAccountBuyer extends string,
+  TAccountRfp extends string,
   TAccountBid extends string,
-  TAccountMagicProgram extends string,
-  TAccountMagicContext extends string,
+  TAccountBuyerReputation extends string,
+  TAccountProviderReputation extends string,
+  TAccountInstructionsSysvar extends string,
+  TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
-  input: SelectBidInput<
+  input: SelectBidAsyncInput<
     TAccountBuyer,
+    TAccountRfp,
     TAccountBid,
-    TAccountMagicProgram,
-    TAccountMagicContext
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountInstructionsSysvar,
+    TAccountSystemProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): SelectBidInstruction<
-  TProgramAddress,
-  TAccountBuyer,
-  TAccountBid,
-  TAccountMagicProgram,
-  TAccountMagicContext
+): Promise<
+  SelectBidInstruction<
+    TProgramAddress,
+    TAccountBuyer,
+    TAccountRfp,
+    TAccountBid,
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountInstructionsSysvar,
+    TAccountSystemProgram
+  >
 > {
   // Program address.
   const programAddress = config?.programAddress ?? TENDER_PROGRAM_ADDRESS;
@@ -162,9 +249,18 @@ export function getSelectBidInstruction<
   // Original accounts.
   const originalAccounts = {
     buyer: { value: input.buyer ?? null, isWritable: true },
-    bid: { value: input.bid ?? null, isWritable: true },
-    magicProgram: { value: input.magicProgram ?? null, isWritable: false },
-    magicContext: { value: input.magicContext ?? null, isWritable: true },
+    rfp: { value: input.rfp ?? null, isWritable: true },
+    bid: { value: input.bid ?? null, isWritable: false },
+    buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
+    providerReputation: {
+      value: input.providerReputation ?? null,
+      isWritable: true,
+    },
+    instructionsSysvar: {
+      value: input.instructionsSysvar ?? null,
+      isWritable: false,
+    },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -175,22 +271,33 @@ export function getSelectBidInstruction<
   const args = { ...input };
 
   // Resolve default values.
-  if (!accounts.magicProgram.value) {
-    accounts.magicProgram.value =
-      "Magic11111111111111111111111111111111111111" as Address<"Magic11111111111111111111111111111111111111">;
+  if (!accounts.buyerReputation.value) {
+    accounts.buyerReputation.value = await findBuyerReputationPda({
+      buyer: getAddressFromResolvedInstructionAccount(
+        "buyer",
+        accounts.buyer.value,
+      ),
+    });
   }
-  if (!accounts.magicContext.value) {
-    accounts.magicContext.value =
-      "MagicContext1111111111111111111111111111111" as Address<"MagicContext1111111111111111111111111111111">;
+  if (!accounts.instructionsSysvar.value) {
+    accounts.instructionsSysvar.value =
+      "Sysvar1nstructions1111111111111111111111111" as Address<"Sysvar1nstructions1111111111111111111111111">;
+  }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
   }
 
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
       getAccountMeta("buyer", accounts.buyer),
+      getAccountMeta("rfp", accounts.rfp),
       getAccountMeta("bid", accounts.bid),
-      getAccountMeta("magicProgram", accounts.magicProgram),
-      getAccountMeta("magicContext", accounts.magicContext),
+      getAccountMeta("buyerReputation", accounts.buyerReputation),
+      getAccountMeta("providerReputation", accounts.providerReputation),
+      getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
+      getAccountMeta("systemProgram", accounts.systemProgram),
     ],
     data: getSelectBidInstructionDataEncoder().encode(
       args as SelectBidInstructionDataArgs,
@@ -199,9 +306,139 @@ export function getSelectBidInstruction<
   } as SelectBidInstruction<
     TProgramAddress,
     TAccountBuyer,
+    TAccountRfp,
     TAccountBid,
-    TAccountMagicProgram,
-    TAccountMagicContext
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountInstructionsSysvar,
+    TAccountSystemProgram
+  >);
+}
+
+export type SelectBidInput<
+  TAccountBuyer extends string = string,
+  TAccountRfp extends string = string,
+  TAccountBid extends string = string,
+  TAccountBuyerReputation extends string = string,
+  TAccountProviderReputation extends string = string,
+  TAccountInstructionsSysvar extends string = string,
+  TAccountSystemProgram extends string = string,
+> = {
+  buyer: TransactionSigner<TAccountBuyer>;
+  rfp: Address<TAccountRfp>;
+  bid: Address<TAccountBid>;
+  buyerReputation: Address<TAccountBuyerReputation>;
+  /**
+   * Provider reputation account. Created lazily on first win — buyer pays
+   * rent. Recording the win here (rather than waiting for first milestone
+   * accept) means `total_won_usdc` reflects awarded contracts even if no
+   * milestones have shipped yet.
+   */
+  providerReputation: Address<TAccountProviderReputation>;
+  /**
+   * differs from bid.provider (private-mode binding-signature verification).
+   * Address-checked when accessed.
+   */
+  instructionsSysvar?: Address<TAccountInstructionsSysvar>;
+  systemProgram?: Address<TAccountSystemProgram>;
+  winnerProvider: SelectBidInstructionDataArgs["winnerProvider"];
+  contractValue: SelectBidInstructionDataArgs["contractValue"];
+  milestoneCount: SelectBidInstructionDataArgs["milestoneCount"];
+  milestoneAmounts: SelectBidInstructionDataArgs["milestoneAmounts"];
+  milestoneDurationsSecs: SelectBidInstructionDataArgs["milestoneDurationsSecs"];
+};
+
+export function getSelectBidInstruction<
+  TAccountBuyer extends string,
+  TAccountRfp extends string,
+  TAccountBid extends string,
+  TAccountBuyerReputation extends string,
+  TAccountProviderReputation extends string,
+  TAccountInstructionsSysvar extends string,
+  TAccountSystemProgram extends string,
+  TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
+>(
+  input: SelectBidInput<
+    TAccountBuyer,
+    TAccountRfp,
+    TAccountBid,
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountInstructionsSysvar,
+    TAccountSystemProgram
+  >,
+  config?: { programAddress?: TProgramAddress },
+): SelectBidInstruction<
+  TProgramAddress,
+  TAccountBuyer,
+  TAccountRfp,
+  TAccountBid,
+  TAccountBuyerReputation,
+  TAccountProviderReputation,
+  TAccountInstructionsSysvar,
+  TAccountSystemProgram
+> {
+  // Program address.
+  const programAddress = config?.programAddress ?? TENDER_PROGRAM_ADDRESS;
+
+  // Original accounts.
+  const originalAccounts = {
+    buyer: { value: input.buyer ?? null, isWritable: true },
+    rfp: { value: input.rfp ?? null, isWritable: true },
+    bid: { value: input.bid ?? null, isWritable: false },
+    buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
+    providerReputation: {
+      value: input.providerReputation ?? null,
+      isWritable: true,
+    },
+    instructionsSysvar: {
+      value: input.instructionsSysvar ?? null,
+      isWritable: false,
+    },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
+  };
+  const accounts = originalAccounts as Record<
+    keyof typeof originalAccounts,
+    ResolvedInstructionAccount
+  >;
+
+  // Original args.
+  const args = { ...input };
+
+  // Resolve default values.
+  if (!accounts.instructionsSysvar.value) {
+    accounts.instructionsSysvar.value =
+      "Sysvar1nstructions1111111111111111111111111" as Address<"Sysvar1nstructions1111111111111111111111111">;
+  }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
+
+  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
+  return Object.freeze({
+    accounts: [
+      getAccountMeta("buyer", accounts.buyer),
+      getAccountMeta("rfp", accounts.rfp),
+      getAccountMeta("bid", accounts.bid),
+      getAccountMeta("buyerReputation", accounts.buyerReputation),
+      getAccountMeta("providerReputation", accounts.providerReputation),
+      getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
+      getAccountMeta("systemProgram", accounts.systemProgram),
+    ],
+    data: getSelectBidInstructionDataEncoder().encode(
+      args as SelectBidInstructionDataArgs,
+    ),
+    programAddress,
+  } as SelectBidInstruction<
+    TProgramAddress,
+    TAccountBuyer,
+    TAccountRfp,
+    TAccountBid,
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountInstructionsSysvar,
+    TAccountSystemProgram
   >);
 }
 
@@ -212,9 +449,22 @@ export type ParsedSelectBidInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     buyer: TAccountMetas[0];
-    bid: TAccountMetas[1];
-    magicProgram: TAccountMetas[2];
-    magicContext: TAccountMetas[3];
+    rfp: TAccountMetas[1];
+    bid: TAccountMetas[2];
+    buyerReputation: TAccountMetas[3];
+    /**
+     * Provider reputation account. Created lazily on first win — buyer pays
+     * rent. Recording the win here (rather than waiting for first milestone
+     * accept) means `total_won_usdc` reflects awarded contracts even if no
+     * milestones have shipped yet.
+     */
+    providerReputation: TAccountMetas[4];
+    /**
+     * differs from bid.provider (private-mode binding-signature verification).
+     * Address-checked when accessed.
+     */
+    instructionsSysvar: TAccountMetas[5];
+    systemProgram: TAccountMetas[6];
   };
   data: SelectBidInstructionData;
 };
@@ -227,12 +477,12 @@ export function parseSelectBidInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedSelectBidInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 4) {
+  if (instruction.accounts.length < 7) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 4,
+        expectedAccountMetas: 7,
       },
     );
   }
@@ -246,9 +496,12 @@ export function parseSelectBidInstruction<
     programAddress: instruction.programAddress,
     accounts: {
       buyer: getNextAccount(),
+      rfp: getNextAccount(),
       bid: getNextAccount(),
-      magicProgram: getNextAccount(),
-      magicContext: getNextAccount(),
+      buyerReputation: getNextAccount(),
+      providerReputation: getNextAccount(),
+      instructionsSysvar: getNextAccount(),
+      systemProgram: getNextAccount(),
     },
     data: getSelectBidInstructionDataDecoder().decode(instruction.data),
   };

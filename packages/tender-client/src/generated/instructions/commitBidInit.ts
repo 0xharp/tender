@@ -10,6 +10,8 @@ import {
   combineCodec,
   fixDecoderSize,
   fixEncoderSize,
+  getAddressDecoder,
+  getAddressEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getStructDecoder,
@@ -22,9 +24,9 @@ import {
   type AccountMeta,
   type AccountSignerMeta,
   type Address,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
+  type Codec,
+  type Decoder,
+  type Encoder,
   type Instruction,
   type InstructionWithAccounts,
   type InstructionWithData,
@@ -36,9 +38,17 @@ import {
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
+  getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
+import { findBidPda } from "../pdas";
 import { TENDER_PROGRAM_ADDRESS } from "../programs";
+import {
+  getPayoutChainDecoder,
+  getPayoutChainEncoder,
+  type PayoutChain,
+  type PayoutChainArgs,
+} from "../types";
 
 export const COMMIT_BID_INIT_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array(
   [8, 223, 167, 217, 223, 255, 65, 224],
@@ -77,43 +87,55 @@ export type CommitBidInitInstruction<
 
 export type CommitBidInitInstructionData = {
   discriminator: ReadonlyUint8Array;
-  bidPdaSeed: ReadonlyUint8Array;
   commitHash: ReadonlyUint8Array;
   buyerEnvelopeLen: number;
   providerEnvelopeLen: number;
+  /**
+   * Where milestone USDC lands. Public mode = provider. Private mode =
+   * initially the ephemeral wallet (it gets reset to the main at select).
+   */
+  payoutDestination: Address;
+  payoutChain: PayoutChain;
 };
 
 export type CommitBidInitInstructionDataArgs = {
-  bidPdaSeed: ReadonlyUint8Array;
   commitHash: ReadonlyUint8Array;
   buyerEnvelopeLen: number;
   providerEnvelopeLen: number;
+  /**
+   * Where milestone USDC lands. Public mode = provider. Private mode =
+   * initially the ephemeral wallet (it gets reset to the main at select).
+   */
+  payoutDestination: Address;
+  payoutChain: PayoutChainArgs;
 };
 
-export function getCommitBidInitInstructionDataEncoder(): FixedSizeEncoder<CommitBidInitInstructionDataArgs> {
+export function getCommitBidInitInstructionDataEncoder(): Encoder<CommitBidInitInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
-      ["bidPdaSeed", fixEncoderSize(getBytesEncoder(), 32)],
       ["commitHash", fixEncoderSize(getBytesEncoder(), 32)],
       ["buyerEnvelopeLen", getU32Encoder()],
       ["providerEnvelopeLen", getU32Encoder()],
+      ["payoutDestination", getAddressEncoder()],
+      ["payoutChain", getPayoutChainEncoder()],
     ]),
     (value) => ({ ...value, discriminator: COMMIT_BID_INIT_DISCRIMINATOR }),
   );
 }
 
-export function getCommitBidInitInstructionDataDecoder(): FixedSizeDecoder<CommitBidInitInstructionData> {
+export function getCommitBidInitInstructionDataDecoder(): Decoder<CommitBidInitInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-    ["bidPdaSeed", fixDecoderSize(getBytesDecoder(), 32)],
     ["commitHash", fixDecoderSize(getBytesDecoder(), 32)],
     ["buyerEnvelopeLen", getU32Decoder()],
     ["providerEnvelopeLen", getU32Decoder()],
+    ["payoutDestination", getAddressDecoder()],
+    ["payoutChain", getPayoutChainDecoder()],
   ]);
 }
 
-export function getCommitBidInitInstructionDataCodec(): FixedSizeCodec<
+export function getCommitBidInitInstructionDataCodec(): Codec<
   CommitBidInitInstructionDataArgs,
   CommitBidInitInstructionData
 > {
@@ -121,6 +143,100 @@ export function getCommitBidInitInstructionDataCodec(): FixedSizeCodec<
     getCommitBidInitInstructionDataEncoder(),
     getCommitBidInitInstructionDataDecoder(),
   );
+}
+
+export type CommitBidInitAsyncInput<
+  TAccountProvider extends string = string,
+  TAccountRfp extends string = string,
+  TAccountBid extends string = string,
+  TAccountSystemProgram extends string = string,
+> = {
+  provider: TransactionSigner<TAccountProvider>;
+  rfp: Address<TAccountRfp>;
+  bid?: Address<TAccountBid>;
+  systemProgram?: Address<TAccountSystemProgram>;
+  commitHash: CommitBidInitInstructionDataArgs["commitHash"];
+  buyerEnvelopeLen: CommitBidInitInstructionDataArgs["buyerEnvelopeLen"];
+  providerEnvelopeLen: CommitBidInitInstructionDataArgs["providerEnvelopeLen"];
+  payoutDestination: CommitBidInitInstructionDataArgs["payoutDestination"];
+  payoutChain: CommitBidInitInstructionDataArgs["payoutChain"];
+};
+
+export async function getCommitBidInitInstructionAsync<
+  TAccountProvider extends string,
+  TAccountRfp extends string,
+  TAccountBid extends string,
+  TAccountSystemProgram extends string,
+  TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
+>(
+  input: CommitBidInitAsyncInput<
+    TAccountProvider,
+    TAccountRfp,
+    TAccountBid,
+    TAccountSystemProgram
+  >,
+  config?: { programAddress?: TProgramAddress },
+): Promise<
+  CommitBidInitInstruction<
+    TProgramAddress,
+    TAccountProvider,
+    TAccountRfp,
+    TAccountBid,
+    TAccountSystemProgram
+  >
+> {
+  // Program address.
+  const programAddress = config?.programAddress ?? TENDER_PROGRAM_ADDRESS;
+
+  // Original accounts.
+  const originalAccounts = {
+    provider: { value: input.provider ?? null, isWritable: true },
+    rfp: { value: input.rfp ?? null, isWritable: true },
+    bid: { value: input.bid ?? null, isWritable: true },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
+  };
+  const accounts = originalAccounts as Record<
+    keyof typeof originalAccounts,
+    ResolvedInstructionAccount
+  >;
+
+  // Original args.
+  const args = { ...input };
+
+  // Resolve default values.
+  if (!accounts.bid.value) {
+    accounts.bid.value = await findBidPda({
+      rfp: getAddressFromResolvedInstructionAccount("rfp", accounts.rfp.value),
+      provider: getAddressFromResolvedInstructionAccount(
+        "provider",
+        accounts.provider.value,
+      ),
+    });
+  }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
+
+  const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
+  return Object.freeze({
+    accounts: [
+      getAccountMeta("provider", accounts.provider),
+      getAccountMeta("rfp", accounts.rfp),
+      getAccountMeta("bid", accounts.bid),
+      getAccountMeta("systemProgram", accounts.systemProgram),
+    ],
+    data: getCommitBidInitInstructionDataEncoder().encode(
+      args as CommitBidInitInstructionDataArgs,
+    ),
+    programAddress,
+  } as CommitBidInitInstruction<
+    TProgramAddress,
+    TAccountProvider,
+    TAccountRfp,
+    TAccountBid,
+    TAccountSystemProgram
+  >);
 }
 
 export type CommitBidInitInput<
@@ -133,10 +249,11 @@ export type CommitBidInitInput<
   rfp: Address<TAccountRfp>;
   bid: Address<TAccountBid>;
   systemProgram?: Address<TAccountSystemProgram>;
-  bidPdaSeed: CommitBidInitInstructionDataArgs["bidPdaSeed"];
   commitHash: CommitBidInitInstructionDataArgs["commitHash"];
   buyerEnvelopeLen: CommitBidInitInstructionDataArgs["buyerEnvelopeLen"];
   providerEnvelopeLen: CommitBidInitInstructionDataArgs["providerEnvelopeLen"];
+  payoutDestination: CommitBidInitInstructionDataArgs["payoutDestination"];
+  payoutChain: CommitBidInitInstructionDataArgs["payoutChain"];
 };
 
 export function getCommitBidInitInstruction<

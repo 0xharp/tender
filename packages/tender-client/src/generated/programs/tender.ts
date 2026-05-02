@@ -35,67 +35,142 @@ import {
 } from "@solana/program-client-core";
 import {
   getBidCommitCodec,
+  getBuyerReputationCodec,
+  getEscrowCodec,
+  getMilestoneStateCodec,
+  getProviderReputationCodec,
   getRfpCodec,
+  getTreasuryCodec,
   type BidCommit,
   type BidCommitArgs,
+  type BuyerReputation,
+  type BuyerReputationArgs,
+  type Escrow,
+  type EscrowArgs,
+  type MilestoneState,
+  type MilestoneStateArgs,
+  type ProviderReputation,
+  type ProviderReputationArgs,
   type Rfp,
   type RfpArgs,
+  type Treasury,
+  type TreasuryArgs,
 } from "../accounts";
 import {
+  getAcceptMilestoneInstructionAsync,
+  getAutoReleaseMilestoneInstructionAsync,
+  getCancelLateMilestoneInstructionAsync,
+  getCancelWithNoticeInstructionAsync,
+  getCancelWithPenaltyInstructionAsync,
   getCloseWithdrawnBidInstructionAsync,
-  getCommitBidInitInstruction,
+  getCommitBidInitInstructionAsync,
   getDelegateBidInstructionAsync,
+  getDisputeDefaultSplitInstructionAsync,
   getFinalizeBidInstruction,
+  getFundProjectInstructionAsync,
+  getInitTreasuryInstructionAsync,
+  getMarkBuyerGhostedInstruction,
   getOpenRevealWindowInstructionAsync,
   getProcessUndelegationInstruction,
+  getRejectMilestoneInstructionAsync,
+  getRequestChangesInstruction,
+  getResolveDisputeInstructionAsync,
+  getRevealReserveInstruction,
   getRfpCloseBiddingInstruction,
   getRfpCreateInstruction,
-  getSelectBidFinalizeInstruction,
-  getSelectBidInstruction,
+  getSelectBidInstructionAsync,
+  getStartMilestoneInstruction,
+  getSubmitMilestoneInstruction,
   getWithdrawBidInstructionAsync,
   getWriteBidChunkInstruction,
+  parseAcceptMilestoneInstruction,
+  parseAutoReleaseMilestoneInstruction,
+  parseCancelLateMilestoneInstruction,
+  parseCancelWithNoticeInstruction,
+  parseCancelWithPenaltyInstruction,
   parseCloseWithdrawnBidInstruction,
   parseCommitBidInitInstruction,
   parseDelegateBidInstruction,
+  parseDisputeDefaultSplitInstruction,
   parseFinalizeBidInstruction,
+  parseFundProjectInstruction,
+  parseInitTreasuryInstruction,
+  parseMarkBuyerGhostedInstruction,
   parseOpenRevealWindowInstruction,
   parseProcessUndelegationInstruction,
+  parseRejectMilestoneInstruction,
+  parseRequestChangesInstruction,
+  parseResolveDisputeInstruction,
+  parseRevealReserveInstruction,
   parseRfpCloseBiddingInstruction,
   parseRfpCreateInstruction,
-  parseSelectBidFinalizeInstruction,
   parseSelectBidInstruction,
+  parseStartMilestoneInstruction,
+  parseSubmitMilestoneInstruction,
   parseWithdrawBidInstruction,
   parseWriteBidChunkInstruction,
+  type AcceptMilestoneAsyncInput,
+  type AutoReleaseMilestoneAsyncInput,
+  type CancelLateMilestoneAsyncInput,
+  type CancelWithNoticeAsyncInput,
+  type CancelWithPenaltyAsyncInput,
   type CloseWithdrawnBidAsyncInput,
-  type CommitBidInitInput,
+  type CommitBidInitAsyncInput,
   type DelegateBidAsyncInput,
+  type DisputeDefaultSplitAsyncInput,
   type FinalizeBidInput,
+  type FundProjectAsyncInput,
+  type InitTreasuryAsyncInput,
+  type MarkBuyerGhostedInput,
   type OpenRevealWindowAsyncInput,
+  type ParsedAcceptMilestoneInstruction,
+  type ParsedAutoReleaseMilestoneInstruction,
+  type ParsedCancelLateMilestoneInstruction,
+  type ParsedCancelWithNoticeInstruction,
+  type ParsedCancelWithPenaltyInstruction,
   type ParsedCloseWithdrawnBidInstruction,
   type ParsedCommitBidInitInstruction,
   type ParsedDelegateBidInstruction,
+  type ParsedDisputeDefaultSplitInstruction,
   type ParsedFinalizeBidInstruction,
+  type ParsedFundProjectInstruction,
+  type ParsedInitTreasuryInstruction,
+  type ParsedMarkBuyerGhostedInstruction,
   type ParsedOpenRevealWindowInstruction,
   type ParsedProcessUndelegationInstruction,
+  type ParsedRejectMilestoneInstruction,
+  type ParsedRequestChangesInstruction,
+  type ParsedResolveDisputeInstruction,
+  type ParsedRevealReserveInstruction,
   type ParsedRfpCloseBiddingInstruction,
   type ParsedRfpCreateInstruction,
-  type ParsedSelectBidFinalizeInstruction,
   type ParsedSelectBidInstruction,
+  type ParsedStartMilestoneInstruction,
+  type ParsedSubmitMilestoneInstruction,
   type ParsedWithdrawBidInstruction,
   type ParsedWriteBidChunkInstruction,
   type ProcessUndelegationInput,
+  type RejectMilestoneAsyncInput,
+  type RequestChangesInput,
+  type ResolveDisputeAsyncInput,
+  type RevealReserveInput,
   type RfpCloseBiddingInput,
   type RfpCreateInput,
-  type SelectBidFinalizeInput,
-  type SelectBidInput,
+  type SelectBidAsyncInput,
+  type StartMilestoneInput,
+  type SubmitMilestoneInput,
   type WithdrawBidAsyncInput,
   type WriteBidChunkInput,
 } from "../instructions";
 import {
+  findBidPda,
   findBufferBidPda,
+  findBuyerReputationPda,
   findDelegationMetadataBidPda,
   findDelegationRecordBidPda,
+  findEscrowPda,
   findPermissionPda,
+  findTreasuryPda,
 } from "../pdas";
 
 export const TENDER_PROGRAM_ADDRESS =
@@ -103,7 +178,12 @@ export const TENDER_PROGRAM_ADDRESS =
 
 export enum TenderAccount {
   BidCommit,
+  BuyerReputation,
+  Escrow,
+  MilestoneState,
+  ProviderReputation,
   Rfp,
+  Treasury,
 }
 
 export function identifyTenderAccount(
@@ -125,12 +205,67 @@ export function identifyTenderAccount(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([214, 92, 22, 85, 90, 62, 253, 55]),
+      ),
+      0,
+    )
+  ) {
+    return TenderAccount.BuyerReputation;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([31, 213, 123, 187, 186, 22, 218, 155]),
+      ),
+      0,
+    )
+  ) {
+    return TenderAccount.Escrow;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([48, 218, 210, 196, 218, 151, 148, 83]),
+      ),
+      0,
+    )
+  ) {
+    return TenderAccount.MilestoneState;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([128, 237, 0, 162, 226, 165, 7, 140]),
+      ),
+      0,
+    )
+  ) {
+    return TenderAccount.ProviderReputation;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([61, 31, 185, 47, 150, 124, 67, 88]),
       ),
       0,
     )
   ) {
     return TenderAccount.Rfp;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([238, 239, 123, 238, 89, 1, 168, 253]),
+      ),
+      0,
+    )
+  ) {
+    return TenderAccount.Treasury;
   }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT,
@@ -139,16 +274,30 @@ export function identifyTenderAccount(
 }
 
 export enum TenderInstruction {
+  AcceptMilestone,
+  AutoReleaseMilestone,
+  CancelLateMilestone,
+  CancelWithNotice,
+  CancelWithPenalty,
   CloseWithdrawnBid,
   CommitBidInit,
   DelegateBid,
+  DisputeDefaultSplit,
   FinalizeBid,
+  FundProject,
+  InitTreasury,
+  MarkBuyerGhosted,
   OpenRevealWindow,
   ProcessUndelegation,
+  RejectMilestone,
+  RequestChanges,
+  ResolveDispute,
+  RevealReserve,
   RfpCloseBidding,
   RfpCreate,
   SelectBid,
-  SelectBidFinalize,
+  StartMilestone,
+  SubmitMilestone,
   WithdrawBid,
   WriteBidChunk,
 }
@@ -157,6 +306,61 @@ export function identifyTenderInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): TenderInstruction {
   const data = "data" in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([67, 203, 235, 220, 254, 79, 251, 205]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.AcceptMilestone;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([5, 67, 241, 235, 237, 223, 249, 106]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.AutoReleaseMilestone;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([123, 167, 146, 176, 136, 124, 211, 174]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.CancelLateMilestone;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([45, 88, 29, 210, 209, 118, 132, 246]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.CancelWithNotice;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([196, 207, 149, 106, 64, 14, 217, 179]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.CancelWithPenalty;
+  }
   if (
     containsBytes(
       data,
@@ -194,12 +398,56 @@ export function identifyTenderInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([248, 177, 61, 228, 108, 236, 241, 56]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.DisputeDefaultSplit;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([185, 148, 101, 95, 131, 251, 233, 99]),
       ),
       0,
     )
   ) {
     return TenderInstruction.FinalizeBid;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([129, 115, 149, 68, 159, 207, 33, 149]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.FundProject;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([105, 152, 173, 51, 158, 151, 49, 14]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.InitTreasury;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([200, 178, 132, 161, 32, 142, 13, 212]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.MarkBuyerGhosted;
   }
   if (
     containsBytes(
@@ -222,6 +470,50 @@ export function identifyTenderInstruction(
     )
   ) {
     return TenderInstruction.ProcessUndelegation;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([243, 48, 66, 165, 237, 41, 116, 249]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.RejectMilestone;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([136, 84, 241, 1, 189, 89, 226, 187]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.RequestChanges;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([231, 6, 202, 6, 96, 103, 12, 230]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.ResolveDispute;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([35, 70, 113, 147, 101, 240, 175, 78]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.RevealReserve;
   }
   if (
     containsBytes(
@@ -260,12 +552,23 @@ export function identifyTenderInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
-        new Uint8Array([65, 113, 199, 213, 2, 109, 32, 44]),
+        new Uint8Array([63, 104, 131, 234, 168, 124, 236, 168]),
       ),
       0,
     )
   ) {
-    return TenderInstruction.SelectBidFinalize;
+    return TenderInstruction.StartMilestone;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([35, 96, 220, 215, 102, 83, 139, 52]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.SubmitMilestone;
   }
   if (
     containsBytes(
@@ -299,6 +602,21 @@ export type ParsedTenderInstruction<
   TProgram extends string = "4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ",
 > =
   | ({
+      instructionType: TenderInstruction.AcceptMilestone;
+    } & ParsedAcceptMilestoneInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.AutoReleaseMilestone;
+    } & ParsedAutoReleaseMilestoneInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.CancelLateMilestone;
+    } & ParsedCancelLateMilestoneInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.CancelWithNotice;
+    } & ParsedCancelWithNoticeInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.CancelWithPenalty;
+    } & ParsedCancelWithPenaltyInstruction<TProgram>)
+  | ({
       instructionType: TenderInstruction.CloseWithdrawnBid;
     } & ParsedCloseWithdrawnBidInstruction<TProgram>)
   | ({
@@ -308,14 +626,38 @@ export type ParsedTenderInstruction<
       instructionType: TenderInstruction.DelegateBid;
     } & ParsedDelegateBidInstruction<TProgram>)
   | ({
+      instructionType: TenderInstruction.DisputeDefaultSplit;
+    } & ParsedDisputeDefaultSplitInstruction<TProgram>)
+  | ({
       instructionType: TenderInstruction.FinalizeBid;
     } & ParsedFinalizeBidInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.FundProject;
+    } & ParsedFundProjectInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.InitTreasury;
+    } & ParsedInitTreasuryInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.MarkBuyerGhosted;
+    } & ParsedMarkBuyerGhostedInstruction<TProgram>)
   | ({
       instructionType: TenderInstruction.OpenRevealWindow;
     } & ParsedOpenRevealWindowInstruction<TProgram>)
   | ({
       instructionType: TenderInstruction.ProcessUndelegation;
     } & ParsedProcessUndelegationInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.RejectMilestone;
+    } & ParsedRejectMilestoneInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.RequestChanges;
+    } & ParsedRequestChangesInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.ResolveDispute;
+    } & ParsedResolveDisputeInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.RevealReserve;
+    } & ParsedRevealReserveInstruction<TProgram>)
   | ({
       instructionType: TenderInstruction.RfpCloseBidding;
     } & ParsedRfpCloseBiddingInstruction<TProgram>)
@@ -326,8 +668,11 @@ export type ParsedTenderInstruction<
       instructionType: TenderInstruction.SelectBid;
     } & ParsedSelectBidInstruction<TProgram>)
   | ({
-      instructionType: TenderInstruction.SelectBidFinalize;
-    } & ParsedSelectBidFinalizeInstruction<TProgram>)
+      instructionType: TenderInstruction.StartMilestone;
+    } & ParsedStartMilestoneInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.SubmitMilestone;
+    } & ParsedSubmitMilestoneInstruction<TProgram>)
   | ({
       instructionType: TenderInstruction.WithdrawBid;
     } & ParsedWithdrawBidInstruction<TProgram>)
@@ -340,6 +685,41 @@ export function parseTenderInstruction<TProgram extends string>(
 ): ParsedTenderInstruction<TProgram> {
   const instructionType = identifyTenderInstruction(instruction);
   switch (instructionType) {
+    case TenderInstruction.AcceptMilestone: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.AcceptMilestone,
+        ...parseAcceptMilestoneInstruction(instruction),
+      };
+    }
+    case TenderInstruction.AutoReleaseMilestone: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.AutoReleaseMilestone,
+        ...parseAutoReleaseMilestoneInstruction(instruction),
+      };
+    }
+    case TenderInstruction.CancelLateMilestone: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.CancelLateMilestone,
+        ...parseCancelLateMilestoneInstruction(instruction),
+      };
+    }
+    case TenderInstruction.CancelWithNotice: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.CancelWithNotice,
+        ...parseCancelWithNoticeInstruction(instruction),
+      };
+    }
+    case TenderInstruction.CancelWithPenalty: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.CancelWithPenalty,
+        ...parseCancelWithPenaltyInstruction(instruction),
+      };
+    }
     case TenderInstruction.CloseWithdrawnBid: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -361,11 +741,39 @@ export function parseTenderInstruction<TProgram extends string>(
         ...parseDelegateBidInstruction(instruction),
       };
     }
+    case TenderInstruction.DisputeDefaultSplit: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.DisputeDefaultSplit,
+        ...parseDisputeDefaultSplitInstruction(instruction),
+      };
+    }
     case TenderInstruction.FinalizeBid: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: TenderInstruction.FinalizeBid,
         ...parseFinalizeBidInstruction(instruction),
+      };
+    }
+    case TenderInstruction.FundProject: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.FundProject,
+        ...parseFundProjectInstruction(instruction),
+      };
+    }
+    case TenderInstruction.InitTreasury: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.InitTreasury,
+        ...parseInitTreasuryInstruction(instruction),
+      };
+    }
+    case TenderInstruction.MarkBuyerGhosted: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.MarkBuyerGhosted,
+        ...parseMarkBuyerGhostedInstruction(instruction),
       };
     }
     case TenderInstruction.OpenRevealWindow: {
@@ -380,6 +788,34 @@ export function parseTenderInstruction<TProgram extends string>(
       return {
         instructionType: TenderInstruction.ProcessUndelegation,
         ...parseProcessUndelegationInstruction(instruction),
+      };
+    }
+    case TenderInstruction.RejectMilestone: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.RejectMilestone,
+        ...parseRejectMilestoneInstruction(instruction),
+      };
+    }
+    case TenderInstruction.RequestChanges: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.RequestChanges,
+        ...parseRequestChangesInstruction(instruction),
+      };
+    }
+    case TenderInstruction.ResolveDispute: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.ResolveDispute,
+        ...parseResolveDisputeInstruction(instruction),
+      };
+    }
+    case TenderInstruction.RevealReserve: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.RevealReserve,
+        ...parseRevealReserveInstruction(instruction),
       };
     }
     case TenderInstruction.RfpCloseBidding: {
@@ -403,11 +839,18 @@ export function parseTenderInstruction<TProgram extends string>(
         ...parseSelectBidInstruction(instruction),
       };
     }
-    case TenderInstruction.SelectBidFinalize: {
+    case TenderInstruction.StartMilestone: {
       assertIsInstructionWithAccounts(instruction);
       return {
-        instructionType: TenderInstruction.SelectBidFinalize,
-        ...parseSelectBidFinalizeInstruction(instruction),
+        instructionType: TenderInstruction.StartMilestone,
+        ...parseStartMilestoneInstruction(instruction),
+      };
+    }
+    case TenderInstruction.SubmitMilestone: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.SubmitMilestone,
+        ...parseSubmitMilestoneInstruction(instruction),
       };
     }
     case TenderInstruction.WithdrawBid: {
@@ -441,25 +884,71 @@ export type TenderPlugin = {
 export type TenderPluginAccounts = {
   bidCommit: ReturnType<typeof getBidCommitCodec> &
     SelfFetchFunctions<BidCommitArgs, BidCommit>;
+  buyerReputation: ReturnType<typeof getBuyerReputationCodec> &
+    SelfFetchFunctions<BuyerReputationArgs, BuyerReputation>;
+  escrow: ReturnType<typeof getEscrowCodec> &
+    SelfFetchFunctions<EscrowArgs, Escrow>;
+  milestoneState: ReturnType<typeof getMilestoneStateCodec> &
+    SelfFetchFunctions<MilestoneStateArgs, MilestoneState>;
+  providerReputation: ReturnType<typeof getProviderReputationCodec> &
+    SelfFetchFunctions<ProviderReputationArgs, ProviderReputation>;
   rfp: ReturnType<typeof getRfpCodec> & SelfFetchFunctions<RfpArgs, Rfp>;
+  treasury: ReturnType<typeof getTreasuryCodec> &
+    SelfFetchFunctions<TreasuryArgs, Treasury>;
 };
 
 export type TenderPluginInstructions = {
+  acceptMilestone: (
+    input: AcceptMilestoneAsyncInput,
+  ) => ReturnType<typeof getAcceptMilestoneInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  autoReleaseMilestone: (
+    input: MakeOptional<AutoReleaseMilestoneAsyncInput, "payer">,
+  ) => ReturnType<typeof getAutoReleaseMilestoneInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  cancelLateMilestone: (
+    input: CancelLateMilestoneAsyncInput,
+  ) => ReturnType<typeof getCancelLateMilestoneInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  cancelWithNotice: (
+    input: CancelWithNoticeAsyncInput,
+  ) => ReturnType<typeof getCancelWithNoticeInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  cancelWithPenalty: (
+    input: CancelWithPenaltyAsyncInput,
+  ) => ReturnType<typeof getCancelWithPenaltyInstructionAsync> &
+    SelfPlanAndSendFunctions;
   closeWithdrawnBid: (
     input: CloseWithdrawnBidAsyncInput,
   ) => ReturnType<typeof getCloseWithdrawnBidInstructionAsync> &
     SelfPlanAndSendFunctions;
   commitBidInit: (
-    input: CommitBidInitInput,
-  ) => ReturnType<typeof getCommitBidInitInstruction> &
+    input: CommitBidInitAsyncInput,
+  ) => ReturnType<typeof getCommitBidInitInstructionAsync> &
     SelfPlanAndSendFunctions;
   delegateBid: (
     input: DelegateBidAsyncInput,
   ) => ReturnType<typeof getDelegateBidInstructionAsync> &
     SelfPlanAndSendFunctions;
+  disputeDefaultSplit: (
+    input: MakeOptional<DisputeDefaultSplitAsyncInput, "payer">,
+  ) => ReturnType<typeof getDisputeDefaultSplitInstructionAsync> &
+    SelfPlanAndSendFunctions;
   finalizeBid: (
     input: FinalizeBidInput,
   ) => ReturnType<typeof getFinalizeBidInstruction> & SelfPlanAndSendFunctions;
+  fundProject: (
+    input: FundProjectAsyncInput,
+  ) => ReturnType<typeof getFundProjectInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  initTreasury: (
+    input: MakeOptional<InitTreasuryAsyncInput, "payer">,
+  ) => ReturnType<typeof getInitTreasuryInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  markBuyerGhosted: (
+    input: MakeOptional<MarkBuyerGhostedInput, "payer">,
+  ) => ReturnType<typeof getMarkBuyerGhostedInstruction> &
+    SelfPlanAndSendFunctions;
   openRevealWindow: (
     input: MakeOptional<OpenRevealWindowAsyncInput, "payer">,
   ) => ReturnType<typeof getOpenRevealWindowInstructionAsync> &
@@ -467,6 +956,22 @@ export type TenderPluginInstructions = {
   processUndelegation: (
     input: MakeOptional<ProcessUndelegationInput, "payer">,
   ) => ReturnType<typeof getProcessUndelegationInstruction> &
+    SelfPlanAndSendFunctions;
+  rejectMilestone: (
+    input: RejectMilestoneAsyncInput,
+  ) => ReturnType<typeof getRejectMilestoneInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  requestChanges: (
+    input: RequestChangesInput,
+  ) => ReturnType<typeof getRequestChangesInstruction> &
+    SelfPlanAndSendFunctions;
+  resolveDispute: (
+    input: ResolveDisputeAsyncInput,
+  ) => ReturnType<typeof getResolveDisputeInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  revealReserve: (
+    input: RevealReserveInput,
+  ) => ReturnType<typeof getRevealReserveInstruction> &
     SelfPlanAndSendFunctions;
   rfpCloseBidding: (
     input: RfpCloseBiddingInput,
@@ -476,11 +981,16 @@ export type TenderPluginInstructions = {
     input: RfpCreateInput,
   ) => ReturnType<typeof getRfpCreateInstruction> & SelfPlanAndSendFunctions;
   selectBid: (
-    input: SelectBidInput,
-  ) => ReturnType<typeof getSelectBidInstruction> & SelfPlanAndSendFunctions;
-  selectBidFinalize: (
-    input: SelectBidFinalizeInput,
-  ) => ReturnType<typeof getSelectBidFinalizeInstruction> &
+    input: SelectBidAsyncInput,
+  ) => ReturnType<typeof getSelectBidInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  startMilestone: (
+    input: StartMilestoneInput,
+  ) => ReturnType<typeof getStartMilestoneInstruction> &
+    SelfPlanAndSendFunctions;
+  submitMilestone: (
+    input: SubmitMilestoneInput,
+  ) => ReturnType<typeof getSubmitMilestoneInstruction> &
     SelfPlanAndSendFunctions;
   withdrawBid: (
     input: WithdrawBidAsyncInput,
@@ -493,7 +1003,11 @@ export type TenderPluginInstructions = {
 };
 
 export type TenderPluginPdas = {
+  escrow: typeof findEscrowPda;
+  treasury: typeof findTreasuryPda;
+  buyerReputation: typeof findBuyerReputationPda;
   permission: typeof findPermissionPda;
+  bid: typeof findBidPda;
   bufferBid: typeof findBufferBidPda;
   delegationRecordBid: typeof findDelegationRecordBidPda;
   delegationMetadataBid: typeof findDelegationMetadataBidPda;
@@ -514,9 +1028,51 @@ export function tenderProgram() {
       tender: <TenderPlugin>{
         accounts: {
           bidCommit: addSelfFetchFunctions(client, getBidCommitCodec()),
+          buyerReputation: addSelfFetchFunctions(
+            client,
+            getBuyerReputationCodec(),
+          ),
+          escrow: addSelfFetchFunctions(client, getEscrowCodec()),
+          milestoneState: addSelfFetchFunctions(
+            client,
+            getMilestoneStateCodec(),
+          ),
+          providerReputation: addSelfFetchFunctions(
+            client,
+            getProviderReputationCodec(),
+          ),
           rfp: addSelfFetchFunctions(client, getRfpCodec()),
+          treasury: addSelfFetchFunctions(client, getTreasuryCodec()),
         },
         instructions: {
+          acceptMilestone: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAcceptMilestoneInstructionAsync(input),
+            ),
+          autoReleaseMilestone: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAutoReleaseMilestoneInstructionAsync({
+                ...input,
+                payer: input.payer ?? client.payer,
+              }),
+            ),
+          cancelLateMilestone: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCancelLateMilestoneInstructionAsync(input),
+            ),
+          cancelWithNotice: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCancelWithNoticeInstructionAsync(input),
+            ),
+          cancelWithPenalty: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCancelWithPenaltyInstructionAsync(input),
+            ),
           closeWithdrawnBid: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -525,17 +1081,46 @@ export function tenderProgram() {
           commitBidInit: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getCommitBidInitInstruction(input),
+              getCommitBidInitInstructionAsync(input),
             ),
           delegateBid: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getDelegateBidInstructionAsync(input),
             ),
+          disputeDefaultSplit: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getDisputeDefaultSplitInstructionAsync({
+                ...input,
+                payer: input.payer ?? client.payer,
+              }),
+            ),
           finalizeBid: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getFinalizeBidInstruction(input),
+            ),
+          fundProject: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getFundProjectInstructionAsync(input),
+            ),
+          initTreasury: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getInitTreasuryInstructionAsync({
+                ...input,
+                payer: input.payer ?? client.payer,
+              }),
+            ),
+          markBuyerGhosted: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getMarkBuyerGhostedInstruction({
+                ...input,
+                payer: input.payer ?? client.payer,
+              }),
             ),
           openRevealWindow: (input) =>
             addSelfPlanAndSendFunctions(
@@ -553,6 +1138,26 @@ export function tenderProgram() {
                 payer: input.payer ?? client.payer.address,
               }),
             ),
+          rejectMilestone: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRejectMilestoneInstructionAsync(input),
+            ),
+          requestChanges: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRequestChangesInstruction(input),
+            ),
+          resolveDispute: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getResolveDisputeInstructionAsync(input),
+            ),
+          revealReserve: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRevealReserveInstruction(input),
+            ),
           rfpCloseBidding: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -561,11 +1166,19 @@ export function tenderProgram() {
           rfpCreate: (input) =>
             addSelfPlanAndSendFunctions(client, getRfpCreateInstruction(input)),
           selectBid: (input) =>
-            addSelfPlanAndSendFunctions(client, getSelectBidInstruction(input)),
-          selectBidFinalize: (input) =>
             addSelfPlanAndSendFunctions(
               client,
-              getSelectBidFinalizeInstruction(input),
+              getSelectBidInstructionAsync(input),
+            ),
+          startMilestone: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getStartMilestoneInstruction(input),
+            ),
+          submitMilestone: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSubmitMilestoneInstruction(input),
             ),
           withdrawBid: (input) =>
             addSelfPlanAndSendFunctions(
@@ -579,7 +1192,11 @@ export function tenderProgram() {
             ),
         },
         pdas: {
+          escrow: findEscrowPda,
+          treasury: findTreasuryPda,
+          buyerReputation: findBuyerReputationPda,
           permission: findPermissionPda,
+          bid: findBidPda,
           bufferBid: findBufferBidPda,
           delegationRecordBid: findDelegationRecordBidPda,
           delegationMetadataBid: findDelegationMetadataBidPda,

@@ -7,4 +7,9 @@
  */
 
 export * from "./bidCommit";
+export * from "./buyerReputation";
+export * from "./escrow";
+export * from "./milestoneState";
+export * from "./providerReputation";
 export * from "./rfp";
+export * from "./treasury";

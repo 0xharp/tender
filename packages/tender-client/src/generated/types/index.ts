@@ -8,5 +8,7 @@
 
 export * from "./bidderVisibility";
 export * from "./bidStatus";
-export * from "./providerIdentity";
+export * from "./milestoneStatus";
+export * from "./payoutChain";
 export * from "./rfpStatus";
+export * from "./targetChain";

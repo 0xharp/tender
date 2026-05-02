@@ -18,12 +18,15 @@ import {
 export enum RfpStatus {
   Draft,
   Open,
+  BidsClosed,
   Reveal,
   Awarded,
+  Funded,
   InProgress,
   Completed,
-  Disputed,
   Cancelled,
+  GhostedByBuyer,
+  Disputed,
 }
 
 export type RfpStatusArgs = RfpStatus;

@@ -45,12 +45,12 @@ import {
 import {
   getBidStatusDecoder,
   getBidStatusEncoder,
-  getProviderIdentityDecoder,
-  getProviderIdentityEncoder,
+  getPayoutChainDecoder,
+  getPayoutChainEncoder,
   type BidStatus,
   type BidStatusArgs,
-  type ProviderIdentity,
-  type ProviderIdentityArgs,
+  type PayoutChain,
+  type PayoutChainArgs,
 } from "../types";
 
 export const BID_COMMIT_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -63,95 +63,61 @@ export function getBidCommitDiscriminatorBytes(): ReadonlyUint8Array {
 
 export type BidCommit = {
   discriminator: ReadonlyUint8Array;
-  /** The RFP this bid is for. */
   rfp: Address;
-  /**
-   * Snapshot of the parent RFP's `buyer` at init time. Stored locally so the
-   * ER-side `open_reveal_window` ix can build the new permission set without
-   * having to read the base-layer Rfp account.
-   */
   buyer: Address;
-  /**
-   * Snapshot of the parent RFP's `bid_close_at` at init time. Used by
-   * `open_reveal_window` to enforce the time gate without a base-layer read.
-   */
   bidCloseAt: bigint;
   /**
-   * PDA seed bytes used at init (`[b"bid", rfp, bid_pda_seed]`). In L0 mode
-   * equals `provider_wallet.to_bytes()`; in L1 mode equals
-   * `sha256(walletSig(BID_PDA_SEED_DOMAIN || rfp_nonce))`.
+   * The pubkey that signed `commit_bid_init`. Bid PDA is derived from this.
+   * In public-bidder-list RFPs this is the provider's main wallet.
+   * In private-bidder-list RFPs this is a per-(main_wallet, rfp) deterministic
+   * ephemeral wallet — the provider's main wallet does not appear on chain.
    */
-  bidPdaSeed: ReadonlyUint8Array;
-  /** Provider identity binding — see `ProviderIdentity`. */
-  providerIdentity: ProviderIdentity;
-  /** `sha256(buyer_envelope || provider_envelope)`. Verified at `finalize_bid`. */
+  provider: Address;
   commitHash: ReadonlyUint8Array;
-  /**
-   * Declared size of `buyer_envelope` at init. Used by `write_bid_chunk` to
-   * validate offsets and by `finalize_bid` to know the slice bounds.
-   */
   buyerEnvelopeLen: number;
-  /** Declared size of `provider_envelope` at init. */
   providerEnvelopeLen: number;
-  /**
-   * ECIES envelope encrypted to the buyer's RFP-specific X25519 pubkey.
-   * Populated by `write_bid_chunk` calls on the ER, sealed by `finalize_bid`.
-   */
   buyerEnvelope: ReadonlyUint8Array;
-  /**
-   * ECIES envelope encrypted to the provider's per-wallet X25519 pubkey.
-   * Same flow as `buyer_envelope`.
-   */
   providerEnvelope: ReadonlyUint8Array;
   submittedAt: bigint;
   status: BidStatus;
   bump: number;
+  /**
+   * Where milestone USDC lands at release time. Set at `commit_bid_init`.
+   * In public mode = `provider`. In private mode = `provider` (the ephemeral)
+   * initially; gets set to the verified main wallet at `select_bid` time.
+   */
+  payoutDestination: Address;
+  /** Payout currency + chain. V1 = `Solana { mint: USDC }` only. */
+  payoutChain: PayoutChain;
 };
 
 export type BidCommitArgs = {
-  /** The RFP this bid is for. */
   rfp: Address;
-  /**
-   * Snapshot of the parent RFP's `buyer` at init time. Stored locally so the
-   * ER-side `open_reveal_window` ix can build the new permission set without
-   * having to read the base-layer Rfp account.
-   */
   buyer: Address;
-  /**
-   * Snapshot of the parent RFP's `bid_close_at` at init time. Used by
-   * `open_reveal_window` to enforce the time gate without a base-layer read.
-   */
   bidCloseAt: number | bigint;
   /**
-   * PDA seed bytes used at init (`[b"bid", rfp, bid_pda_seed]`). In L0 mode
-   * equals `provider_wallet.to_bytes()`; in L1 mode equals
-   * `sha256(walletSig(BID_PDA_SEED_DOMAIN || rfp_nonce))`.
+   * The pubkey that signed `commit_bid_init`. Bid PDA is derived from this.
+   * In public-bidder-list RFPs this is the provider's main wallet.
+   * In private-bidder-list RFPs this is a per-(main_wallet, rfp) deterministic
+   * ephemeral wallet — the provider's main wallet does not appear on chain.
    */
-  bidPdaSeed: ReadonlyUint8Array;
-  /** Provider identity binding — see `ProviderIdentity`. */
-  providerIdentity: ProviderIdentityArgs;
-  /** `sha256(buyer_envelope || provider_envelope)`. Verified at `finalize_bid`. */
+  provider: Address;
   commitHash: ReadonlyUint8Array;
-  /**
-   * Declared size of `buyer_envelope` at init. Used by `write_bid_chunk` to
-   * validate offsets and by `finalize_bid` to know the slice bounds.
-   */
   buyerEnvelopeLen: number;
-  /** Declared size of `provider_envelope` at init. */
   providerEnvelopeLen: number;
-  /**
-   * ECIES envelope encrypted to the buyer's RFP-specific X25519 pubkey.
-   * Populated by `write_bid_chunk` calls on the ER, sealed by `finalize_bid`.
-   */
   buyerEnvelope: ReadonlyUint8Array;
-  /**
-   * ECIES envelope encrypted to the provider's per-wallet X25519 pubkey.
-   * Same flow as `buyer_envelope`.
-   */
   providerEnvelope: ReadonlyUint8Array;
   submittedAt: number | bigint;
   status: BidStatusArgs;
   bump: number;
+  /**
+   * Where milestone USDC lands at release time. Set at `commit_bid_init`.
+   * In public mode = `provider`. In private mode = `provider` (the ephemeral)
+   * initially; gets set to the verified main wallet at `select_bid` time.
+   */
+  payoutDestination: Address;
+  /** Payout currency + chain. V1 = `Solana { mint: USDC }` only. */
+  payoutChain: PayoutChainArgs;
 };
 
 /** Gets the encoder for {@link BidCommitArgs} account data. */
@@ -162,8 +128,7 @@ export function getBidCommitEncoder(): Encoder<BidCommitArgs> {
       ["rfp", getAddressEncoder()],
       ["buyer", getAddressEncoder()],
       ["bidCloseAt", getI64Encoder()],
-      ["bidPdaSeed", fixEncoderSize(getBytesEncoder(), 32)],
-      ["providerIdentity", getProviderIdentityEncoder()],
+      ["provider", getAddressEncoder()],
       ["commitHash", fixEncoderSize(getBytesEncoder(), 32)],
       ["buyerEnvelopeLen", getU32Encoder()],
       ["providerEnvelopeLen", getU32Encoder()],
@@ -178,6 +143,8 @@ export function getBidCommitEncoder(): Encoder<BidCommitArgs> {
       ["submittedAt", getI64Encoder()],
       ["status", getBidStatusEncoder()],
       ["bump", getU8Encoder()],
+      ["payoutDestination", getAddressEncoder()],
+      ["payoutChain", getPayoutChainEncoder()],
     ]),
     (value) => ({ ...value, discriminator: BID_COMMIT_DISCRIMINATOR }),
   );
@@ -190,8 +157,7 @@ export function getBidCommitDecoder(): Decoder<BidCommit> {
     ["rfp", getAddressDecoder()],
     ["buyer", getAddressDecoder()],
     ["bidCloseAt", getI64Decoder()],
-    ["bidPdaSeed", fixDecoderSize(getBytesDecoder(), 32)],
-    ["providerIdentity", getProviderIdentityDecoder()],
+    ["provider", getAddressDecoder()],
     ["commitHash", fixDecoderSize(getBytesDecoder(), 32)],
     ["buyerEnvelopeLen", getU32Decoder()],
     ["providerEnvelopeLen", getU32Decoder()],
@@ -203,6 +169,8 @@ export function getBidCommitDecoder(): Decoder<BidCommit> {
     ["submittedAt", getI64Decoder()],
     ["status", getBidStatusDecoder()],
     ["bump", getU8Decoder()],
+    ["payoutDestination", getAddressDecoder()],
+    ["payoutChain", getPayoutChainDecoder()],
   ]);
 }
 
