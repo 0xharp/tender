@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { MilestoneNotesThread } from '@/components/escrow/milestone-notes-thread';
-import { ProviderWinnerBidDecryptBanner } from '@/components/escrow/winner-bid-decrypt-banner';
+import { ProviderWinningBidPanel } from '@/components/escrow/winning-bid-panel';
 import { LocalTime } from '@/components/local-time';
 import { TxToastDescription } from '@/components/primitives/tx-toast';
 import { Button } from '@/components/ui/button';
@@ -119,10 +119,10 @@ function ConnectedProviderPanel({
           )}
         </p>
         {winnerBidPda && (
-          <ProviderWinnerBidDecryptBanner
+          <ProviderWinningBidPanel
             rfpPda={rfpPda as Address}
             winnerBidPda={winnerBidPda as Address}
-            hasPlaintext={!!plaintext}
+            plaintext={plaintext}
             onDecrypted={setPlaintext}
           />
         )}

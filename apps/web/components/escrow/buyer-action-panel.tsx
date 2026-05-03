@@ -27,7 +27,7 @@ import {
   type CancelMilestonePayload,
 } from '@/components/escrow/confirm-dialogs';
 import { MilestoneNotesThread } from '@/components/escrow/milestone-notes-thread';
-import { BuyerWinnerBidDecryptBanner } from '@/components/escrow/winner-bid-decrypt-banner';
+import { BuyerWinningBidPanel } from '@/components/escrow/winning-bid-panel';
 import { LocalTime } from '@/components/local-time';
 import { HashLink } from '@/components/primitives/hash-link';
 import { TxToastDescription } from '@/components/primitives/tx-toast';
@@ -711,11 +711,11 @@ function BuyerMilestoneManagement({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {winnerBidPda && (
-          <BuyerWinnerBidDecryptBanner
+          <BuyerWinningBidPanel
             rfpPda={rfpPda}
             rfpNonceHex={rfpNonceHex}
             winnerBidPda={winnerBidPda as Address}
-            hasPlaintext={!!plaintext}
+            plaintext={plaintext}
             onDecrypted={setPlaintext}
           />
         )}
