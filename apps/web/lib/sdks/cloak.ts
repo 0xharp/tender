@@ -88,6 +88,22 @@ export function prefetchCloak(): Promise<typeof import('@cloak.dev/sdk-devnet')>
 }
 
 /**
+ * Same-origin proxy path that forwards to api.devnet.cloak.ag (see
+ * `apps/web/app/api/cloak/[...path]/route.ts`). The Cloak relay doesn't
+ * include CORS headers for our deployed origin, so direct browser calls
+ * fail with `Failed to fetch`. Routing the SDK through `/api/cloak`
+ * keeps everything same-origin from the browser's perspective.
+ *
+ * Override via NEXT_PUBLIC_CLOAK_RELAY_URL if you ever want to point the
+ * SDK directly at the upstream relay (e.g., in a localhost dev setup
+ * where Cloak's CORS already whitelists localhost).
+ */
+const CLOAK_RELAY_URL =
+  process.env.NEXT_PUBLIC_CLOAK_RELAY_URL && process.env.NEXT_PUBLIC_CLOAK_RELAY_URL.length > 0
+    ? process.env.NEXT_PUBLIC_CLOAK_RELAY_URL
+    : '/api/cloak';
+
+/**
  * Fund a fresh ephemeral wallet from the provider's main wallet via Cloak's
  * shielded UTXO pool. The provider signs ONE Phantom popup for the deposit;
  * everything after (shielded transfer + relay-paid withdraw) is signless from
@@ -139,6 +155,7 @@ export async function fundEphemeralWallet(input: FundEphemeralInput): Promise<Fu
     {
       connection,
       programId: CLOAK_PROGRAM_ID,
+      relayUrl: CLOAK_RELAY_URL,
       signTransaction,
       signMessage,
       depositorPublicKey: walletPublicKey,
@@ -161,6 +178,7 @@ export async function fundEphemeralWallet(input: FundEphemeralInput): Promise<Fu
       withdraw = await fullWithdraw(deposited.outputUtxos, ephemeralPubkey, {
         connection,
         programId: CLOAK_PROGRAM_ID,
+        relayUrl: CLOAK_RELAY_URL,
         walletPublicKey,
         signMessage,
         cachedMerkleTree: deposited.merkleTree,
@@ -226,6 +244,7 @@ export async function sweepEphemeralToDestination(
     {
       connection,
       programId: CLOAK_PROGRAM_ID,
+      relayUrl: CLOAK_RELAY_URL,
       depositorKeypair: ephemeralKeypair,
       walletPublicKey: ephemeralKeypair.publicKey,
     },
@@ -242,6 +261,7 @@ export async function sweepEphemeralToDestination(
       withdraw = await fullWithdraw(deposited.outputUtxos, destinationPubkey, {
         connection,
         programId: CLOAK_PROGRAM_ID,
+        relayUrl: CLOAK_RELAY_URL,
         depositorKeypair: ephemeralKeypair,
         walletPublicKey: ephemeralKeypair.publicKey,
         cachedMerkleTree: deposited.merkleTree,
