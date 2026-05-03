@@ -82,6 +82,12 @@ pub fn handler(ctx: Context<RejectMilestone>, _milestone_index: u8) -> Result<()
         provider_rep.bump = ctx.bumps.provider_reputation;
     }
     provider_rep.disputed_milestones = provider_rep.disputed_milestones.saturating_add(1);
+    // total_disputed_usdc tracks "amounts that hit the dispute path" - bump it
+    // here at dispute-OPEN time so the metric is correct regardless of how it
+    // closes (resolve_dispute mutual-agree OR dispute_default_split lapse).
+    // Was previously only set in resolve_dispute, leaving default-split closures
+    // with a stale-zero amount.
+    provider_rep.total_disputed_usdc = provider_rep.total_disputed_usdc.saturating_add(ms.amount);
     provider_rep.last_updated = now;
     emit!(ProviderReputationUpdated { provider: provider_rep.provider, field: 2, at: now });
 

@@ -66,6 +66,7 @@ import {
   getCommitBidInitInstructionAsync,
   getDelegateBidInstructionAsync,
   getDisputeDefaultSplitInstructionAsync,
+  getExpireRfpInstruction,
   getFinalizeBidInstruction,
   getFundProjectInstructionAsync,
   getInitTreasuryInstructionAsync,
@@ -92,6 +93,7 @@ import {
   parseCommitBidInitInstruction,
   parseDelegateBidInstruction,
   parseDisputeDefaultSplitInstruction,
+  parseExpireRfpInstruction,
   parseFinalizeBidInstruction,
   parseFundProjectInstruction,
   parseInitTreasuryInstruction,
@@ -118,6 +120,7 @@ import {
   type CommitBidInitAsyncInput,
   type DelegateBidAsyncInput,
   type DisputeDefaultSplitAsyncInput,
+  type ExpireRfpInput,
   type FinalizeBidInput,
   type FundProjectAsyncInput,
   type InitTreasuryAsyncInput,
@@ -132,6 +135,7 @@ import {
   type ParsedCommitBidInitInstruction,
   type ParsedDelegateBidInstruction,
   type ParsedDisputeDefaultSplitInstruction,
+  type ParsedExpireRfpInstruction,
   type ParsedFinalizeBidInstruction,
   type ParsedFundProjectInstruction,
   type ParsedInitTreasuryInstruction,
@@ -283,6 +287,7 @@ export enum TenderInstruction {
   CommitBidInit,
   DelegateBid,
   DisputeDefaultSplit,
+  ExpireRfp,
   FinalizeBid,
   FundProject,
   InitTreasury,
@@ -404,6 +409,17 @@ export function identifyTenderInstruction(
     )
   ) {
     return TenderInstruction.DisputeDefaultSplit;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([118, 121, 90, 249, 175, 143, 240, 196]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.ExpireRfp;
   }
   if (
     containsBytes(
@@ -629,6 +645,9 @@ export type ParsedTenderInstruction<
       instructionType: TenderInstruction.DisputeDefaultSplit;
     } & ParsedDisputeDefaultSplitInstruction<TProgram>)
   | ({
+      instructionType: TenderInstruction.ExpireRfp;
+    } & ParsedExpireRfpInstruction<TProgram>)
+  | ({
       instructionType: TenderInstruction.FinalizeBid;
     } & ParsedFinalizeBidInstruction<TProgram>)
   | ({
@@ -746,6 +765,13 @@ export function parseTenderInstruction<TProgram extends string>(
       return {
         instructionType: TenderInstruction.DisputeDefaultSplit,
         ...parseDisputeDefaultSplitInstruction(instruction),
+      };
+    }
+    case TenderInstruction.ExpireRfp: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.ExpireRfp,
+        ...parseExpireRfpInstruction(instruction),
       };
     }
     case TenderInstruction.FinalizeBid: {
@@ -934,6 +960,9 @@ export type TenderPluginInstructions = {
     input: MakeOptional<DisputeDefaultSplitAsyncInput, "payer">,
   ) => ReturnType<typeof getDisputeDefaultSplitInstructionAsync> &
     SelfPlanAndSendFunctions;
+  expireRfp: (
+    input: ExpireRfpInput,
+  ) => ReturnType<typeof getExpireRfpInstruction> & SelfPlanAndSendFunctions;
   finalizeBid: (
     input: FinalizeBidInput,
   ) => ReturnType<typeof getFinalizeBidInstruction> & SelfPlanAndSendFunctions;
@@ -1096,6 +1125,8 @@ export function tenderProgram() {
                 payer: input.payer ?? client.payer,
               }),
             ),
+          expireRfp: (input) =>
+            addSelfPlanAndSendFunctions(client, getExpireRfpInstruction(input)),
           finalizeBid: (input) =>
             addSelfPlanAndSendFunctions(
               client,

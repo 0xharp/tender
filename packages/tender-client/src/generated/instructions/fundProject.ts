@@ -145,6 +145,16 @@ export type FundProjectAsyncInput<
   TAccountSystemProgram extends string = string,
 > = {
   buyer: TransactionSigner<TAccountBuyer>;
+  /**
+   * `Box<Account>` (instead of plain `Account`) heap-allocates the
+   * deserialized struct - critical here because `Rfp` is now 431 bytes
+   * and Anchor's expanded `try_accounts` function would otherwise put it
+   * directly on the 4KB Solana stack frame. Combined with the other
+   * stack-allocated accounts below (escrow init + ATA init + reputation),
+   * the un-boxed version overflows the stack with "Access violation in
+   * stack frame N" at runtime. Same pattern applied to every other heavy
+   * account in this struct.
+   */
   rfp: Address<TAccountRfp>;
   mint: Address<TAccountMint>;
   /** Source ATA: buyer's USDC. */
@@ -342,6 +352,16 @@ export type FundProjectInput<
   TAccountSystemProgram extends string = string,
 > = {
   buyer: TransactionSigner<TAccountBuyer>;
+  /**
+   * `Box<Account>` (instead of plain `Account`) heap-allocates the
+   * deserialized struct - critical here because `Rfp` is now 431 bytes
+   * and Anchor's expanded `try_accounts` function would otherwise put it
+   * directly on the 4KB Solana stack frame. Combined with the other
+   * stack-allocated accounts below (escrow init + ATA init + reputation),
+   * the un-boxed version overflows the stack with "Access violation in
+   * stack frame N" at runtime. Same pattern applied to every other heavy
+   * account in this struct.
+   */
   rfp: Address<TAccountRfp>;
   mint: Address<TAccountMint>;
   /** Source ATA: buyer's USDC. */
@@ -470,6 +490,16 @@ export type ParsedFundProjectInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     buyer: TAccountMetas[0];
+    /**
+     * `Box<Account>` (instead of plain `Account`) heap-allocates the
+     * deserialized struct - critical here because `Rfp` is now 431 bytes
+     * and Anchor's expanded `try_accounts` function would otherwise put it
+     * directly on the 4KB Solana stack frame. Combined with the other
+     * stack-allocated accounts below (escrow init + ATA init + reputation),
+     * the un-boxed version overflows the stack with "Access violation in
+     * stack frame N" at runtime. Same pattern applied to every other heavy
+     * account in this struct.
+     */
     rfp: TAccountMetas[1];
     mint: TAccountMetas[2];
     /** Source ATA: buyer's USDC. */

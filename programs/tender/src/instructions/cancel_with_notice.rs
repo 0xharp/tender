@@ -103,8 +103,17 @@ pub fn handler(ctx: Context<CancelWithNotice>, _milestone_index: u8) -> Result<(
     buyer_rep.total_refunded_usdc = buyer_rep.total_refunded_usdc.saturating_add(amount);
     buyer_rep.last_updated = now;
 
+    // Project-level auto-flip. If nothing was ever released to the provider
+    // (every milestone resulted in a refund), distinguish from the
+    // value-delivered case by setting Cancelled instead of Completed. Buyers
+    // who serially cancel before any work shouldn't appear as having
+    // "completed projects" in their on-chain reputation.
     if escrow.total_released.saturating_add(escrow.total_refunded) >= escrow.total_locked {
-        rfp.status = RfpStatus::Completed;
+        rfp.status = if escrow.total_released == 0 {
+            RfpStatus::Cancelled
+        } else {
+            RfpStatus::Completed
+        };
     }
 
     emit!(MilestoneCancelled {

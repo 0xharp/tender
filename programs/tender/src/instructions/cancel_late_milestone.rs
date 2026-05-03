@@ -142,8 +142,15 @@ pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Resul
     // BuyerReputationUpdated event suppressed - buyer didn't accrue any
     // counter change (cancellation was provider's fault).
 
+    // See cancel_with_notice for the Cancelled-vs-Completed rationale: a
+    // project where every milestone resulted in refunds is qualitatively
+    // different from one where work was delivered.
     if escrow.total_released.saturating_add(escrow.total_refunded) >= escrow.total_locked {
-        rfp.status = RfpStatus::Completed;
+        rfp.status = if escrow.total_released == 0 {
+            RfpStatus::Cancelled
+        } else {
+            RfpStatus::Completed
+        };
     } else {
         rfp.status = RfpStatus::InProgress;
     }

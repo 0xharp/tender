@@ -154,7 +154,14 @@ pub fn handler(ctx: Context<CancelWithPenalty>, _milestone_index: u8) -> Result<
     // accounting change, not a "win" or "completion").
 
     if escrow.total_released.saturating_add(escrow.total_refunded) >= escrow.total_locked {
-        rfp.status = RfpStatus::Completed;
+        // The penalty payout is included in total_released, so this branch
+        // almost always lands on Completed. The Cancelled fallback is purely
+        // defensive (penalty == 0 + everything else cancel-with-notice).
+        rfp.status = if escrow.total_released == 0 {
+            RfpStatus::Cancelled
+        } else {
+            RfpStatus::Completed
+        };
     } else {
         rfp.status = RfpStatus::InProgress;
     }

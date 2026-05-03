@@ -108,7 +108,7 @@ export type SelectBidInstructionData = {
   /**
    * Per-milestone payout amounts (USDC base units). Length equals
    * `milestone_count`; sum MUST equal `contract_value`. These are the
-   * exact amounts the provider quoted in their bid — no rounding.
+   * exact amounts the provider quoted in their bid - no rounding.
    */
   milestoneAmounts: Array<bigint>;
   /**
@@ -131,7 +131,7 @@ export type SelectBidInstructionDataArgs = {
   /**
    * Per-milestone payout amounts (USDC base units). Length equals
    * `milestone_count`; sum MUST equal `contract_value`. These are the
-   * exact amounts the provider quoted in their bid — no rounding.
+   * exact amounts the provider quoted in their bid - no rounding.
    */
   milestoneAmounts: Array<number | bigint>;
   /**
@@ -192,7 +192,7 @@ export type SelectBidAsyncInput<
   bid: Address<TAccountBid>;
   buyerReputation?: Address<TAccountBuyerReputation>;
   /**
-   * Provider reputation account. Created lazily on first win — buyer pays
+   * Provider reputation account. Created lazily on first win - buyer pays
    * rent. Recording the win here (rather than waiting for first milestone
    * accept) means `total_won_usdc` reflects awarded contracts even if no
    * milestones have shipped yet.
@@ -329,7 +329,7 @@ export type SelectBidInput<
   bid: Address<TAccountBid>;
   buyerReputation: Address<TAccountBuyerReputation>;
   /**
-   * Provider reputation account. Created lazily on first win — buyer pays
+   * Provider reputation account. Created lazily on first win - buyer pays
    * rent. Recording the win here (rather than waiting for first milestone
    * accept) means `total_won_usdc` reflects awarded contracts even if no
    * milestones have shipped yet.
@@ -453,7 +453,7 @@ export type ParsedSelectBidInstruction<
     bid: TAccountMetas[2];
     buyerReputation: TAccountMetas[3];
     /**
-     * Provider reputation account. Created lazily on first win — buyer pays
+     * Provider reputation account. Created lazily on first win - buyer pays
      * rent. Recording the win here (rather than waiting for first milestone
      * accept) means `total_won_usdc` reflects awarded contracts even if no
      * milestones have shipped yet.

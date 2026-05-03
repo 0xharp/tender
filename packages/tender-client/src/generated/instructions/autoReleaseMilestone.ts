@@ -65,6 +65,7 @@ export type AutoReleaseMilestoneInstruction<
   TAccountTreasury extends string | AccountMeta<string> = string,
   TAccountTreasuryAta extends string | AccountMeta<string> = string,
   TAccountProviderReputation extends string | AccountMeta<string> = string,
+  TAccountBuyerReputation extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountSystemProgram extends string | AccountMeta<string> =
@@ -103,6 +104,9 @@ export type AutoReleaseMilestoneInstruction<
       TAccountProviderReputation extends string
         ? WritableAccount<TAccountProviderReputation>
         : TAccountProviderReputation,
+      TAccountBuyerReputation extends string
+        ? WritableAccount<TAccountBuyerReputation>
+        : TAccountBuyerReputation,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -163,6 +167,7 @@ export type AutoReleaseMilestoneAsyncInput<
   TAccountTreasury extends string = string,
   TAccountTreasuryAta extends string = string,
   TAccountProviderReputation extends string = string,
+  TAccountBuyerReputation extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
@@ -176,6 +181,15 @@ export type AutoReleaseMilestoneAsyncInput<
   treasury?: Address<TAccountTreasury>;
   treasuryAta?: Address<TAccountTreasuryAta>;
   providerReputation: Address<TAccountProviderReputation>;
+  /**
+   * Buyer reputation - mirrors `accept_milestone` so silence-as-consent
+   * settlement still ticks the buyer's `total_released_usdc` and (on
+   * completion) `completed_rfps`. `init_if_needed` because in theory the
+   * account could be missing if `select_bid` was somehow skipped, though
+   * the lifecycle guarantees that doesn't happen. Permissionless caller
+   * (`payer`) covers any rent.
+   */
+  buyerReputation: Address<TAccountBuyerReputation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   milestoneIndex: AutoReleaseMilestoneInstructionDataArgs["milestoneIndex"];
@@ -192,6 +206,7 @@ export async function getAutoReleaseMilestoneInstructionAsync<
   TAccountTreasury extends string,
   TAccountTreasuryAta extends string,
   TAccountProviderReputation extends string,
+  TAccountBuyerReputation extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
@@ -207,6 +222,7 @@ export async function getAutoReleaseMilestoneInstructionAsync<
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountProviderReputation,
+    TAccountBuyerReputation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >,
@@ -224,6 +240,7 @@ export async function getAutoReleaseMilestoneInstructionAsync<
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountProviderReputation,
+    TAccountBuyerReputation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >
@@ -246,6 +263,7 @@ export async function getAutoReleaseMilestoneInstructionAsync<
       value: input.providerReputation ?? null,
       isWritable: true,
     },
+    buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
@@ -336,6 +354,7 @@ export async function getAutoReleaseMilestoneInstructionAsync<
       getAccountMeta("treasury", accounts.treasury),
       getAccountMeta("treasuryAta", accounts.treasuryAta),
       getAccountMeta("providerReputation", accounts.providerReputation),
+      getAccountMeta("buyerReputation", accounts.buyerReputation),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
@@ -355,6 +374,7 @@ export async function getAutoReleaseMilestoneInstructionAsync<
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountProviderReputation,
+    TAccountBuyerReputation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >);
@@ -371,6 +391,7 @@ export type AutoReleaseMilestoneInput<
   TAccountTreasury extends string = string,
   TAccountTreasuryAta extends string = string,
   TAccountProviderReputation extends string = string,
+  TAccountBuyerReputation extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
@@ -384,6 +405,15 @@ export type AutoReleaseMilestoneInput<
   treasury: Address<TAccountTreasury>;
   treasuryAta: Address<TAccountTreasuryAta>;
   providerReputation: Address<TAccountProviderReputation>;
+  /**
+   * Buyer reputation - mirrors `accept_milestone` so silence-as-consent
+   * settlement still ticks the buyer's `total_released_usdc` and (on
+   * completion) `completed_rfps`. `init_if_needed` because in theory the
+   * account could be missing if `select_bid` was somehow skipped, though
+   * the lifecycle guarantees that doesn't happen. Permissionless caller
+   * (`payer`) covers any rent.
+   */
+  buyerReputation: Address<TAccountBuyerReputation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
   milestoneIndex: AutoReleaseMilestoneInstructionDataArgs["milestoneIndex"];
@@ -400,6 +430,7 @@ export function getAutoReleaseMilestoneInstruction<
   TAccountTreasury extends string,
   TAccountTreasuryAta extends string,
   TAccountProviderReputation extends string,
+  TAccountBuyerReputation extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
@@ -415,6 +446,7 @@ export function getAutoReleaseMilestoneInstruction<
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountProviderReputation,
+    TAccountBuyerReputation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >,
@@ -431,6 +463,7 @@ export function getAutoReleaseMilestoneInstruction<
   TAccountTreasury,
   TAccountTreasuryAta,
   TAccountProviderReputation,
+  TAccountBuyerReputation,
   TAccountTokenProgram,
   TAccountSystemProgram
 > {
@@ -452,6 +485,7 @@ export function getAutoReleaseMilestoneInstruction<
       value: input.providerReputation ?? null,
       isWritable: true,
     },
+    buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
@@ -486,6 +520,7 @@ export function getAutoReleaseMilestoneInstruction<
       getAccountMeta("treasury", accounts.treasury),
       getAccountMeta("treasuryAta", accounts.treasuryAta),
       getAccountMeta("providerReputation", accounts.providerReputation),
+      getAccountMeta("buyerReputation", accounts.buyerReputation),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
@@ -505,6 +540,7 @@ export function getAutoReleaseMilestoneInstruction<
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountProviderReputation,
+    TAccountBuyerReputation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >);
@@ -526,8 +562,17 @@ export type ParsedAutoReleaseMilestoneInstruction<
     treasury: TAccountMetas[7];
     treasuryAta: TAccountMetas[8];
     providerReputation: TAccountMetas[9];
-    tokenProgram: TAccountMetas[10];
-    systemProgram: TAccountMetas[11];
+    /**
+     * Buyer reputation - mirrors `accept_milestone` so silence-as-consent
+     * settlement still ticks the buyer's `total_released_usdc` and (on
+     * completion) `completed_rfps`. `init_if_needed` because in theory the
+     * account could be missing if `select_bid` was somehow skipped, though
+     * the lifecycle guarantees that doesn't happen. Permissionless caller
+     * (`payer`) covers any rent.
+     */
+    buyerReputation: TAccountMetas[10];
+    tokenProgram: TAccountMetas[11];
+    systemProgram: TAccountMetas[12];
   };
   data: AutoReleaseMilestoneInstructionData;
 };
@@ -540,12 +585,12 @@ export function parseAutoReleaseMilestoneInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedAutoReleaseMilestoneInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 12) {
+  if (instruction.accounts.length < 13) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 12,
+        expectedAccountMetas: 13,
       },
     );
   }
@@ -568,6 +613,7 @@ export function parseAutoReleaseMilestoneInstruction<
       treasury: getNextAccount(),
       treasuryAta: getNextAccount(),
       providerReputation: getNextAccount(),
+      buyerReputation: getNextAccount(),
       tokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),
     },

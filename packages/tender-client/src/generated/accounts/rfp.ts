@@ -105,14 +105,14 @@ export type Rfp = {
    * `contract_value`. Length is `milestone_count`; padded with zeros to
    * `MAX_MILESTONE_COUNT`. Sourced from the winning bid's plaintext at
    * `select_bid` time and used directly by `fund_project` to initialize
-   * each milestone's amount — no percentage-rounding loss.
+   * each milestone's amount - no percentage-rounding loss.
    */
   milestoneAmounts: Array<bigint>;
   /**
    * Per-milestone delivery deadline duration (seconds, from the moment the
    * provider calls `start_milestone`). Sourced from the winning bid's
    * plaintext at `select_bid` time. Length is `milestone_count`; padded
-   * with zeros. A value of 0 means "no deadline enforced" — the
+   * with zeros. A value of 0 means "no deadline enforced" - the
    * `cancel_late_milestone` path is unavailable for that milestone.
    */
   milestoneDurationsSecs: Array<bigint>;
@@ -168,14 +168,14 @@ export type RfpArgs = {
    * `contract_value`. Length is `milestone_count`; padded with zeros to
    * `MAX_MILESTONE_COUNT`. Sourced from the winning bid's plaintext at
    * `select_bid` time and used directly by `fund_project` to initialize
-   * each milestone's amount — no percentage-rounding loss.
+   * each milestone's amount - no percentage-rounding loss.
    */
   milestoneAmounts: Array<number | bigint>;
   /**
    * Per-milestone delivery deadline duration (seconds, from the moment the
    * provider calls `start_milestone`). Sourced from the winning bid's
    * plaintext at `select_bid` time. Length is `milestone_count`; padded
-   * with zeros. A value of 0 means "no deadline enforced" — the
+   * with zeros. A value of 0 means "no deadline enforced" - the
    * `cancel_late_milestone` path is unavailable for that milestone.
    */
   milestoneDurationsSecs: Array<number | bigint>;

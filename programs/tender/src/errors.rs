@@ -11,6 +11,8 @@ pub enum TenderError {
     BidWindowStillOpen,
     #[msg("Reveal window has expired")]
     RevealWindowExpired,
+    #[msg("Reveal window is still open - cannot expire RFP yet")]
+    RevealWindowOpen,
     #[msg("Funding window has expired - buyer ghosted")]
     FundingWindowExpired,
     #[msg("Funding window is still open")]

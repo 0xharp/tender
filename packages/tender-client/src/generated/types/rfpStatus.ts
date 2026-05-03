@@ -27,6 +27,7 @@ export enum RfpStatus {
   Cancelled,
   GhostedByBuyer,
   Disputed,
+  Expired,
 }
 
 export type RfpStatusArgs = RfpStatus;

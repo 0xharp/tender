@@ -65,7 +65,7 @@ export type ProviderReputation = {
    * (entire project walked) and `disputed_milestones` (escalated to dispute).
    */
   lateMilestones: number;
-  /** Amount tracking — gross USDC base units. */
+  /** Amount tracking - gross USDC base units. */
   totalWonUsdc: bigint;
   totalEarnedUsdc: bigint;
   totalDisputedUsdc: bigint;
@@ -85,7 +85,7 @@ export type ProviderReputationArgs = {
    * (entire project walked) and `disputed_milestones` (escalated to dispute).
    */
   lateMilestones: number;
-  /** Amount tracking — gross USDC base units. */
+  /** Amount tracking - gross USDC base units. */
   totalWonUsdc: number | bigint;
   totalEarnedUsdc: number | bigint;
   totalDisputedUsdc: number | bigint;

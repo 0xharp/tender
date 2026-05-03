@@ -170,7 +170,7 @@ export type CancelWithPenaltyAsyncInput<
   buyerAta: Address<TAccountBuyerAta>;
   providerAta: Address<TAccountProviderAta>;
   buyerReputation?: Address<TAccountBuyerReputation>;
-  /** Provider rep — receives the penalty as `total_earned_usdc`. */
+  /** Provider rep - receives the penalty as `total_earned_usdc`. */
   providerReputation: Address<TAccountProviderReputation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
@@ -360,7 +360,7 @@ export type CancelWithPenaltyInput<
   buyerAta: Address<TAccountBuyerAta>;
   providerAta: Address<TAccountProviderAta>;
   buyerReputation: Address<TAccountBuyerReputation>;
-  /** Provider rep — receives the penalty as `total_earned_usdc`. */
+  /** Provider rep - receives the penalty as `total_earned_usdc`. */
   providerReputation: Address<TAccountProviderReputation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
@@ -503,7 +503,7 @@ export type ParsedCancelWithPenaltyInstruction<
     buyerAta: TAccountMetas[6];
     providerAta: TAccountMetas[7];
     buyerReputation: TAccountMetas[8];
-    /** Provider rep — receives the penalty as `total_earned_usdc`. */
+    /** Provider rep - receives the penalty as `total_earned_usdc`. */
     providerReputation: TAccountMetas[9];
     tokenProgram: TAccountMetas[10];
     systemProgram: TAccountMetas[11];

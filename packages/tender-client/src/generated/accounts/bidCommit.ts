@@ -70,7 +70,7 @@ export type BidCommit = {
    * The pubkey that signed `commit_bid_init`. Bid PDA is derived from this.
    * In public-bidder-list RFPs this is the provider's main wallet.
    * In private-bidder-list RFPs this is a per-(main_wallet, rfp) deterministic
-   * ephemeral wallet — the provider's main wallet does not appear on chain.
+   * ephemeral wallet - the provider's main wallet does not appear on chain.
    */
   provider: Address;
   commitHash: ReadonlyUint8Array;
@@ -99,7 +99,7 @@ export type BidCommitArgs = {
    * The pubkey that signed `commit_bid_init`. Bid PDA is derived from this.
    * In public-bidder-list RFPs this is the provider's main wallet.
    * In private-bidder-list RFPs this is a per-(main_wallet, rfp) deterministic
-   * ephemeral wallet — the provider's main wallet does not appear on chain.
+   * ephemeral wallet - the provider's main wallet does not appear on chain.
    */
   provider: Address;
   commitHash: ReadonlyUint8Array;

@@ -7,6 +7,7 @@ pub mod close_withdrawn_bid;
 pub mod commit_bid_init;
 pub mod delegate_bid;
 pub mod dispute_default_split;
+pub mod expire_rfp;
 pub mod finalize_bid;
 pub mod fund_project;
 pub mod init_treasury;
@@ -42,6 +43,8 @@ pub use commit_bid_init::*;
 pub use delegate_bid::*;
 #[allow(ambiguous_glob_reexports)]
 pub use dispute_default_split::*;
+#[allow(ambiguous_glob_reexports)]
+pub use expire_rfp::*;
 #[allow(ambiguous_glob_reexports)]
 pub use finalize_bid::*;
 #[allow(ambiguous_glob_reexports)]

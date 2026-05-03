@@ -201,18 +201,29 @@ pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()
     // NOTE: `total_wins` was already incremented at `select_bid` time - we
     // count wins on award, not on completion. Only `completed_projects` ticks
     // here.
+    // accept_milestone always adds to total_released, so this site can only
+    // reach the Completed branch in practice - the Cancelled fallback is
+    // defensive (matches cancel_with_notice's pattern).
     let total_settled = escrow.total_released
         .saturating_add(escrow.total_refunded);
     if total_settled >= escrow.total_locked {
-        rfp.status = RfpStatus::Completed;
-        provider_rep.completed_projects = provider_rep.completed_projects.saturating_add(1);
-        emit!(ProviderReputationUpdated {
-            provider: provider_rep.provider,
-            field: 1,
-            at: now,
-        });
-        emit!(BuyerReputationUpdated { buyer: buyer_rep.buyer, field: 2, at: now });
-        emit!(RfpCompleted { rfp: rfp.key(), at: now });
+        if escrow.total_released == 0 {
+            rfp.status = RfpStatus::Cancelled;
+        } else {
+            rfp.status = RfpStatus::Completed;
+            provider_rep.completed_projects = provider_rep.completed_projects.saturating_add(1);
+            // Was previously emitting the BuyerReputationUpdated event without
+            // actually incrementing the counter - the event-only write left every
+            // buyer's `completed_rfps` permanently at 0. Increment + emit now.
+            buyer_rep.completed_rfps = buyer_rep.completed_rfps.saturating_add(1);
+            emit!(ProviderReputationUpdated {
+                provider: provider_rep.provider,
+                field: 1,
+                at: now,
+            });
+            emit!(BuyerReputationUpdated { buyer: buyer_rep.buyer, field: 2, at: now });
+            emit!(RfpCompleted { rfp: rfp.key(), at: now });
+        }
     }
 
     Ok(())

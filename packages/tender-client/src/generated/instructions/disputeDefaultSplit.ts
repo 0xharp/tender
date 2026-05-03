@@ -65,6 +65,10 @@ export type DisputeDefaultSplitInstruction<
   TAccountBuyerAta extends string | AccountMeta<string> = string,
   TAccountTreasury extends string | AccountMeta<string> = string,
   TAccountTreasuryAta extends string | AccountMeta<string> = string,
+  TAccountBuyerReputation extends string | AccountMeta<string> = string,
+  TAccountProviderReputation extends string | AccountMeta<string> = string,
+  TAccountSystemProgram extends string | AccountMeta<string> =
+    "11111111111111111111111111111111",
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -101,6 +105,15 @@ export type DisputeDefaultSplitInstruction<
       TAccountTreasuryAta extends string
         ? WritableAccount<TAccountTreasuryAta>
         : TAccountTreasuryAta,
+      TAccountBuyerReputation extends string
+        ? WritableAccount<TAccountBuyerReputation>
+        : TAccountBuyerReputation,
+      TAccountProviderReputation extends string
+        ? WritableAccount<TAccountProviderReputation>
+        : TAccountProviderReputation,
+      TAccountSystemProgram extends string
+        ? ReadonlyAccount<TAccountSystemProgram>
+        : TAccountSystemProgram,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -156,6 +169,9 @@ export type DisputeDefaultSplitAsyncInput<
   TAccountBuyerAta extends string = string,
   TAccountTreasury extends string = string,
   TAccountTreasuryAta extends string = string,
+  TAccountBuyerReputation extends string = string,
+  TAccountProviderReputation extends string = string,
+  TAccountSystemProgram extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
   payer: TransactionSigner<TAccountPayer>;
@@ -168,6 +184,18 @@ export type DisputeDefaultSplitAsyncInput<
   buyerAta: Address<TAccountBuyerAta>;
   treasury?: Address<TAccountTreasury>;
   treasuryAta?: Address<TAccountTreasuryAta>;
+  /**
+   * Buyer + provider reputation - need updating because before this fix the
+   * default-split path was the only settlement that left rep stats stale
+   * (`reject_milestone` already incremented `disputed_milestones` on both
+   * sides; the AMOUNTS only landed when `resolve_dispute` was called).
+   * init_if_needed because the permissionless caller pays for any rent if
+   * somehow the accounts are missing - in practice both exist by this
+   * stage of the lifecycle.
+   */
+  buyerReputation: Address<TAccountBuyerReputation>;
+  providerReputation: Address<TAccountProviderReputation>;
+  systemProgram?: Address<TAccountSystemProgram>;
   tokenProgram?: Address<TAccountTokenProgram>;
   milestoneIndex: DisputeDefaultSplitInstructionDataArgs["milestoneIndex"];
 };
@@ -183,6 +211,9 @@ export async function getDisputeDefaultSplitInstructionAsync<
   TAccountBuyerAta extends string,
   TAccountTreasury extends string,
   TAccountTreasuryAta extends string,
+  TAccountBuyerReputation extends string,
+  TAccountProviderReputation extends string,
+  TAccountSystemProgram extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
@@ -197,6 +228,9 @@ export async function getDisputeDefaultSplitInstructionAsync<
     TAccountBuyerAta,
     TAccountTreasury,
     TAccountTreasuryAta,
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountSystemProgram,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -213,6 +247,9 @@ export async function getDisputeDefaultSplitInstructionAsync<
     TAccountBuyerAta,
     TAccountTreasury,
     TAccountTreasuryAta,
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountSystemProgram,
     TAccountTokenProgram
   >
 > {
@@ -231,6 +268,12 @@ export async function getDisputeDefaultSplitInstructionAsync<
     buyerAta: { value: input.buyerAta ?? null, isWritable: true },
     treasury: { value: input.treasury ?? null, isWritable: true },
     treasuryAta: { value: input.treasuryAta ?? null, isWritable: true },
+    buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
+    providerReputation: {
+      value: input.providerReputation ?? null,
+      isWritable: true,
+    },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -298,6 +341,10 @@ export async function getDisputeDefaultSplitInstructionAsync<
       ],
     });
   }
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
@@ -316,6 +363,9 @@ export async function getDisputeDefaultSplitInstructionAsync<
       getAccountMeta("buyerAta", accounts.buyerAta),
       getAccountMeta("treasury", accounts.treasury),
       getAccountMeta("treasuryAta", accounts.treasuryAta),
+      getAccountMeta("buyerReputation", accounts.buyerReputation),
+      getAccountMeta("providerReputation", accounts.providerReputation),
+      getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getDisputeDefaultSplitInstructionDataEncoder().encode(
@@ -334,6 +384,9 @@ export async function getDisputeDefaultSplitInstructionAsync<
     TAccountBuyerAta,
     TAccountTreasury,
     TAccountTreasuryAta,
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountSystemProgram,
     TAccountTokenProgram
   >);
 }
@@ -349,6 +402,9 @@ export type DisputeDefaultSplitInput<
   TAccountBuyerAta extends string = string,
   TAccountTreasury extends string = string,
   TAccountTreasuryAta extends string = string,
+  TAccountBuyerReputation extends string = string,
+  TAccountProviderReputation extends string = string,
+  TAccountSystemProgram extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
   payer: TransactionSigner<TAccountPayer>;
@@ -361,6 +417,18 @@ export type DisputeDefaultSplitInput<
   buyerAta: Address<TAccountBuyerAta>;
   treasury: Address<TAccountTreasury>;
   treasuryAta: Address<TAccountTreasuryAta>;
+  /**
+   * Buyer + provider reputation - need updating because before this fix the
+   * default-split path was the only settlement that left rep stats stale
+   * (`reject_milestone` already incremented `disputed_milestones` on both
+   * sides; the AMOUNTS only landed when `resolve_dispute` was called).
+   * init_if_needed because the permissionless caller pays for any rent if
+   * somehow the accounts are missing - in practice both exist by this
+   * stage of the lifecycle.
+   */
+  buyerReputation: Address<TAccountBuyerReputation>;
+  providerReputation: Address<TAccountProviderReputation>;
+  systemProgram?: Address<TAccountSystemProgram>;
   tokenProgram?: Address<TAccountTokenProgram>;
   milestoneIndex: DisputeDefaultSplitInstructionDataArgs["milestoneIndex"];
 };
@@ -376,6 +444,9 @@ export function getDisputeDefaultSplitInstruction<
   TAccountBuyerAta extends string,
   TAccountTreasury extends string,
   TAccountTreasuryAta extends string,
+  TAccountBuyerReputation extends string,
+  TAccountProviderReputation extends string,
+  TAccountSystemProgram extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
@@ -390,6 +461,9 @@ export function getDisputeDefaultSplitInstruction<
     TAccountBuyerAta,
     TAccountTreasury,
     TAccountTreasuryAta,
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountSystemProgram,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -405,6 +479,9 @@ export function getDisputeDefaultSplitInstruction<
   TAccountBuyerAta,
   TAccountTreasury,
   TAccountTreasuryAta,
+  TAccountBuyerReputation,
+  TAccountProviderReputation,
+  TAccountSystemProgram,
   TAccountTokenProgram
 > {
   // Program address.
@@ -422,6 +499,12 @@ export function getDisputeDefaultSplitInstruction<
     buyerAta: { value: input.buyerAta ?? null, isWritable: true },
     treasury: { value: input.treasury ?? null, isWritable: true },
     treasuryAta: { value: input.treasuryAta ?? null, isWritable: true },
+    buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
+    providerReputation: {
+      value: input.providerReputation ?? null,
+      isWritable: true,
+    },
+    systemProgram: { value: input.systemProgram ?? null, isWritable: false },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -433,6 +516,10 @@ export function getDisputeDefaultSplitInstruction<
   const args = { ...input };
 
   // Resolve default values.
+  if (!accounts.systemProgram.value) {
+    accounts.systemProgram.value =
+      "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
+  }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
@@ -451,6 +538,9 @@ export function getDisputeDefaultSplitInstruction<
       getAccountMeta("buyerAta", accounts.buyerAta),
       getAccountMeta("treasury", accounts.treasury),
       getAccountMeta("treasuryAta", accounts.treasuryAta),
+      getAccountMeta("buyerReputation", accounts.buyerReputation),
+      getAccountMeta("providerReputation", accounts.providerReputation),
+      getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getDisputeDefaultSplitInstructionDataEncoder().encode(
@@ -469,6 +559,9 @@ export function getDisputeDefaultSplitInstruction<
     TAccountBuyerAta,
     TAccountTreasury,
     TAccountTreasuryAta,
+    TAccountBuyerReputation,
+    TAccountProviderReputation,
+    TAccountSystemProgram,
     TAccountTokenProgram
   >);
 }
@@ -489,7 +582,19 @@ export type ParsedDisputeDefaultSplitInstruction<
     buyerAta: TAccountMetas[7];
     treasury: TAccountMetas[8];
     treasuryAta: TAccountMetas[9];
-    tokenProgram: TAccountMetas[10];
+    /**
+     * Buyer + provider reputation - need updating because before this fix the
+     * default-split path was the only settlement that left rep stats stale
+     * (`reject_milestone` already incremented `disputed_milestones` on both
+     * sides; the AMOUNTS only landed when `resolve_dispute` was called).
+     * init_if_needed because the permissionless caller pays for any rent if
+     * somehow the accounts are missing - in practice both exist by this
+     * stage of the lifecycle.
+     */
+    buyerReputation: TAccountMetas[10];
+    providerReputation: TAccountMetas[11];
+    systemProgram: TAccountMetas[12];
+    tokenProgram: TAccountMetas[13];
   };
   data: DisputeDefaultSplitInstructionData;
 };
@@ -502,12 +607,12 @@ export function parseDisputeDefaultSplitInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedDisputeDefaultSplitInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 11) {
+  if (instruction.accounts.length < 14) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 11,
+        expectedAccountMetas: 14,
       },
     );
   }
@@ -530,6 +635,9 @@ export function parseDisputeDefaultSplitInstruction<
       buyerAta: getNextAccount(),
       treasury: getNextAccount(),
       treasuryAta: getNextAccount(),
+      buyerReputation: getNextAccount(),
+      providerReputation: getNextAccount(),
+      systemProgram: getNextAccount(),
       tokenProgram: getNextAccount(),
     },
     data: getDisputeDefaultSplitInstructionDataDecoder().decode(

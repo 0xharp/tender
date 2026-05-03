@@ -109,6 +109,9 @@ pub mod tender {
     pub fn mark_buyer_ghosted(ctx: Context<MarkBuyerGhosted>) -> Result<()> {
         instructions::mark_buyer_ghosted::handler(ctx)
     }
+    pub fn expire_rfp(ctx: Context<ExpireRfp>) -> Result<()> {
+        instructions::expire_rfp::handler(ctx)
+    }
 
     /* ----- Dispute resolution --------------------------------------------- */
     pub fn resolve_dispute(

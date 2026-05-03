@@ -171,6 +171,13 @@ export type AcceptMilestoneAsyncInput<
   TAccountSystemProgram extends string = string,
 > = {
   buyer: TransactionSigner<TAccountBuyer>;
+  /**
+   * `Box<Account>` to keep the 431-byte deserialized Rfp off the stack.
+   * Combined with the boxed token accounts + 2 init_if_needed reputation
+   * accounts below, leaving Rfp on the stack overflows the 4KB Solana
+   * stack frame at runtime ("Access violation in stack frame N"). Same
+   * fix pattern as `fund_project`.
+   */
   rfp: Address<TAccountRfp>;
   milestone: Address<TAccountMilestone>;
   escrow?: Address<TAccountEscrow>;
@@ -193,7 +200,7 @@ export type AcceptMilestoneAsyncInput<
    */
   providerReputation: Address<TAccountProviderReputation>;
   /**
-   * Buyer reputation — track total_released_usdc here. Already created by
+   * Buyer reputation - track total_released_usdc here. Already created by
    * `select_bid`, so init_if_needed is a no-op in practice.
    */
   buyerReputation?: Address<TAccountBuyerReputation>;
@@ -411,6 +418,13 @@ export type AcceptMilestoneInput<
   TAccountSystemProgram extends string = string,
 > = {
   buyer: TransactionSigner<TAccountBuyer>;
+  /**
+   * `Box<Account>` to keep the 431-byte deserialized Rfp off the stack.
+   * Combined with the boxed token accounts + 2 init_if_needed reputation
+   * accounts below, leaving Rfp on the stack overflows the 4KB Solana
+   * stack frame at runtime ("Access violation in stack frame N"). Same
+   * fix pattern as `fund_project`.
+   */
   rfp: Address<TAccountRfp>;
   milestone: Address<TAccountMilestone>;
   escrow: Address<TAccountEscrow>;
@@ -433,7 +447,7 @@ export type AcceptMilestoneInput<
    */
   providerReputation: Address<TAccountProviderReputation>;
   /**
-   * Buyer reputation — track total_released_usdc here. Already created by
+   * Buyer reputation - track total_released_usdc here. Already created by
    * `select_bid`, so init_if_needed is a no-op in practice.
    */
   buyerReputation: Address<TAccountBuyerReputation>;
@@ -576,6 +590,13 @@ export type ParsedAcceptMilestoneInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     buyer: TAccountMetas[0];
+    /**
+     * `Box<Account>` to keep the 431-byte deserialized Rfp off the stack.
+     * Combined with the boxed token accounts + 2 init_if_needed reputation
+     * accounts below, leaving Rfp on the stack overflows the 4KB Solana
+     * stack frame at runtime ("Access violation in stack frame N"). Same
+     * fix pattern as `fund_project`.
+     */
     rfp: TAccountMetas[1];
     milestone: TAccountMetas[2];
     escrow: TAccountMetas[3];
@@ -598,7 +619,7 @@ export type ParsedAcceptMilestoneInstruction<
      */
     providerReputation: TAccountMetas[9];
     /**
-     * Buyer reputation — track total_released_usdc here. Already created by
+     * Buyer reputation - track total_released_usdc here. Already created by
      * `select_bid`, so init_if_needed is a no-op in practice.
      */
     buyerReputation: TAccountMetas[10];

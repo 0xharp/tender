@@ -167,7 +167,7 @@ export type CancelLateMilestoneAsyncInput<
   escrowAta?: Address<TAccountEscrowAta>;
   buyerAta: Address<TAccountBuyerAta>;
   buyerReputation?: Address<TAccountBuyerReputation>;
-  /** Provider rep — gets the late_milestones increment. */
+  /** Provider rep - gets the late_milestones increment. */
   providerReputation: Address<TAccountProviderReputation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
@@ -349,7 +349,7 @@ export type CancelLateMilestoneInput<
   escrowAta: Address<TAccountEscrowAta>;
   buyerAta: Address<TAccountBuyerAta>;
   buyerReputation: Address<TAccountBuyerReputation>;
-  /** Provider rep — gets the late_milestones increment. */
+  /** Provider rep - gets the late_milestones increment. */
   providerReputation: Address<TAccountProviderReputation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
@@ -485,7 +485,7 @@ export type ParsedCancelLateMilestoneInstruction<
     escrowAta: TAccountMetas[5];
     buyerAta: TAccountMetas[6];
     buyerReputation: TAccountMetas[7];
-    /** Provider rep — gets the late_milestones increment. */
+    /** Provider rep - gets the late_milestones increment. */
     providerReputation: TAccountMetas[8];
     tokenProgram: TAccountMetas[9];
     systemProgram: TAccountMetas[10];

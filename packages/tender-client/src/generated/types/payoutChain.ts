@@ -37,7 +37,7 @@ import {
  * Where milestone payments land for this bid.
  *
  * V1 only `Solana { mint }` is implemented. `CrossChain` is reserved for the
- * Day 10 Ika integration — `select_bid` rejects it with `CrossChainNotYetSupported`
+ * Day 10 Ika integration - `select_bid` rejects it with `CrossChainNotYetSupported`
  * for now, so the on-chain shape is forward-compat without breaking changes.
  */
 export type PayoutChain =

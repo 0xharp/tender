@@ -3,10 +3,10 @@ use anchor_spl::token::{transfer_checked, Mint, Token, TokenAccount, TransferChe
 
 use crate::errors::TenderError;
 use crate::state::{
-    BuyerReputation, BUYER_REP_SEED, DisputeResolved, DisputeSplitProposed, Escrow, ESCROW_SEED,
-    MilestoneState, MILESTONE_SEED, MilestoneStatus, NO_ACTIVE_MILESTONE, ProviderReputation,
-    PROVIDER_REP_SEED, Rfp, RfpStatus, Treasury, TREASURY_SEED, BPS_DENOMINATOR,
-    SPLIT_NOT_PROPOSED,
+    BuyerReputation, BUYER_REP_SEED, BuyerReputationUpdated, DisputeResolved,
+    DisputeSplitProposed, Escrow, ESCROW_SEED, MilestoneState, MILESTONE_SEED, MilestoneStatus,
+    NO_ACTIVE_MILESTONE, ProviderReputation, PROVIDER_REP_SEED, ProviderReputationUpdated, Rfp,
+    RfpCompleted, RfpStatus, Treasury, TREASURY_SEED, BPS_DENOMINATOR, SPLIT_NOT_PROPOSED,
 };
 
 /// Both buyer + provider must call this with the SAME split for it to release.
@@ -229,11 +229,28 @@ pub fn handler(
         provider_rep.bump = ctx.bumps.provider_reputation;
     }
     provider_rep.total_earned_usdc = provider_rep.total_earned_usdc.saturating_add(to_provider_net);
-    provider_rep.total_disputed_usdc = provider_rep.total_disputed_usdc.saturating_add(amount);
+    // total_disputed_usdc is bumped at reject_milestone time (dispute OPEN),
+    // not here. This avoids double-counting and ensures the field is correct
+    // even when a dispute closes via dispute_default_split (lapse path).
     provider_rep.last_updated = now;
 
+    // resolve_dispute can theoretically settle 100% to buyer (split=0) — in
+    // that case total_released stays at 0 from this call and the project is
+    // a Cancelled-equivalent (no work value retained). Otherwise Completed.
     if escrow.total_released.saturating_add(escrow.total_refunded) >= escrow.total_locked {
+      if escrow.total_released == 0 {
+        rfp.status = RfpStatus::Cancelled;
+      } else {
         rfp.status = RfpStatus::Completed;
+        // Tick completion counters - mirrors accept_milestone +
+        // dispute_default_split. A dispute that drains the escrow still
+        // counts as a completed RFP from "the project is done" perspective.
+        provider_rep.completed_projects = provider_rep.completed_projects.saturating_add(1);
+        buyer_rep.completed_rfps = buyer_rep.completed_rfps.saturating_add(1);
+        emit!(ProviderReputationUpdated { provider: provider_rep.provider, field: 1, at: now });
+        emit!(BuyerReputationUpdated { buyer: buyer_rep.buyer, field: 2, at: now });
+        emit!(RfpCompleted { rfp: rfp.key(), at: now });
+      }
     } else {
         rfp.status = RfpStatus::InProgress;
     }

@@ -62,7 +62,7 @@ export type BuyerReputation = {
   disputedMilestones: number;
   cancelledMilestones: number;
   /**
-   * Amount tracking — gross USDC base units. Counts mislead at scale
+   * Amount tracking - gross USDC base units. Counts mislead at scale
    * ($100 cancel vs $50,000 cancel look identical); amounts give honest
    * signal alongside the counts above.
    */
@@ -82,7 +82,7 @@ export type BuyerReputationArgs = {
   disputedMilestones: number;
   cancelledMilestones: number;
   /**
-   * Amount tracking — gross USDC base units. Counts mislead at scale
+   * Amount tracking - gross USDC base units. Counts mislead at scale
    * ($100 cancel vs $50,000 cancel look identical); amounts give honest
    * signal alongside the counts above.
    */

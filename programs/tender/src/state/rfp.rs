@@ -96,6 +96,10 @@ pub enum RfpStatus {
     Cancelled,
     GhostedByBuyer, // buyer selected but never funded within window
     Disputed,
+    /// Reveal window closed without an award. Permissionlessly set by
+    /// `expire_rfp` after `reveal_close_at` passes while status is still
+    /// Reveal or BidsClosed. Terminal state - no further actions on this RFP.
+    Expired,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, InitSpace, Clone, Copy, PartialEq, Eq, Debug)]
@@ -151,5 +155,12 @@ pub struct RfpGhosted {
 #[event]
 pub struct RfpCompleted {
     pub rfp: Pubkey,
+    pub at: i64,
+}
+
+#[event]
+pub struct RfpExpired {
+    pub rfp: Pubkey,
+    pub buyer: Pubkey,
     pub at: i64,
 }

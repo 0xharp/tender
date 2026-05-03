@@ -15,6 +15,7 @@ export * from "./closeWithdrawnBid";
 export * from "./commitBidInit";
 export * from "./delegateBid";
 export * from "./disputeDefaultSplit";
+export * from "./expireRfp";
 export * from "./finalizeBid";
 export * from "./fundProject";
 export * from "./initTreasury";

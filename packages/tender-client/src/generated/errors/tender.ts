@@ -22,90 +22,92 @@ export const TENDER_ERROR__BID_WINDOW_CLOSED = 0x1771; // 6001
 export const TENDER_ERROR__BID_WINDOW_STILL_OPEN = 0x1772; // 6002
 /** RevealWindowExpired: Reveal window has expired */
 export const TENDER_ERROR__REVEAL_WINDOW_EXPIRED = 0x1773; // 6003
-/** FundingWindowExpired: Funding window has expired — buyer ghosted */
-export const TENDER_ERROR__FUNDING_WINDOW_EXPIRED = 0x1774; // 6004
+/** RevealWindowOpen: Reveal window is still open - cannot expire RFP yet */
+export const TENDER_ERROR__REVEAL_WINDOW_OPEN = 0x1774; // 6004
+/** FundingWindowExpired: Funding window has expired - buyer ghosted */
+export const TENDER_ERROR__FUNDING_WINDOW_EXPIRED = 0x1775; // 6005
 /** FundingWindowOpen: Funding window is still open */
-export const TENDER_ERROR__FUNDING_WINDOW_OPEN = 0x1775; // 6005
+export const TENDER_ERROR__FUNDING_WINDOW_OPEN = 0x1776; // 6006
 /** ReviewWindowOpen: Review window is still open */
-export const TENDER_ERROR__REVIEW_WINDOW_OPEN = 0x1776; // 6006
+export const TENDER_ERROR__REVIEW_WINDOW_OPEN = 0x1777; // 6007
 /** ReviewWindowExpired: Review window has expired */
-export const TENDER_ERROR__REVIEW_WINDOW_EXPIRED = 0x1777; // 6007
+export const TENDER_ERROR__REVIEW_WINDOW_EXPIRED = 0x1778; // 6008
 /** CancelNoticeActive: Cancel-with-notice period is still in effect */
-export const TENDER_ERROR__CANCEL_NOTICE_ACTIVE = 0x1778; // 6008
+export const TENDER_ERROR__CANCEL_NOTICE_ACTIVE = 0x1779; // 6009
 /** DisputeCooloffActive: Dispute cool-off is still active */
-export const TENDER_ERROR__DISPUTE_COOLOFF_ACTIVE = 0x1779; // 6009
+export const TENDER_ERROR__DISPUTE_COOLOFF_ACTIVE = 0x177a; // 6010
 /** DisputeCooloffExpired: Dispute cool-off has expired */
-export const TENDER_ERROR__DISPUTE_COOLOFF_EXPIRED = 0x177a; // 6010
+export const TENDER_ERROR__DISPUTE_COOLOFF_EXPIRED = 0x177b; // 6011
 /** BidAlreadyCommitted: Bid commit already exists for this provider */
-export const TENDER_ERROR__BID_ALREADY_COMMITTED = 0x177b; // 6011
+export const TENDER_ERROR__BID_ALREADY_COMMITTED = 0x177c; // 6012
 /** BidCommitHashMismatch: Bid commit hash mismatch */
-export const TENDER_ERROR__BID_COMMIT_HASH_MISMATCH = 0x177c; // 6012
+export const TENDER_ERROR__BID_COMMIT_HASH_MISMATCH = 0x177d; // 6013
 /** BidNotWithdrawable: Bid is not in a withdrawable state */
-export const TENDER_ERROR__BID_NOT_WITHDRAWABLE = 0x177d; // 6013
+export const TENDER_ERROR__BID_NOT_WITHDRAWABLE = 0x177e; // 6014
 /** InvalidBidStatus: Bid is not in the expected lifecycle state for this action */
-export const TENDER_ERROR__INVALID_BID_STATUS = 0x177e; // 6014
+export const TENDER_ERROR__INVALID_BID_STATUS = 0x177f; // 6015
 /** NotBuyer: Signer is not the buyer */
-export const TENDER_ERROR__NOT_BUYER = 0x177f; // 6015
+export const TENDER_ERROR__NOT_BUYER = 0x1780; // 6016
 /** NotProvider: Signer is not the provider */
-export const TENDER_ERROR__NOT_PROVIDER = 0x1780; // 6016
+export const TENDER_ERROR__NOT_PROVIDER = 0x1781; // 6017
 /** NotDisputeParty: Signer is not a party to this dispute */
-export const TENDER_ERROR__NOT_DISPUTE_PARTY = 0x1781; // 6017
+export const TENDER_ERROR__NOT_DISPUTE_PARTY = 0x1782; // 6018
 /** NotTreasuryAuthority: Signer is not the treasury authority */
-export const TENDER_ERROR__NOT_TREASURY_AUTHORITY = 0x1782; // 6018
+export const TENDER_ERROR__NOT_TREASURY_AUTHORITY = 0x1783; // 6019
 /** InvalidAttestation: Attestation signature is invalid */
-export const TENDER_ERROR__INVALID_ATTESTATION = 0x1783; // 6019
+export const TENDER_ERROR__INVALID_ATTESTATION = 0x1784; // 6020
 /** InvalidMilestoneCount: Milestone count must be between 1 and 8 */
-export const TENDER_ERROR__INVALID_MILESTONE_COUNT = 0x1784; // 6020
+export const TENDER_ERROR__INVALID_MILESTONE_COUNT = 0x1785; // 6021
 /** InvalidMilestonePercentages: Milestone percentages must sum to 100 */
-export const TENDER_ERROR__INVALID_MILESTONE_PERCENTAGES = 0x1785; // 6021
+export const TENDER_ERROR__INVALID_MILESTONE_PERCENTAGES = 0x1786; // 6022
 /** InvalidMilestoneIndex: Milestone index out of bounds */
-export const TENDER_ERROR__INVALID_MILESTONE_INDEX = 0x1786; // 6022
+export const TENDER_ERROR__INVALID_MILESTONE_INDEX = 0x1787; // 6023
 /** InvalidBidWindow: bid_open_at must be < bid_close_at < reveal_close_at */
-export const TENDER_ERROR__INVALID_BID_WINDOW = 0x1787; // 6023
+export const TENDER_ERROR__INVALID_BID_WINDOW = 0x1788; // 6024
 /** InvalidWindowSecs: Window value must be positive */
-export const TENDER_ERROR__INVALID_WINDOW_SECS = 0x1788; // 6024
+export const TENDER_ERROR__INVALID_WINDOW_SECS = 0x1789; // 6025
 /** InvalidMaxIterations: Max iterations must be at least 1 */
-export const TENDER_ERROR__INVALID_MAX_ITERATIONS = 0x1789; // 6025
+export const TENDER_ERROR__INVALID_MAX_ITERATIONS = 0x178a; // 6026
 /** ReserveCommitmentMismatch: Reserve commitment must reveal correctly */
-export const TENDER_ERROR__RESERVE_COMMITMENT_MISMATCH = 0x178a; // 6026
+export const TENDER_ERROR__RESERVE_COMMITMENT_MISMATCH = 0x178b; // 6027
 /** WinningBidExceedsReserve: Winning bid exceeds the revealed reserve price */
-export const TENDER_ERROR__WINNING_BID_EXCEEDS_RESERVE = 0x178b; // 6027
+export const TENDER_ERROR__WINNING_BID_EXCEEDS_RESERVE = 0x178c; // 6028
 /** DeclaredAmountMismatch: Declared winning amount mismatch with bid envelope */
-export const TENDER_ERROR__DECLARED_AMOUNT_MISMATCH = 0x178c; // 6028
+export const TENDER_ERROR__DECLARED_AMOUNT_MISMATCH = 0x178d; // 6029
 /** CrossChainNotYetSupported: Provider declared a payout chain that V1 does not yet support */
-export const TENDER_ERROR__CROSS_CHAIN_NOT_YET_SUPPORTED = 0x178d; // 6029
+export const TENDER_ERROR__CROSS_CHAIN_NOT_YET_SUPPORTED = 0x178e; // 6030
 /** EnvelopeTooLarge: Declared envelope size exceeds maximum */
-export const TENDER_ERROR__ENVELOPE_TOO_LARGE = 0x178e; // 6030
+export const TENDER_ERROR__ENVELOPE_TOO_LARGE = 0x178f; // 6031
 /** EnvelopeEmpty: Declared envelope size must be > 0 */
-export const TENDER_ERROR__ENVELOPE_EMPTY = 0x178f; // 6031
+export const TENDER_ERROR__ENVELOPE_EMPTY = 0x1790; // 6032
 /** InvalidSplit: Split must be in 0..=10000 basis points */
-export const TENDER_ERROR__INVALID_SPLIT = 0x1790; // 6032
-/** SplitMismatch: Split mismatch — both parties must propose the same split */
-export const TENDER_ERROR__SPLIT_MISMATCH = 0x1791; // 6033
+export const TENDER_ERROR__INVALID_SPLIT = 0x1791; // 6033
+/** SplitMismatch: Split mismatch - both parties must propose the same split */
+export const TENDER_ERROR__SPLIT_MISMATCH = 0x1792; // 6034
 /** IterationsExhausted: Iteration count exceeded */
-export const TENDER_ERROR__ITERATIONS_EXHAUSTED = 0x1792; // 6034
+export const TENDER_ERROR__ITERATIONS_EXHAUSTED = 0x1793; // 6035
 /** InvalidFeeBps: Fee bps must be <= 10000 */
-export const TENDER_ERROR__INVALID_FEE_BPS = 0x1793; // 6035
+export const TENDER_ERROR__INVALID_FEE_BPS = 0x1794; // 6036
 /** ChunkOffsetOutOfBounds: Chunk offset is out of bounds for the declared envelope size */
-export const TENDER_ERROR__CHUNK_OFFSET_OUT_OF_BOUNDS = 0x1794; // 6036
+export const TENDER_ERROR__CHUNK_OFFSET_OUT_OF_BOUNDS = 0x1795; // 6037
 /** ChunkOverrun: Chunk would write past the declared envelope size */
-export const TENDER_ERROR__CHUNK_OVERRUN = 0x1795; // 6037
+export const TENDER_ERROR__CHUNK_OVERRUN = 0x1796; // 6038
 /** InvalidEnvelopeKind: Chunk targets an unknown envelope kind (must be 0 = buyer, 1 = provider) */
-export const TENDER_ERROR__INVALID_ENVELOPE_KIND = 0x1796; // 6038
+export const TENDER_ERROR__INVALID_ENVELOPE_KIND = 0x1797; // 6039
 /** InvalidRfpStatus: RFP is not in a state that allows this action */
-export const TENDER_ERROR__INVALID_RFP_STATUS = 0x1797; // 6039
+export const TENDER_ERROR__INVALID_RFP_STATUS = 0x1798; // 6040
 /** InvalidMilestoneStatus: Milestone is not in the expected state for this action */
-export const TENDER_ERROR__INVALID_MILESTONE_STATUS = 0x1798; // 6040
-/** AnotherMilestoneActive: Another milestone is currently active — only one milestone can be in flight at a time */
-export const TENDER_ERROR__ANOTHER_MILESTONE_ACTIVE = 0x1799; // 6041
-/** DeliveryDeadlineNotPassed: Milestone's delivery deadline has not yet passed — use cancel_with_penalty instead */
-export const TENDER_ERROR__DELIVERY_DEADLINE_NOT_PASSED = 0x179a; // 6042
-/** NoDeliveryDeadline: Milestone has no delivery deadline configured — cancel_late_milestone unavailable */
-export const TENDER_ERROR__NO_DELIVERY_DEADLINE = 0x179b; // 6043
+export const TENDER_ERROR__INVALID_MILESTONE_STATUS = 0x1799; // 6041
+/** AnotherMilestoneActive: Another milestone is currently active - only one milestone can be in flight at a time */
+export const TENDER_ERROR__ANOTHER_MILESTONE_ACTIVE = 0x179a; // 6042
+/** DeliveryDeadlineNotPassed: Milestone's delivery deadline has not yet passed - use cancel_with_penalty instead */
+export const TENDER_ERROR__DELIVERY_DEADLINE_NOT_PASSED = 0x179b; // 6043
+/** NoDeliveryDeadline: Milestone has no delivery deadline configured - cancel_late_milestone unavailable */
+export const TENDER_ERROR__NO_DELIVERY_DEADLINE = 0x179c; // 6044
 /** MathOverflow: Token math overflow */
-export const TENDER_ERROR__MATH_OVERFLOW = 0x179c; // 6044
+export const TENDER_ERROR__MATH_OVERFLOW = 0x179d; // 6045
 /** InsufficientEscrow: Insufficient escrow balance */
-export const TENDER_ERROR__INSUFFICIENT_ESCROW = 0x179d; // 6045
+export const TENDER_ERROR__INSUFFICIENT_ESCROW = 0x179e; // 6046
 
 export type TenderError =
   | typeof TENDER_ERROR__ANOTHER_MILESTONE_ACTIVE
@@ -150,6 +152,7 @@ export type TenderError =
   | typeof TENDER_ERROR__NOT_TREASURY_AUTHORITY
   | typeof TENDER_ERROR__RESERVE_COMMITMENT_MISMATCH
   | typeof TENDER_ERROR__REVEAL_WINDOW_EXPIRED
+  | typeof TENDER_ERROR__REVEAL_WINDOW_OPEN
   | typeof TENDER_ERROR__REVIEW_WINDOW_EXPIRED
   | typeof TENDER_ERROR__REVIEW_WINDOW_OPEN
   | typeof TENDER_ERROR__SPLIT_MISMATCH
@@ -158,7 +161,7 @@ export type TenderError =
 let tenderErrorMessages: Record<TenderError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   tenderErrorMessages = {
-    [TENDER_ERROR__ANOTHER_MILESTONE_ACTIVE]: `Another milestone is currently active — only one milestone can be in flight at a time`,
+    [TENDER_ERROR__ANOTHER_MILESTONE_ACTIVE]: `Another milestone is currently active - only one milestone can be in flight at a time`,
     [TENDER_ERROR__BID_ALREADY_COMMITTED]: `Bid commit already exists for this provider`,
     [TENDER_ERROR__BID_COMMIT_HASH_MISMATCH]: `Bid commit hash mismatch`,
     [TENDER_ERROR__BID_NOT_WITHDRAWABLE]: `Bid is not in a withdrawable state`,
@@ -170,12 +173,12 @@ if (process.env["NODE_ENV"] !== "production") {
     [TENDER_ERROR__CHUNK_OVERRUN]: `Chunk would write past the declared envelope size`,
     [TENDER_ERROR__CROSS_CHAIN_NOT_YET_SUPPORTED]: `Provider declared a payout chain that V1 does not yet support`,
     [TENDER_ERROR__DECLARED_AMOUNT_MISMATCH]: `Declared winning amount mismatch with bid envelope`,
-    [TENDER_ERROR__DELIVERY_DEADLINE_NOT_PASSED]: `Milestone's delivery deadline has not yet passed — use cancel_with_penalty instead`,
+    [TENDER_ERROR__DELIVERY_DEADLINE_NOT_PASSED]: `Milestone's delivery deadline has not yet passed - use cancel_with_penalty instead`,
     [TENDER_ERROR__DISPUTE_COOLOFF_ACTIVE]: `Dispute cool-off is still active`,
     [TENDER_ERROR__DISPUTE_COOLOFF_EXPIRED]: `Dispute cool-off has expired`,
     [TENDER_ERROR__ENVELOPE_EMPTY]: `Declared envelope size must be > 0`,
     [TENDER_ERROR__ENVELOPE_TOO_LARGE]: `Declared envelope size exceeds maximum`,
-    [TENDER_ERROR__FUNDING_WINDOW_EXPIRED]: `Funding window has expired — buyer ghosted`,
+    [TENDER_ERROR__FUNDING_WINDOW_EXPIRED]: `Funding window has expired - buyer ghosted`,
     [TENDER_ERROR__FUNDING_WINDOW_OPEN]: `Funding window is still open`,
     [TENDER_ERROR__INSUFFICIENT_ESCROW]: `Insufficient escrow balance`,
     [TENDER_ERROR__INVALID_ATTESTATION]: `Attestation signature is invalid`,
@@ -193,16 +196,17 @@ if (process.env["NODE_ENV"] !== "production") {
     [TENDER_ERROR__INVALID_WINDOW_SECS]: `Window value must be positive`,
     [TENDER_ERROR__ITERATIONS_EXHAUSTED]: `Iteration count exceeded`,
     [TENDER_ERROR__MATH_OVERFLOW]: `Token math overflow`,
-    [TENDER_ERROR__NO_DELIVERY_DEADLINE]: `Milestone has no delivery deadline configured — cancel_late_milestone unavailable`,
+    [TENDER_ERROR__NO_DELIVERY_DEADLINE]: `Milestone has no delivery deadline configured - cancel_late_milestone unavailable`,
     [TENDER_ERROR__NOT_BUYER]: `Signer is not the buyer`,
     [TENDER_ERROR__NOT_DISPUTE_PARTY]: `Signer is not a party to this dispute`,
     [TENDER_ERROR__NOT_PROVIDER]: `Signer is not the provider`,
     [TENDER_ERROR__NOT_TREASURY_AUTHORITY]: `Signer is not the treasury authority`,
     [TENDER_ERROR__RESERVE_COMMITMENT_MISMATCH]: `Reserve commitment must reveal correctly`,
     [TENDER_ERROR__REVEAL_WINDOW_EXPIRED]: `Reveal window has expired`,
+    [TENDER_ERROR__REVEAL_WINDOW_OPEN]: `Reveal window is still open - cannot expire RFP yet`,
     [TENDER_ERROR__REVIEW_WINDOW_EXPIRED]: `Review window has expired`,
     [TENDER_ERROR__REVIEW_WINDOW_OPEN]: `Review window is still open`,
-    [TENDER_ERROR__SPLIT_MISMATCH]: `Split mismatch — both parties must propose the same split`,
+    [TENDER_ERROR__SPLIT_MISMATCH]: `Split mismatch - both parties must propose the same split`,
     [TENDER_ERROR__WINNING_BID_EXCEEDS_RESERVE]: `Winning bid exceeds the revealed reserve price`,
   };
 }
