@@ -1,7 +1,14 @@
 'use client';
 
 import { useSelectedWalletAccount } from '@solana/react';
-import { LogOutIcon, UserIcon, Wallet2Icon } from 'lucide-react';
+import {
+  GavelIcon,
+  ListChecksIcon,
+  LogOutIcon,
+  ScrollTextIcon,
+  UserIcon,
+  Wallet2Icon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -95,6 +102,7 @@ function NavButtonShell({ label, className }: { label: string; className?: strin
 function SignedInPopover({ wallet }: { wallet: string }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const actionCount = useActionCount({ pollMs: 60_000, refetchOnOpen: open });
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -104,10 +112,30 @@ function SignedInPopover({ wallet }: { wallet: string }) {
             {...props}
             variant="outline"
             size="sm"
-            className="gap-2 rounded-full border-border bg-card/60 px-3 font-mono text-xs backdrop-blur-sm hover:bg-card"
+            className={cn(
+              'gap-2 rounded-full border-border bg-card/60 px-3 font-mono text-xs backdrop-blur-sm hover:bg-card',
+              actionCount > 0 && 'border-amber-500/50 bg-amber-500/5',
+            )}
           >
-            <span className="size-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px] shadow-emerald-500/60" />
+            <span
+              className={cn(
+                'size-1.5 rounded-full shadow-[0_0_8px]',
+                actionCount > 0
+                  ? 'bg-amber-400 shadow-amber-400/60'
+                  : 'bg-emerald-500 shadow-emerald-500/60',
+              )}
+            />
             {shortAddress(wallet)}
+            {/* Numbered pip - only renders when at least one project needs
+                action. Sized to fit single + double digits without reflow. */}
+            {actionCount > 0 && (
+              <span
+                aria-label={`${actionCount} ${actionCount === 1 ? 'project needs' : 'projects need'} your attention`}
+                className="-mr-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 font-display text-[10px] font-semibold text-amber-50 tabular-nums"
+              >
+                {actionCount > 99 ? '99+' : actionCount}
+              </span>
+            )}
           </Button>
         )}
       />
@@ -130,10 +158,31 @@ function SignedInPopover({ wallet }: { wallet: string }) {
             label="Dashboard"
             onNavigate={() => setOpen(false)}
           />
+          {/* Operational workbench - every project where this wallet is buyer
+              or winning provider, with the next concrete step surfaced. The
+              place to start when you log in to actually do something (vs.
+              dashboard which is overview / share-card). */}
           <PopoverItem
-            icon={Wallet2Icon}
+            icon={ListChecksIcon}
+            href="/me/projects"
+            label="Your projects"
+            badge={actionCount > 0 ? actionCount : undefined}
+            onNavigate={() => setOpen(false)}
+          />
+          {/* Show BOTH role profiles for layout consistency. A wallet that
+              hasn't acted in a role yet still has a destination to inspect
+              its zero-state - cleaner than asymmetric "provider profile but
+              no buyer profile" linkage. */}
+          <PopoverItem
+            icon={GavelIcon}
             href={`/providers/${wallet}`}
             label="Your provider profile"
+            onNavigate={() => setOpen(false)}
+          />
+          <PopoverItem
+            icon={ScrollTextIcon}
+            href={`/buyers/${wallet}`}
+            label="Your buyer profile"
             onNavigate={() => setOpen(false)}
           />
           <SignOutItem
@@ -152,11 +201,15 @@ function PopoverItem({
   icon: Icon,
   href,
   label,
+  badge,
   onNavigate,
 }: {
   icon: typeof UserIcon;
   href: string;
   label: string;
+  /** Numbered pill rendered after the label - used for the "Your projects"
+   *  needs-attention count. Hidden when undefined or 0. */
+  badge?: number;
   onNavigate: () => void;
 }) {
   return (
@@ -166,9 +219,60 @@ function PopoverItem({
       className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted/60"
     >
       <Icon className="size-4 text-muted-foreground" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 font-display text-[10px] font-semibold text-amber-700 tabular-nums dark:text-amber-300">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </Link>
   );
+}
+
+/**
+ * Polls the `/api/me/action-count` endpoint to keep the nav badge fresh.
+ * Refetches when the popover opens (so the badge reflects an in-flight action
+ * the user just took without waiting up to a minute).
+ *
+ * Returns 0 on any error - the badge is a UX nicety, not a correctness gate.
+ */
+function useActionCount({
+  pollMs,
+  refetchOnOpen,
+}: {
+  pollMs: number;
+  refetchOnOpen: boolean;
+}): number {
+  const [count, setCount] = useState(0);
+  const refetch = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCount = async () => {
+      try {
+        const res = await fetch('/api/me/action-count', { cache: 'no-store' });
+        if (!res.ok) return;
+        const j = (await res.json()) as { count?: number };
+        if (!cancelled && typeof j.count === 'number') setCount(j.count);
+      } catch {
+        // swallow - badge is non-load-bearing
+      }
+    };
+    refetch.current = fetchCount;
+    void fetchCount();
+    const id = setInterval(fetchCount, pollMs);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [pollMs]);
+
+  // Refetch when popover opens (catches state changes from in-flight action).
+  useEffect(() => {
+    if (refetchOnOpen) refetch.current();
+  }, [refetchOnOpen]);
+
+  return count;
 }
 
 function SignOutItem({ onAfter }: { onAfter: () => void }) {

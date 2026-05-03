@@ -115,9 +115,13 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 export async function revealAllBidsForBuyer(input: BuyerRevealInput): Promise<BuyerRevealResult> {
+  // rfpPda intentionally NOT destructured - we have rfpNonceHex (drives the
+  // X25519 derivation) + bidPdas (drives the per-bid open_reveal_window
+  // calls). The on-chain RFP account itself isn't read in this flow; PDA
+  // verification happens implicitly via the ix accounts list. Keeping rfpPda
+  // in the input shape for future symmetry with other flows that DO need it.
   const {
     buyerWallet,
-    rfpPda,
     rfpNonceHex,
     bidPdas,
     signMessage,
@@ -185,8 +189,8 @@ export async function revealAllBidsForBuyer(input: BuyerRevealInput): Promise<Bu
     const sigs = await Promise.all(
       signed.map(async (s) => {
         const b64 = b64Decoder.decode(s.signedTransaction);
-        // biome-ignore lint/suspicious/noExplicitAny: kit base64 branding
         const sig = (await erRpc
+          // biome-ignore lint/suspicious/noExplicitAny: kit base64 branding requires this cast at sendTransaction call sites
           .sendTransaction(b64 as any, { encoding: 'base64', skipPreflight: true })
           .send()) as string;
         return sig;

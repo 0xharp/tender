@@ -166,7 +166,10 @@ function sha256Two(a: Uint8Array, b: Uint8Array): Uint8Array {
 /* -------------------------------------------------------------------------- */
 
 export async function submitBid({
-  rfpId,
+  // rfpId intentionally NOT destructured - was used by the old supabase POST
+  // that got dropped in the on-chain-source-of-truth migration. Kept in the
+  // input shape so callers don't have to change; flow itself only needs the
+  // on-chain rfpPda for tx building.
   rfpPda,
   rfpNonce,
   buyerEncryptionPubkeyHex,
@@ -244,6 +247,7 @@ export async function submitBid({
       description: m.description,
       amountUsdc: m.amount_usdc,
       durationDays: m.duration_days,
+      successCriteria: m.success_criteria ?? '',
     })),
     payoutPreference: { chain: 'solana', asset: 'USDC', address: values.payout_address },
     notes: values.notes,

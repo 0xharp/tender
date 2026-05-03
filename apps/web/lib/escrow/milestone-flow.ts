@@ -208,12 +208,7 @@ export async function acceptMilestone(input: {
     input.mint,
     providerAta,
   );
-  const ensureTreasuryAta = createAtaIdempotentIx(
-    input.signer,
-    treasury,
-    input.mint,
-    treasuryAta,
-  );
+  const ensureTreasuryAta = createAtaIdempotentIx(input.signer, treasury, input.mint, treasuryAta);
   return await sendMany(
     [ensureProviderAta, ensureTreasuryAta, ix],
     input.signer,
@@ -272,6 +267,10 @@ export async function autoReleaseMilestone(input: {
   rfpPda: Address;
   milestoneIndex: number;
   mint: Address;
+  /** Buyer wallet for the buyer-reputation PDA derivation. Caller must
+   *  supply since auto-release is permissionless and the signer may not be
+   *  the buyer. */
+  buyerWallet: Address;
   providerPayoutWallet: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
@@ -281,6 +280,7 @@ export async function autoReleaseMilestone(input: {
   const [escrow] = await findEscrowPda(input.rfpPda);
   const [treasury] = await findTreasuryPda();
   const [providerRep] = await findProviderRepPda(input.providerPayoutWallet);
+  const [buyerRep] = await findBuyerRepPda(input.buyerWallet);
   const escrowAta = await findAta(input.mint, escrow);
   const treasuryAta = await findAta(input.mint, treasury);
   const providerAta = await findAta(input.mint, input.providerPayoutWallet);
@@ -296,6 +296,7 @@ export async function autoReleaseMilestone(input: {
     treasury,
     treasuryAta,
     providerReputation: providerRep,
+    buyerReputation: buyerRep,
     milestoneIndex: input.milestoneIndex,
   });
   // Same as acceptMilestone: provider + treasury ATAs may not exist yet.
@@ -418,12 +419,7 @@ export async function cancelWithPenalty(input: {
     input.mint,
     providerAta,
   );
-  return await sendMany(
-    [ensureProviderAta, ix],
-    input.signer,
-    input.rpc,
-    input.signTransactions,
-  );
+  return await sendMany([ensureProviderAta, ix], input.signer, input.rpc, input.signTransactions);
 }
 
 export async function markBuyerGhosted(input: {
@@ -439,6 +435,26 @@ export async function markBuyerGhosted(input: {
     payer: noop,
     rfp: input.rfpPda,
     buyerReputation: buyerRep,
+  });
+  return await sendOne(ix, input.signer, input.rpc, input.signTransactions);
+}
+
+/**
+ * Permissionless: flips a stuck RFP (status = Reveal/BidsClosed but past
+ * `reveal_close_at`) to RfpStatus::Expired. Anyone can call - typically the
+ * buyer (acknowledging they let the window pass) or any provider whose bid
+ * is otherwise stuck. No rent flows.
+ */
+export async function expireRfp(input: {
+  signer: Address;
+  rfpPda: Address;
+  signTransactions: SignTransactions;
+  rpc: Rpc<SolanaRpcApi>;
+}): Promise<string> {
+  const noop = createNoopSigner(input.signer);
+  const ix = instructions.getExpireRfpInstruction({
+    caller: noop,
+    rfp: input.rfpPda,
   });
   return await sendOne(ix, input.signer, input.rpc, input.signTransactions);
 }
@@ -522,6 +538,8 @@ export async function disputeDefaultSplit(input: {
   const providerAta = await findAta(input.mint, input.providerPayoutWallet);
   const treasuryAta = await findAta(input.mint, treasury);
 
+  const [buyerRep] = await findBuyerRepPda(input.buyerWallet);
+  const [providerRep] = await findProviderRepPda(input.providerPayoutWallet);
   const ix = instructions.getDisputeDefaultSplitInstruction({
     payer: noop,
     rfp: input.rfpPda,
@@ -533,6 +551,8 @@ export async function disputeDefaultSplit(input: {
     buyerAta,
     treasury,
     treasuryAta,
+    buyerReputation: buyerRep,
+    providerReputation: providerRep,
     milestoneIndex: input.milestoneIndex,
   });
   // 50/50 default split touches all three parties' ATAs. Buyer's exists;

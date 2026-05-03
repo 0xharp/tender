@@ -14,6 +14,7 @@ import type { Address } from '@solana/kit';
  */
 import { useSelectedWalletAccount, useSignTransactions } from '@solana/react';
 import type { UiWalletAccount } from '@wallet-standard/react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -25,6 +26,8 @@ import {
   CancelMilestoneDialog,
   type CancelMilestonePayload,
 } from '@/components/escrow/confirm-dialogs';
+import { MilestoneNotesThread } from '@/components/escrow/milestone-notes-thread';
+import { BuyerWinnerBidDecryptBanner } from '@/components/escrow/winner-bid-decrypt-banner';
 import { LocalTime } from '@/components/local-time';
 import { HashLink } from '@/components/primitives/hash-link';
 import { TxToastDescription } from '@/components/primitives/tx-toast';
@@ -34,6 +37,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { type CloseBiddingStage, closeBidding } from '@/lib/bids/close-bidding-flow';
 import { friendlyBidError, humanizeStage } from '@/lib/bids/error-utils';
+import type { SealedBidPlaintext } from '@/lib/bids/schema';
 import { type AwardStage, awardAndFund } from '@/lib/escrow/award-fund-flow';
 import {
   acceptMilestone,
@@ -46,7 +50,9 @@ import {
   rejectMilestone,
   requestChanges,
 } from '@/lib/escrow/milestone-flow';
+import { postMilestoneNote } from '@/lib/milestones/notes';
 import { rpc } from '@/lib/solana/client';
+import type { MilestoneNoteRow } from '@tender/shared';
 
 const AWARD_STAGE_LABEL: Record<AwardStage, string> = {
   building_txs: 'Building transactions…',
@@ -106,6 +112,10 @@ export interface BuyerActionPanelProps {
   /** Server computed: is now past bid_close_at? Drives the "Close bidding"
    *  button visibility when status is still Open. */
   isPastBidClose: boolean;
+  /** Off-chain notes attached to milestone state transitions, grouped by
+   *  milestone_index. Empty record when no notes posted yet. Threaded into
+   *  each milestone row's bottom section. */
+  notesByMilestoneIndex: Record<number, MilestoneNoteRow[]>;
 }
 
 export function BuyerActionPanel(props: BuyerActionPanelProps) {
@@ -130,6 +140,7 @@ function ConnectedBuyerPanel({
   winnerProvider,
   bids,
   isPastBidClose,
+  notesByMilestoneIndex,
 }: BuyerActionPanelProps & { account: UiWalletAccount }) {
   const signTransactions = useSignTransactions(account, 'solana:devnet');
   const wallet = account.address as Address;
@@ -206,41 +217,65 @@ function ConnectedBuyerPanel({
 
   if (rfpStatus === 'funded' || rfpStatus === 'inprogress' || rfpStatus === 'disputed') {
     return (
-      <Card>
-        <CardHeader className="flex flex-row items-baseline justify-between gap-3">
-          <CardTitle className="text-base">Project - milestone management</CardTitle>
-          <span className="font-mono text-xs text-muted-foreground">
-            {contractValueUsdc} USDC locked
-          </span>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {milestones.map((ms) => (
-            <BuyerMilestoneRow
-              key={ms.index}
-              wallet={wallet}
-              rfpPda={rfpPda as Address}
-              milestone={ms}
-              winnerProvider={winnerProvider as Address | null}
-              // biome-ignore lint/suspicious/noExplicitAny: hook type drift
-              signTransactions={signTransactions as any}
-            />
-          ))}
-        </CardContent>
-      </Card>
+      <BuyerMilestoneManagement
+        wallet={wallet}
+        rfpPda={rfpPda as Address}
+        rfpNonceHex={rfpNonceHex}
+        winnerBidPda={winnerBidPda}
+        winnerProvider={winnerProvider}
+        contractValueUsdc={contractValueUsdc}
+        milestones={milestones}
+        notesByMilestoneIndex={notesByMilestoneIndex}
+        // biome-ignore lint/suspicious/noExplicitAny: hook type drift
+        signTransactions={signTransactions as any}
+      />
     );
   }
 
   /* ----- COMPLETED / CANCELLED ------------------------------------------- */
 
   if (rfpStatus === 'completed') {
+    // Distinguish "all milestones released to provider" (true completion)
+    // from "some delivered, some cancelled" (partial). The on-chain status
+    // is `Completed` either way as long as ANY value was released.
+    const released = milestones.filter((m) => m.status === 'released').length;
+    const cancelled = milestones.filter((m) => m.status === 'cancelledbybuyer').length;
+    const disputeResolved = milestones.filter(
+      (m) => m.status === 'disputeresolved' || m.status === 'disputedefault',
+    ).length;
+    const isPartial = cancelled > 0 || disputeResolved > 0;
     return (
       <Card className="border-emerald-500/40 bg-emerald-500/5">
         <CardHeader>
-          <CardTitle className="text-base">Project completed</CardTitle>
+          <CardTitle className="text-base">
+            {isPartial ? 'Project closed (partial delivery)' : 'Project completed'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Every milestone has been released or cancelled. Total contract value:{' '}
+            {isPartial
+              ? `${released} of ${milestones.length} milestones released to provider, ${cancelled} cancelled${disputeResolved > 0 ? `, ${disputeResolved} settled via dispute` : ''}.`
+              : 'Every milestone was released to the provider.'}{' '}
+            Total contract value:{' '}
+            <span className="font-mono text-foreground">{contractValueUsdc} USDC</span>.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (rfpStatus === 'cancelled') {
+    // On-chain Cancelled = every milestone was refunded, nothing released.
+    // Different from Completed: no work was delivered, no value retained.
+    return (
+      <Card className="border-muted-foreground/30 bg-muted/40">
+        <CardHeader>
+          <CardTitle className="text-base">Project cancelled</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            All {milestones.length} milestones were refunded to you. Nothing was released to the
+            provider, so no work was delivered. Total refunded:{' '}
             <span className="font-mono text-foreground">{contractValueUsdc} USDC</span>.
           </p>
         </CardContent>
@@ -626,6 +661,82 @@ function ResumeFundingSection({
 }
 
 /* -------------------------------------------------------------------------- */
+/* BuyerMilestoneManagement - sub-component that owns the decrypted-bid       */
+/* state so we can lazily surface per-milestone success criteria + scope     */
+/* inline in each row + the dispute UI.                                      */
+/* -------------------------------------------------------------------------- */
+
+function BuyerMilestoneManagement({
+  wallet,
+  rfpPda,
+  rfpNonceHex,
+  winnerBidPda,
+  winnerProvider,
+  contractValueUsdc,
+  milestones,
+  notesByMilestoneIndex,
+  signTransactions,
+}: {
+  wallet: Address;
+  rfpPda: Address;
+  rfpNonceHex: string;
+  winnerBidPda: string | null;
+  winnerProvider: string | null;
+  contractValueUsdc: string;
+  milestones: MilestoneSummary[];
+  notesByMilestoneIndex: Record<number, MilestoneNoteRow[]>;
+  // biome-ignore lint/suspicious/noExplicitAny: hook type drift
+  signTransactions: any;
+}) {
+  // Lazily-decrypted winning-bid plaintext. Once populated, every milestone
+  // row gets its `successCriteria` prop wired from this object. State lives
+  // here (not in each row) so a single decrypt unlocks all rows + the dispute
+  // UI together.
+  const [plaintext, setPlaintext] = useState<SealedBidPlaintext | null>(null);
+
+  const successByIndex: Record<number, string | undefined> = {};
+  if (plaintext) {
+    plaintext.milestones.forEach((m, i) => {
+      successByIndex[i] = m.successCriteria;
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-baseline justify-between gap-3">
+        <CardTitle className="text-base">Project - milestone management</CardTitle>
+        <span className="font-mono text-xs text-muted-foreground">
+          {contractValueUsdc} USDC locked
+        </span>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {winnerBidPda && (
+          <BuyerWinnerBidDecryptBanner
+            rfpPda={rfpPda}
+            rfpNonceHex={rfpNonceHex}
+            winnerBidPda={winnerBidPda as Address}
+            hasPlaintext={!!plaintext}
+            onDecrypted={setPlaintext}
+          />
+        )}
+        {milestones.map((ms) => (
+          <BuyerMilestoneRow
+            key={ms.index}
+            wallet={wallet}
+            rfpPda={rfpPda}
+            milestone={ms}
+            successCriteria={successByIndex[ms.index]}
+            notes={notesByMilestoneIndex[ms.index] ?? []}
+            winnerProvider={winnerProvider as Address | null}
+            signTransactions={signTransactions}
+          />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* BuyerMilestoneRow                                                           */
 /* -------------------------------------------------------------------------- */
 
@@ -633,12 +744,22 @@ function BuyerMilestoneRow({
   wallet,
   rfpPda,
   milestone,
+  successCriteria,
+  notes,
   winnerProvider,
   signTransactions,
 }: {
   wallet: Address;
   rfpPda: Address;
   milestone: MilestoneSummary;
+  /** Provider's committed acceptance bar for this milestone, sourced from
+   *  the decrypted winning-bid envelope. Undefined when the buyer hasn't
+   *  decrypted yet, OR when the provider didn't set one. */
+  successCriteria?: string;
+  /** Off-chain notes already posted against this milestone. Rendered as a
+   *  thread at the bottom of the row. New buyer notes attach via the inline
+   *  textarea above Request Changes. */
+  notes: MilestoneNoteRow[];
   winnerProvider: Address | null;
   // biome-ignore lint/suspicious/noExplicitAny: hook type drift
   signTransactions: any;
@@ -646,14 +767,47 @@ function BuyerMilestoneRow({
   const [busy, setBusy] = useState(false);
   const [splitInput, setSplitInput] = useState('5000');
   const [pendingCancel, setPendingCancel] = useState<CancelMilestonePayload | null>(null);
+  /** Inline note that ships with the next Request Changes click. Cleared
+   *  after a successful post. Optional - empty body skips the note. */
+  const [changeNote, setChangeNote] = useState('');
+  const router = useRouter();
 
-  async function run(action: () => Promise<string>, label: string) {
+  async function run(
+    action: () => Promise<string>,
+    label: string,
+    opts?: {
+      /** Post-success: attach an off-chain note with this kind+body to the
+       *  on-chain action's tx signature. Skipped when body is empty. Note
+       *  failure does NOT roll back the toast or surface as an error - the
+       *  on-chain action already happened. */
+      note?: { kind: MilestoneNoteRow['kind']; body: string; onPosted?: () => void };
+    },
+  ) {
     setBusy(true);
     try {
       const sig = await action();
       toast.success(`${label} done`, {
         description: <TxToastDescription hash={sig} prefix="Tx" />,
       });
+      const body = opts?.note?.body.trim();
+      if (body && opts?.note) {
+        const res = await postMilestoneNote({
+          rfp_pda: rfpPda,
+          milestone_index: milestone.index,
+          kind: opts.note.kind,
+          body,
+          tx_signature: sig,
+        });
+        if (res.ok) {
+          opts.note.onPosted?.();
+        } else {
+          toast.warning('Note not saved', { description: res.error });
+        }
+      }
+      // Re-fetch on-chain state so buttons stay in sync with reality. Without
+      // this the page renders the pre-action snapshot and the user can fire
+      // a follow-up tx whose precondition no longer matches what they see.
+      router.refresh();
     } catch (e) {
       toast.error(`${label} failed`, { description: friendlyBidError(e), duration: 12000 });
     } finally {
@@ -677,6 +831,16 @@ function BuyerMilestoneRow({
         </span>
       </div>
 
+      {/* Acceptance bar from the bid plaintext. Buyer sees the same text the
+          provider committed to at submit time - removes ambiguity about what
+          they're approving against. Hidden when the buyer hasn't decrypted
+          the winning bid yet OR when the provider didn't set a criterion. */}
+      {successCriteria && (
+        <p className="rounded-md border border-primary/15 bg-primary/5 px-3 py-2 text-[11px] leading-relaxed text-foreground/80">
+          <span className="font-medium text-primary/80">Acceptance bar:</span> {successCriteria}
+        </p>
+      )}
+
       {/* Submitted: review window countdown + accept/changes/reject */}
       {milestone.status === 'submitted' && (
         <>
@@ -686,6 +850,25 @@ function BuyerMilestoneRow({
               nothing. Iteration {milestone.iterationCount + 1}.
             </p>
           )}
+          {/* Inline note for Request Changes - the provider needs to know
+              what to fix. Optional but strongly encouraged: an empty
+              "Request changes" with no context is a bad faith pattern, and
+              the provider sees the note attached to the on-chain tx. */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`change-note-${milestone.index}`} className="text-[11px]">
+              What needs to change?{' '}
+              <span className="text-muted-foreground">(optional, posts with Request changes)</span>
+            </Label>
+            <textarea
+              id={`change-note-${milestone.index}`}
+              className="min-h-[60px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-xs leading-relaxed shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+              placeholder="e.g. section 3 needs revision - the deliverable doesn't cover the access-control checks we agreed on."
+              maxLength={2000}
+              value={changeNote}
+              onChange={(e) => setChangeNote(e.target.value)}
+              disabled={busy}
+            />
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -725,6 +908,13 @@ function BuyerMilestoneRow({
                       rpc,
                     }),
                   'Request changes',
+                  {
+                    note: {
+                      kind: 'request_changes',
+                      body: changeNote,
+                      onPosted: () => setChangeNote(''),
+                    },
+                  },
                 )
               }
             >
@@ -832,6 +1022,22 @@ function BuyerMilestoneRow({
       {/* Disputed: propose split / wait */}
       {milestone.status === 'disputed' && winnerProvider && (
         <div className="flex flex-col gap-2">
+          {/* In a dispute, the acceptance bar IS the resolution reference -
+              both parties can re-read what the provider committed to vs what
+              actually shipped. Surface it more prominently here than in
+              other states. */}
+          {successCriteria && (
+            <div className="flex flex-col gap-1 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                Provider's committed acceptance bar
+              </span>
+              <p className="text-xs leading-relaxed text-foreground/85">{successCriteria}</p>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                Use this as the reference when proposing a split - it's the bar the provider signed
+                up to at submit time.
+              </p>
+            </div>
+          )}
           {milestone.disputeDeadlineIso && (
             <p className="text-xs text-muted-foreground">
               Cool-off ends <LocalTime iso={milestone.disputeDeadlineIso} />. Both parties must
@@ -839,7 +1045,7 @@ function BuyerMilestoneRow({
               sign.
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Label htmlFor={`split-${milestone.index}`} className="text-xs">
               Your proposed split to provider (bps, 0–10000)
             </Label>
@@ -903,6 +1109,8 @@ function BuyerMilestoneRow({
           </div>
         </div>
       )}
+
+      <MilestoneNotesThread notes={notes} />
 
       <CancelMilestoneDialog
         open={pendingCancel !== null}
@@ -983,10 +1191,6 @@ function usdcToBaseUnits(decimal: string): bigint {
   const [whole, frac = ''] = decimal.split('.');
   const fracPadded = frac.padEnd(6, '0').slice(0, 6);
   return BigInt(whole ?? '0') * 1_000_000n + BigInt(fracPadded || '0');
-}
-
-function microUsdcDisplay(micro: string): string {
-  return (Number(micro) / 1_000_000).toFixed(2);
 }
 
 void markBuyerGhosted; // exported helper for the (future) provider-side panel

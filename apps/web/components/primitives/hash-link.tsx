@@ -15,7 +15,7 @@ export interface HashLinkProps {
    * If `href` is also provided, `href` wins.
    */
   kind?: 'account' | 'tx' | 'none';
-  /** Cluster suffix; defaults to devnet for the hackathon period. */
+  /** Cluster suffix; defaults to devnet during the devnet phase. */
   cluster?: 'devnet' | 'mainnet-beta' | 'testnet';
   /** Chars to show before + after the ellipsis. Default 6. */
   visibleChars?: number;

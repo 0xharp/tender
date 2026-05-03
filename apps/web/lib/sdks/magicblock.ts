@@ -20,7 +20,7 @@ import {
  *     record, delegation metadata) needed by `delegate_bid`, `withdraw_bid`,
  *     `select_bid`, and `open_reveal_window` instructions.
  *
- * See `docs/PRIVACY-MODEL.md` for why we use PER and the time-locked-reveal
+ * See `docs/privacy-model.md` (in-app at /docs/privacy-model) for why we use PER and the time-locked-reveal
  * guarantee. See https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers
  * for the underlying SDK + endpoint specifics.
  */

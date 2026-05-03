@@ -43,10 +43,7 @@ export function YourBidsListClient({
     return rows
       .filter((r) => {
         if (!q) return true;
-        return (
-          (r.rfpTitle ?? '').toLowerCase().includes(q) ||
-          r.rfpPda.toLowerCase().includes(q)
-        );
+        return (r.rfpTitle ?? '').toLowerCase().includes(q) || r.rfpPda.toLowerCase().includes(q);
       })
       .slice()
       .sort((a, b) => {
@@ -73,7 +70,9 @@ export function YourBidsListClient({
         {rows.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/40 p-2.5">
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Sort</span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Sort
+              </span>
               <Pill active={sort === 'recent'} onClick={() => setSort('recent')}>
                 Most recent
               </Pill>
@@ -124,7 +123,18 @@ export function YourBidsListClient({
                     </p>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                       <span>
-                        bid <HashLink hash={r.bidPda} kind="account" visibleChars={6} />
+                        {/* linkable=false because the entire row is already
+                            wrapped in a <Link> to the RFP - rendering this as
+                            a real anchor would nest <a> inside <a> and
+                            trigger a hydration error. Copy + Solscan icon
+                            still work; just no row-internal navigation. */}
+                        bid{' '}
+                        <HashLink
+                          hash={r.bidPda}
+                          kind="account"
+                          visibleChars={6}
+                          linkable={false}
+                        />
                       </span>
                       <span>·</span>
                       <span>

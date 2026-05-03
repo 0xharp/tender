@@ -1,11 +1,19 @@
 import type { Address } from '@solana/kit';
-import { ArrowUpRightIcon, FileTextIcon, GavelIcon, ScaleIcon } from 'lucide-react';
+import { ArrowUpRightIcon, FileTextIcon, GavelIcon, ScaleIcon, TrendingUpIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { DashboardShell } from '@/components/dashboard/dashboard-shell';
 import { buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCurrentWallet } from '@/lib/auth/session';
-import { listBids, listRfps, rfpStatusToString } from '@/lib/solana/chain-reads';
+import {
+  fetchBuyerReputation,
+  fetchProviderReputation,
+  listBids,
+  listRfps,
+  microUsdcToDecimal,
+  rfpStatusToString,
+} from '@/lib/solana/chain-reads';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -18,9 +26,16 @@ export default async function DashboardHome() {
   // bids are signed by per-RFP ephemeral keypairs and are intentionally not
   // enumerable from the main wallet (that's the privacy property).
   const walletAddr = wallet as Address;
-  const [allRfps, ownBids] = await Promise.all([
+  // Reputation reads are issued in parallel with the listings so the page
+  // load stays a single round-trip. Both rep accounts are nullable - a wallet
+  // that has never awarded an RFP has no BuyerReputation; one that has never
+  // won has no ProviderReputation. UI renders a quiet empty state in either
+  // case rather than zeroes (which would imply "active but with zero stats").
+  const [allRfps, ownBids, buyerRep, providerRep] = await Promise.all([
     listRfps(),
     listBids({ providerWallet: walletAddr }),
+    fetchBuyerReputation(walletAddr),
+    fetchProviderReputation(walletAddr),
   ]);
 
   const myRfps = allRfps.filter((r) => r.data.buyer === walletAddr);
@@ -40,7 +55,7 @@ export default async function DashboardHome() {
   return (
     <DashboardShell
       title="Workspace"
-      description="Your RFPs, your bids, and the marketplace at a glance."
+      description="Your private workspace - what you're working on, what needs your attention. Public on-chain stats live on your provider/buyer profile pages."
       tabs={tabs}
       activeHref="/dashboard"
       actions={
@@ -72,6 +87,89 @@ export default async function DashboardHome() {
           href="/rfps"
           accent
         />
+      </section>
+
+      {/* Reputation snapshot - BOTH cards always render so the layout is
+          balanced regardless of which roles the wallet has actually used.
+          When the underlying rep account doesn't exist yet, the card shows a
+          quiet zero-state telling the viewer how to populate it. */}
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-baseline justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <TrendingUpIcon className="size-4 text-primary" />
+              Your provider rep
+            </CardTitle>
+            <Link
+              href={`/providers/${wallet}`}
+              className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              your provider profile →
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {providerRep ? (
+              <div className="grid grid-cols-3 gap-3">
+                <RepMini
+                  label="Wins"
+                  value={String(providerRep.totalWins ?? 0)}
+                  hint={`$${microUsdcToDecimal(providerRep.totalWonUsdc)} won`}
+                />
+                <RepMini
+                  label="Completed"
+                  value={String(providerRep.completedProjects ?? 0)}
+                  hint={`$${microUsdcToDecimal(providerRep.totalEarnedUsdc)} earned`}
+                />
+                <RepMini
+                  label="Late · Disp."
+                  value={`${providerRep.lateMilestones} · ${providerRep.disputedMilestones}`}
+                  hint="lower is better"
+                  warn={providerRep.lateMilestones + providerRep.disputedMilestones > 0}
+                />
+              </div>
+            ) : (
+              <RepEmpty body="No provider activity yet. Win your first RFP and reputation accrues automatically — no off-chain claims, no application form." />
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-baseline justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <TrendingUpIcon className="size-4 text-primary" />
+              Your buyer rep
+            </CardTitle>
+            <Link
+              href={`/buyers/${wallet}`}
+              className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              your buyer profile →
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {buyerRep ? (
+              <div className="grid grid-cols-3 gap-3">
+                <RepMini
+                  label="Funded"
+                  value={String(buyerRep.fundedRfps ?? 0)}
+                  hint={`of ${buyerRep.totalRfps} awarded`}
+                />
+                <RepMini
+                  label="Completed"
+                  value={String(buyerRep.completedRfps ?? 0)}
+                  hint={`$${microUsdcToDecimal(buyerRep.totalReleasedUsdc)} released`}
+                />
+                <RepMini
+                  label="Ghost · Canc."
+                  value={`${buyerRep.ghostedRfps} · ${buyerRep.cancelledMilestones}`}
+                  hint="lower is better"
+                  warn={buyerRep.ghostedRfps + buyerRep.cancelledMilestones > 0}
+                />
+              </div>
+            ) : (
+              <RepEmpty body="No buyer activity yet. Award your first RFP to start the on-chain track record bidders use to size you up." />
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <section className="rounded-2xl border border-border/60 bg-card p-6">
@@ -135,6 +233,34 @@ function StatCard({
       </div>
       <ArrowUpRightIcon className="absolute top-5 right-5 size-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
     </Link>
+  );
+}
+
+function RepEmpty({ body }: { body: string }) {
+  return <p className="text-xs leading-relaxed text-muted-foreground">{body}</p>;
+}
+
+function RepMini({
+  label,
+  value,
+  hint,
+  warn,
+}: { label: string; value: string; hint: string; warn?: boolean }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <span
+        className={cn(
+          'font-mono text-xl font-semibold tabular-nums',
+          warn && 'text-amber-600 dark:text-amber-400',
+        )}
+      >
+        {value}
+      </span>
+      <span className="text-[10px] text-muted-foreground">{hint}</span>
+    </div>
   );
 }
 

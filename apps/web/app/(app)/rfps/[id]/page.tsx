@@ -1,8 +1,10 @@
 import type { Address } from '@solana/kit';
 import { BoxIcon, CalendarRangeIcon } from 'lucide-react';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { BuyerActionPanel, type MilestoneSummary } from '@/components/escrow/buyer-action-panel';
+import { ExpireRfpPanel } from '@/components/escrow/expire-rfp-panel';
 import { ProviderActionPanel } from '@/components/escrow/provider-action-panel';
 import { DataField } from '@/components/primitives/data-field';
 import { HashLink } from '@/components/primitives/hash-link';
@@ -15,9 +17,11 @@ import { SweepEphemeralPanel } from '@/components/rfp/sweep-ephemeral-panel';
 import { YourBidPanel } from '@/components/rfp/your-bid-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCurrentWallet } from '@/lib/auth/session';
+import { listMilestoneNotes } from '@/lib/milestones/notes-server';
 import {
   bidderVisibilityToString,
   bytesToHex as bytesToHexNoble,
+  fetchBuyerReputation,
   fetchMilestones,
   fetchRfp,
   listBids,
@@ -92,6 +96,12 @@ export default async function Page({ params }: PageProps) {
   const status = rfpStatusToString(chainRfp.status);
   const visibility = bidderVisibilityToString(chainRfp.bidderVisibility);
   const buyerWallet = chainRfp.buyer;
+  // Buyer rep is fetched lazily here (not bundled in the initial Promise.all
+  // above) because it's only needed for the inline trust badge in the Scope
+  // card. If the rep account doesn't exist yet (buyer's first RFP, no awards
+  // ever) the badge silently hides - cleaner than rendering "0 funded · 0
+  // completed" which would imply the buyer had failed history.
+  const buyerRep = await fetchBuyerReputation(buyerWallet as Address);
   const bidOpenAtIso = unixSecondsToIso(chainRfp.bidOpenAt);
   const bidCloseAtIso = unixSecondsToIso(chainRfp.bidCloseAt);
   const revealCloseAtIso = unixSecondsToIso(chainRfp.revealCloseAt);
@@ -109,25 +119,33 @@ export default async function Page({ params }: PageProps) {
   // String()-ing the wrapper yields "[object Object]" (15 chars) which then
   // trips kit's address-length validator downstream. Unwrap to T | null.
   const winnerProvider =
-    chainRfp.winnerProvider?.__option === 'Some'
-      ? String(chainRfp.winnerProvider.value)
-      : null;
-  const winnerBidPda =
-    chainRfp.winner?.__option === 'Some' ? String(chainRfp.winner.value) : null;
+    chainRfp.winnerProvider?.__option === 'Some' ? String(chainRfp.winnerProvider.value) : null;
+  const winnerBidPda = chainRfp.winner?.__option === 'Some' ? String(chainRfp.winner.value) : null;
   const fundingDeadlineIso =
     chainRfp.fundingDeadline > 0n ? unixSecondsToIso(chainRfp.fundingDeadline) : null;
 
   // Pull milestones (after funding) + bid list (for buyer's close-bidding +
   // award picker). The buyer needs the bid list as soon as bidding is past
   // its close time (to flip status), and throughout the reveal+award phases.
-  const [milestonesRaw, bidsForAward] = await Promise.all([
+  const [milestonesRaw, bidsForAward, milestoneNotes] = await Promise.all([
     chainRfp.milestoneCount > 0
       ? fetchMilestones(id as Address, chainRfp.milestoneCount)
       : Promise.resolve([]),
     isBuyer
       ? listBids({ rfpPda: id as Address })
       : Promise.resolve([] as Awaited<ReturnType<typeof listBids>>),
+    listMilestoneNotes(id),
   ]);
+
+  // Group notes by milestone_index so each row can pluck its slice without
+  // O(N*M) scans. Empty arrays for milestones with no notes simplify the
+  // render path (component only renders when notes.length > 0).
+  const notesByMilestoneIndex: Record<number, typeof milestoneNotes> = {};
+  for (const n of milestoneNotes) {
+    const arr = notesByMilestoneIndex[n.milestone_index] ?? [];
+    arr.push(n);
+    notesByMilestoneIndex[n.milestone_index] = arr;
+  }
 
   const milestoneSummaries: MilestoneSummary[] = milestonesRaw
     .map((m, i): MilestoneSummary | null => {
@@ -196,8 +214,35 @@ export default async function Page({ params }: PageProps) {
         <Card className="overflow-hidden">
           <CardHeader className="flex flex-row items-baseline justify-between gap-3">
             <CardTitle className="text-base">Scope</CardTitle>
-            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
               buyer · <HashLink hash={buyerWallet} kind="account" visibleChars={4} />
+              {/* Inline trust badge: signals to bidders whether the buyer
+                  has a track record of funding + completing past RFPs.
+                  Reads tone:
+                  - green-ish: at least 1 funded + 0 ghosted
+                  - amber: any ghosted_rfps > 0 (red flag for bidders)
+                  - hidden: no rep account or zero-everything (don't pollute
+                    a fresh wallet's profile with negative-by-default signals)
+                  Click-through goes to the buyer's full profile. */}
+              {buyerRep && (buyerRep.fundedRfps > 0 || buyerRep.ghostedRfps > 0) && (
+                <Link
+                  href={`/buyers/${buyerWallet}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card/40 px-2 py-0.5 normal-case tracking-normal text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                  title="Buyer's on-chain track record"
+                >
+                  <span className="text-foreground">{buyerRep.completedRfps}</span> completed ·{' '}
+                  <span className="text-foreground">{buyerRep.fundedRfps}</span> funded
+                  {buyerRep.ghostedRfps > 0 && (
+                    <>
+                      {' '}
+                      ·{' '}
+                      <span className="text-amber-600 dark:text-amber-400">
+                        {buyerRep.ghostedRfps} ghosted
+                      </span>
+                    </>
+                  )}
+                </Link>
+              )}
             </span>
           </CardHeader>
           <CardContent>
@@ -251,13 +296,15 @@ export default async function Page({ params }: PageProps) {
                 revealCloseAtIso={revealCloseAtIso}
                 fundingDeadlineIso={fundingDeadlineIso}
                 milestoneCount={chainRfp.milestoneCount}
-                milestonesSettled={milestoneSummaries.filter(
-                  (m) =>
-                    m.status === 'released' ||
-                    m.status === 'cancelledbybuyer' ||
-                    m.status === 'disputeresolved' ||
-                    m.status === 'disputedefault',
-                ).length}
+                milestonesSettled={
+                  milestoneSummaries.filter(
+                    (m) =>
+                      m.status === 'released' ||
+                      m.status === 'cancelledbybuyer' ||
+                      m.status === 'disputeresolved' ||
+                      m.status === 'disputedefault',
+                  ).length
+                }
               />
             </CardContent>
           </Card>
@@ -275,6 +322,14 @@ export default async function Page({ params }: PageProps) {
           existingBid={viewerExistingBid}
         />
       )}
+
+      {/* ---- Reveal-window-expired escape hatch (permissionless) ------------ */}
+      <ExpireRfpPanel
+        rfpPda={id}
+        rfpStatus={status}
+        revealCloseAtIso={revealCloseAtIso}
+        buyerWallet={buyerWallet}
+      />
 
       {/* ---- Provider-side ephemeral sweep - surfaces only when there's a
               cached ephemeral with > 0.015 SOL ------------------------------ */}
@@ -302,6 +357,7 @@ export default async function Page({ params }: PageProps) {
           winnerProvider={winnerProvider}
           bids={bidsForAwardPanel}
           isPastBidClose={isPastBidClose}
+          notesByMilestoneIndex={notesByMilestoneIndex}
         />
       )}
 
@@ -315,6 +371,7 @@ export default async function Page({ params }: PageProps) {
           milestoneCount={chainRfp.milestoneCount}
           milestones={milestoneSummaries}
           activeMilestoneIndex={chainRfp.activeMilestoneIndex}
+          notesByMilestoneIndex={notesByMilestoneIndex}
         />
       )}
 
@@ -333,4 +390,3 @@ export default async function Page({ params }: PageProps) {
     </main>
   );
 }
-

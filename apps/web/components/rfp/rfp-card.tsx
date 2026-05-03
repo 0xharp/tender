@@ -37,8 +37,19 @@ function statusTone(status?: string): StatusTone {
   if (status === 'open') return 'open';
   if (status === 'reveal') return 'reveal';
   if (status === 'awarded') return 'awarded';
-  if (status === 'closed' || status === 'reveal window lapsed') return 'closed';
   if (status === 'bidsclosed' || status === 'bid window closed') return 'sealed';
+  // Terminal / dead states - render muted so they don't compete visually
+  // with active RFPs in the marketplace grid.
+  if (
+    status === 'closed' ||
+    status === 'reveal window lapsed' ||
+    status === 'expired' ||
+    status === 'cancelled' ||
+    status === 'completed' ||
+    status === 'ghostedbybuyer'
+  ) {
+    return 'closed';
+  }
   return 'open';
 }
 
@@ -54,9 +65,7 @@ function displayStatus(
 ): string {
   const now = Date.now();
   const bidClosed = new Date(bidCloseAtIso).getTime() <= now;
-  const revealClosed = revealCloseAtIso
-    ? new Date(revealCloseAtIso).getTime() <= now
-    : false;
+  const revealClosed = revealCloseAtIso ? new Date(revealCloseAtIso).getTime() <= now : false;
   if ((status === 'reveal' || status === 'bidsclosed') && revealClosed) {
     return 'reveal window lapsed';
   }

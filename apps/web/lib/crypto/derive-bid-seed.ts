@@ -20,14 +20,14 @@ export function deriveBidSeedMessage(rfpNonce: Uint8Array): Uint8Array {
   if (rfpNonce.byteLength !== 8) {
     throw new Error(`rfp_nonce must be 8 bytes, got ${rfpNonce.byteLength}`);
   }
-  const text =
-    `Tender — derive private bid PDA seed.\n` +
-    `\n` +
-    `Domain: ${DOMAIN_PREFIX}\n` +
-    `RFP nonce: 0x${bytesToHex(rfpNonce)}\n` +
-    `\n` +
-    `Signing this lets you bid privately on this RFP. The signature is local —\n` +
-    `no funds move. The signature does NOT authorize a transaction.`;
+  // CRYPTO-STABLE STRING - DO NOT EDIT THE LITERAL BYTES. The output of this
+  // function is signed by the user's wallet, hashed, and used as the private
+  // bid PDA seed. Any change to the bytes - including whitespace, em-dash to
+  // hyphen, or line break shifts - produces a different hash, which produces
+  // a different PDA, which means EVERY existing private bid becomes
+  // unreachable from this app. (Was previously broken once by an em-dash
+  // sweep; see the 2026-05-03 incident in docs.)
+  const text = `Tender — derive private bid PDA seed.\n\nDomain: ${DOMAIN_PREFIX}\nRFP nonce: 0x${bytesToHex(rfpNonce)}\n\nSigning this lets you bid privately on this RFP. The signature is local —\nno funds move. The signature does NOT authorize a transaction.`;
   return new TextEncoder().encode(text);
 }
 

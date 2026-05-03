@@ -31,6 +31,7 @@
  * methods we'd try to copy are missing too). The npm `buffer@6.x` package
  * ships the full BigInt methods - that's what Cloak's relay path needs.
  */
+// biome-ignore lint/style/useNodejsImportProtocol: intentionally NOT 'node:buffer' - Next/Turbopack auto-shims that to a stripped Buffer without BigInt methods, defeating the polyfill. The npm 'buffer' package ships the full implementation Cloak needs.
 import { Buffer as BufferPolyfill } from 'buffer';
 
 if (typeof window !== 'undefined') {

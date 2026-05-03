@@ -31,11 +31,16 @@ export const metadata: Metadata = {
     title: 'tendr.bid',
     description: 'Sealed-bid procurement on Solana - privacy, escrow, reputation.',
     type: 'website',
+    siteName: 'tendr.bid',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'tendr.bid',
     description: 'Sealed-bid procurement on Solana - privacy, escrow, reputation.',
+    // `site` is the brand handle that gets attribution on every X link
+    // card pointing at tendr.bid. `creator` is the founder's handle.
+    site: '@tendrdotbid',
+    creator: '@0xharp',
   },
 };
 

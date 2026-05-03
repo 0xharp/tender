@@ -283,9 +283,7 @@ function Connected({
             onClick={handleDecrypt}
             className="min-w-[12rem] justify-center text-xs"
           >
-            {decrypting
-              ? decryptStageLabel(stage, 'Re-decrypting…')
-              : 'Re-decrypt (refresh)'}
+            {decrypting ? decryptStageLabel(stage, 'Re-decrypting…') : 'Re-decrypt (refresh)'}
           </Button>
         </div>
       </CardContent>
@@ -374,19 +372,24 @@ function BidRow({
         <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           Milestones · {pt.milestones.length}
         </span>
-        <ul className="flex flex-col gap-1 rounded-lg border border-dashed border-border/60 bg-card/30 p-2.5">
+        <ul className="flex flex-col gap-2 rounded-lg border border-dashed border-border/60 bg-card/30 p-2.5">
           {pt.milestones.map((m, i) => (
-            <li
-              key={`${bid.bidPda}-${i}`}
-              className="flex items-baseline justify-between gap-3 text-xs"
-            >
-              <span>
-                <span className="font-mono text-[10px] text-muted-foreground">{i + 1}</span>{' '}
-                {m.name}
-              </span>
-              <span className="font-mono tabular-nums">
-                ${Number(m.amountUsdc).toLocaleString()}
-              </span>
+            <li key={`${bid.bidPda}-${i}`} className="flex flex-col gap-1 text-xs">
+              <div className="flex items-baseline justify-between gap-3">
+                <span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{i + 1}</span>{' '}
+                  {m.name}
+                </span>
+                <span className="font-mono tabular-nums">
+                  ${Number(m.amountUsdc).toLocaleString()}
+                </span>
+              </div>
+              {m.successCriteria && (
+                <p className="rounded border border-primary/15 bg-primary/5 px-2 py-1 text-[10px] leading-relaxed text-foreground/75">
+                  <span className="font-medium text-primary/80">Acceptance bar:</span>{' '}
+                  {m.successCriteria}
+                </p>
+              )}
             </li>
           ))}
         </ul>

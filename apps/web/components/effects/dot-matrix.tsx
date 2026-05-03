@@ -52,22 +52,16 @@ export function DotMatrix() {
 
     function resize() {
       dpr = window.devicePixelRatio || 1;
-      // biome-ignore lint/style/noNonNullAssertion: ref guarded above
       canvas!.width = window.innerWidth * dpr;
-      // biome-ignore lint/style/noNonNullAssertion: ref guarded above
       canvas!.height = window.innerHeight * dpr;
-      // biome-ignore lint/style/noNonNullAssertion: ref guarded above
       canvas!.style.width = `${window.innerWidth}px`;
-      // biome-ignore lint/style/noNonNullAssertion: ref guarded above
       canvas!.style.height = `${window.innerHeight}px`;
-      // biome-ignore lint/style/noNonNullAssertion: ref guarded above
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
     function frame() {
       const w = window.innerWidth;
       const h = window.innerHeight;
-      // biome-ignore lint/style/noNonNullAssertion: ref guarded above
       ctx!.clearRect(0, 0, w, h);
       const cursor = cursorRef.current;
 
@@ -85,15 +79,11 @@ export function DotMatrix() {
               opacity = BASE_OPACITY + (MAX_OPACITY - BASE_OPACITY) * t;
             }
           }
-          // biome-ignore lint/style/noNonNullAssertion: ref guarded above
           ctx!.beginPath();
-          // biome-ignore lint/style/noNonNullAssertion: ref guarded above
           ctx!.fillStyle = `${dotColor}${Math.round(opacity * 255)
             .toString(16)
             .padStart(2, '0')}`;
-          // biome-ignore lint/style/noNonNullAssertion: ref guarded above
           ctx!.arc(x, y, radius, 0, Math.PI * 2);
-          // biome-ignore lint/style/noNonNullAssertion: ref guarded above
           ctx!.fill();
         }
       }
@@ -135,13 +125,7 @@ export function DotMatrix() {
     };
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden
-      className="pointer-events-none fixed inset-0 -z-10"
-    />
-  );
+  return <canvas ref={canvasRef} aria-hidden className="pointer-events-none fixed inset-0 -z-10" />;
 }
 
 /** Read `--primary` (or `--foreground` fallback) from the document and parse

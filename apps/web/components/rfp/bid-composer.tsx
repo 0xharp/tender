@@ -35,8 +35,6 @@ import type { Address } from '@solana/kit';
  *  defaults. One-line swap to Circle mainnet (`EPjFWdd5…`) for V2. */
 const DEVNET_MOCK_USDC_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU' as const;
 
-type PayoutModeKind = 'main' | 'ephemeral_no_rep' | 'ephemeral_with_rep';
-
 const STAGE_LABEL: Record<BidSubmitStage, string> = {
   deriving_provider_key: 'Approve the derive-key signature in your wallet…',
   deriving_bid_seed: 'Approve the private bid seed signature…',
@@ -117,20 +115,6 @@ function BidCharCounter({ value, min, max }: { value: string; min: number; max: 
   );
 }
 
-function evenDefaults(count: number, total: string, totalDays = 30) {
-  const totalNum = Number(total) || 0;
-  const each = (totalNum / count).toFixed(2);
-  const dayBase = Math.floor(totalDays / count);
-  const dayRemainder = totalDays - dayBase * count;
-  return Array.from({ length: count }, (_, i) => ({
-    name: `Milestone ${i + 1}`,
-    description: `Milestone ${i + 1} deliverable`,
-    amount_usdc: each,
-    // Last bucket absorbs day rounding so the sum hits totalDays exactly.
-    duration_days: i === count - 1 ? dayBase + dayRemainder : dayBase,
-  }));
-}
-
 /** Initial milestone count when the composer first mounts. The provider can
  *  freely add/remove milestones (1–8) - this is just a starting point that
  *  most procurement bids tend to gravitate toward. */
@@ -186,6 +170,7 @@ function ConnectedComposer({
         amount_usdc: '',
         // biome-ignore lint/suspicious/noExplicitAny: numeric blank
         duration_days: undefined as any,
+        success_criteria: '',
       })),
       payout_address: account.address,
       notes: '',
@@ -487,6 +472,22 @@ function ConnectedComposer({
                     {...form.register(`milestones.${idx}.description`)}
                   />
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`m-success-${idx}`} className="text-xs">
+                    Success criteria <span className="text-muted-foreground">(optional)</span>
+                  </Label>
+                  <Textarea
+                    id={`m-success-${idx}`}
+                    rows={2}
+                    placeholder="What does done look like? E.g. ‘all 12 endpoints documented + Postman collection + 90%+ test coverage’"
+                    {...form.register(`milestones.${idx}.success_criteria`)}
+                  />
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    The acceptance bar you commit to. Surfaces in the milestone row so the buyer
+                    knows exactly what they're approving against - and referenced inline if the
+                    milestone hits the dispute path.
+                  </p>
+                </div>
                 {fields.length > 1 && (
                   <div className="flex justify-end">
                     <Button
@@ -519,6 +520,7 @@ function ConnectedComposer({
                     amount_usdc: '' as any,
                     // biome-ignore lint/suspicious/noExplicitAny: numeric blank
                     duration_days: undefined as any,
+                    success_criteria: '',
                   })
                 }
                 className="w-fit gap-1.5 rounded-full px-4 text-xs"
@@ -735,8 +737,8 @@ export function EphemeralFundingPanel({
     return (
       <div className="flex flex-col gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-400">
         <span>
-          Privacy wallet funded: <span className="font-mono">{balance.toFixed(4)} SOL</span>.
-          Ready to submit.
+          Privacy wallet funded: <span className="font-mono">{balance.toFixed(4)} SOL</span>. Ready
+          to submit.
         </span>
         <button
           type="button"
@@ -744,7 +746,9 @@ export function EphemeralFundingPanel({
           disabled={funding}
           className="self-start text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
         >
-          {funding ? humanizeStage(fundProgress, 'Topping up') : 'Top up more (for very large bids)'}
+          {funding
+            ? humanizeStage(fundProgress, 'Topping up')
+            : 'Top up more (for very large bids)'}
         </button>
       </div>
     );
@@ -778,9 +782,8 @@ export function EphemeralFundingPanel({
           relay-paid withdrawal. Observers see two unlinked transfers.
         </li>
         <li>
-          <strong className="text-foreground">Cloak fee:</strong> ~0.005 SOL per shielded
-          transfer (deducted from the deposit). Of the 0.06 SOL sent, ~0.055 SOL lands on the
-          ephemeral.
+          <strong className="text-foreground">Cloak fee:</strong> ~0.005 SOL per shielded transfer
+          (deducted from the deposit). Of the 0.06 SOL sent, ~0.055 SOL lands on the ephemeral.
         </li>
         <li>
           <strong className="text-foreground">Bid size matters:</strong> rent for the bid account
@@ -789,8 +792,8 @@ export function EphemeralFundingPanel({
         </li>
         <li>
           <strong className="text-foreground">Sweep anytime:</strong> any unused SOL on the
-          ephemeral can be sent back to your main wallet via the same shielded path (look for
-          "Sweep ephemeral funds back" on the RFP page).
+          ephemeral can be sent back to your main wallet via the same shielded path (look for "Sweep
+          ephemeral funds back" on the RFP page).
         </li>
       </ul>
     </div>

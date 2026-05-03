@@ -112,7 +112,6 @@ describe('ECIES round-trip', () => {
     // flip a bit deep in the ciphertext (past the header)
     const tampered = new Uint8Array(sealed.blob);
     const idx = X25519_KEY_BYTES + XCHACHA_NONCE_BYTES + 1;
-    // biome-ignore lint/style/noNonNullAssertion: index in range
     tampered[idx] = (tampered[idx]! ^ 0x01) & 0xff;
 
     expect(() => decryptBid(tampered, buyer.priv)).toThrow();
@@ -122,7 +121,6 @@ describe('ECIES round-trip', () => {
     const buyer = freshBuyerKeypair();
     const sealed = encryptBid(enc.encode('original'), buyer.pub);
     const tampered = new Uint8Array(sealed.blob);
-    // biome-ignore lint/style/noNonNullAssertion: index in range
     tampered[60] = (tampered[60]! ^ 0xff) & 0xff;
     expect(commitHashHex(tampered)).not.toBe(commitHashHex(sealed.blob));
   });

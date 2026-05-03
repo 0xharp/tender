@@ -1,8 +1,7 @@
-
 import { type BidCommitWithAddress, unixSecondsToIso } from '@/lib/solana/chain-reads';
 import { serverSupabase } from '@/lib/supabase/server';
 
-import { YourBidsListClient, type YourBidRow } from './your-bids-list-client';
+import { type YourBidRow, YourBidsListClient } from './your-bids-list-client';
 
 export interface YourBidsListProps {
   /** Bid records from `listBids({ providerWallet })` - public-mode bids only. */
@@ -54,11 +53,6 @@ export async function YourBidsList({
   });
 
   return (
-    <YourBidsListClient
-      rows={rows}
-      emptyTitle={emptyTitle}
-      emptyBody={emptyBody}
-      notice={notice}
-    />
+    <YourBidsListClient rows={rows} emptyTitle={emptyTitle} emptyBody={emptyBody} notice={notice} />
   );
 }

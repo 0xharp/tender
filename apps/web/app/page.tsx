@@ -55,13 +55,12 @@ function Hero() {
           <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
             Private sealed-bid procurement on Solana - built for humans today, ready for AI agents
             tomorrow. Bids sit encrypted on a{' '}
-            <span className="text-foreground">MagicBlock&rsquo;s TEE-backed rollup</span> - sealed from
-            everyone, <span className="text-foreground">including the buyer</span>, until the bid
-            window closes. Switch on private bidding and a per-RFP{' '}
+            <span className="text-foreground">MagicBlock&rsquo;s TEE-backed rollup</span> - sealed
+            from everyone, <span className="text-foreground">including the buyer</span>, until the
+            bid window closes. Switch on private bidding and a per-RFP{' '}
             <span className="text-foreground">ephemeral wallet</span> commits your bid, funded
-            through{' '}
-            <span className="text-foreground">Cloak&rsquo;s shielded UTXO pool</span>. Winners
-            surface on-chain at award reveal; losers stay anonymous forever.
+            through <span className="text-foreground">Cloak&rsquo;s shielded UTXO pool</span>.
+            Winners surface on-chain at award reveal; losers stay anonymous forever.
           </p>
         </StaggerItem>
 
@@ -244,12 +243,21 @@ function FooterCta() {
               browser; the commit goes on-chain.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/rfps"
               className={cn(buttonVariants({ size: 'lg' }), 'h-11 rounded-full px-6')}
             >
               Browse RFPs
+            </Link>
+            <Link
+              href="/docs"
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'lg' }),
+                'h-11 rounded-full px-6',
+              )}
+            >
+              Read the docs
             </Link>
             <a
               href="https://github.com/0xharp/tender"

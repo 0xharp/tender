@@ -24,9 +24,7 @@ export function ProfileShareButton({ href, shareText }: ProfileShareButtonProps)
   const [copied, setCopied] = useState(false);
 
   const fullUrl =
-    typeof window === 'undefined'
-      ? href
-      : new URL(href, window.location.origin).toString();
+    typeof window === 'undefined' ? href : new URL(href, window.location.origin).toString();
 
   async function handleCopy() {
     try {

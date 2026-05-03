@@ -73,8 +73,8 @@ export async function closeBidding({
 
   onProgress?.('sending');
   const b64 = b64Decoder.decode(signed.signedTransaction);
-  // biome-ignore lint/suspicious/noExplicitAny: kit base64 branding
   const sig = (await rpc
+    // biome-ignore lint/suspicious/noExplicitAny: kit base64 branding requires this cast at sendTransaction call sites
     .sendTransaction(b64 as any, { encoding: 'base64', skipPreflight: true })
     .send()) as string;
 

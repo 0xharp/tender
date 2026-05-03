@@ -61,16 +61,19 @@ function currentPhaseIndex(
   milestonesSettled: number,
 ): {
   idx: number;
-  failure?: 'cancelled' | 'ghostedbybuyer' | 'disputed' | 'reveallapsed';
+  failure?: 'cancelled' | 'ghostedbybuyer' | 'disputed' | 'reveallapsed' | 'expired';
 } {
   if (status === 'cancelled') return { idx: -1, failure: 'cancelled' };
   if (status === 'ghostedbybuyer') return { idx: -1, failure: 'ghostedbybuyer' };
   if (status === 'disputed') return { idx: -1, failure: 'disputed' };
+  // `expired` is the terminal on-chain state set by expire_rfp after the
+  // reveal window lapses. Surfaces as a failure tile - lifecycle is over.
+  if (status === 'expired') return { idx: -1, failure: 'expired' };
 
-  // Reveal-window-lapsed: buyer didn't call select_bid before reveal_close_at.
-  // On-chain status is still Reveal/BidsClosed (no auto-transition exists),
-  // but the program's `now < reveal_close_at` check now blocks any award.
-  // RFP is effectively dead - show it as a terminal failure.
+  // Reveal-window-lapsed: buyer didn't call expire_rfp yet, so on-chain status
+  // is still Reveal/BidsClosed even though the program would now block any
+  // award. Synthesized failure tile that prompts the expire_rfp action; once
+  // someone fires it, status flips to `expired` and the branch above catches it.
   const revealExpired = new Date(revealCloseAtIso).getTime() <= Date.now();
   if ((status === 'reveal' || status === 'bidsclosed') && revealExpired) {
     return { idx: -1, failure: 'reveallapsed' };
@@ -99,7 +102,7 @@ function currentPhaseIndex(
 const FAILURE_COPY: Record<string, { title: string; body: string }> = {
   cancelled: {
     title: 'Cancelled',
-    body: 'RFP was cancelled. No award, no funds locked.',
+    body: 'Every milestone was refunded - no work was delivered. Buyer kept the full contract value; provider received nothing. Terminal state.',
   },
   ghostedbybuyer: {
     title: 'Ghosted by buyer',
@@ -112,6 +115,10 @@ const FAILURE_COPY: Record<string, { title: string; body: string }> = {
   reveallapsed: {
     title: 'Reveal window lapsed',
     body: "Buyer didn't pick a winner before the reveal deadline. The RFP is dead - bidders' funds were never locked, no on-chain award is possible anymore.",
+  },
+  expired: {
+    title: 'Expired',
+    body: 'The reveal window closed without an award. The RFP was permissionlessly marked expired - terminal state.',
   },
 };
 
@@ -286,9 +293,7 @@ export function RfpLifecycleBar({
             {milestonesSettled} / {milestoneCount} settled
           </Hint>
         )}
-        {idx === 5 && (
-          <p>All milestones released or refunded. Project is done.</p>
-        )}
+        {idx === 5 && <p>All milestones released or refunded. Project is done.</p>}
         <Link
           href="/docs/lifecycle"
           className="mt-1 inline-flex items-center gap-1 self-start text-[10px] text-muted-foreground/80 underline underline-offset-2 hover:text-foreground"

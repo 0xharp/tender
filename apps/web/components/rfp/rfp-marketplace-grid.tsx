@@ -18,7 +18,7 @@
 import { useMemo, useState } from 'react';
 
 import { Stagger, StaggerItem } from '@/components/motion/stagger';
-import { type RfpCardData, RfpCard } from '@/components/rfp/rfp-card';
+import { RfpCard, type RfpCardData } from '@/components/rfp/rfp-card';
 import { cn } from '@/lib/utils';
 
 export interface RfpMarketplaceGridProps {
@@ -48,8 +48,7 @@ export function RfpMarketplaceGrid({ rfps }: RfpMarketplaceGridProps) {
     // PDA tiebreaker keeps the order deterministic across refreshes when two
     // RFPs tie on the primary sort key. Without it, the upstream chain query
     // returns RFPs in non-deterministic order and ties get visually shuffled.
-    const byPda = (a: RfpCardData, b: RfpCardData) =>
-      a.on_chain_pda.localeCompare(b.on_chain_pda);
+    const byPda = (a: RfpCardData, b: RfpCardData) => a.on_chain_pda.localeCompare(b.on_chain_pda);
     const now = Date.now();
 
     return rfps
@@ -59,11 +58,7 @@ export function RfpMarketplaceGrid({ rfps }: RfpMarketplaceGridProps) {
           if (r.status !== 'open') return false;
           if (new Date(r.bid_close_at).getTime() <= now) return false;
         } else if (lifecycle === 'active') {
-          if (
-            r.status !== 'open' &&
-            r.status !== 'reveal' &&
-            r.status !== 'bidsclosed'
-          )
+          if (r.status !== 'open' && r.status !== 'reveal' && r.status !== 'bidsclosed')
             return false;
         }
         // 'all' falls through - server already dropped reveal-lapsed dead RFPs.
@@ -168,7 +163,11 @@ export function RfpMarketplaceGrid({ rfps }: RfpMarketplaceGridProps) {
           No RFPs match these filters.
         </div>
       ) : (
-        <Stagger className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" step={0.05} delay={0.1}>
+        <Stagger
+          className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+          step={0.05}
+          delay={0.1}
+        >
           {filtered.map((r) => (
             <StaggerItem key={r.on_chain_pda}>
               <RfpCard rfp={r} />

@@ -89,15 +89,18 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
     // (Select, radio) need a DEFINED initial value to stay controlled across
     // their lifetime - Base UI warns when value flips from `undefined` to a
     // string. Empty string is treated as "nothing selected" for those.
-    // biome-ignore lint/suspicious/noExplicitAny: zod default vs RHF Resolver type drift
     defaultValues: {
       title: '',
+      // biome-ignore lint/suspicious/noExplicitAny: zod default vs RHF Resolver type drift
       category: '' as any,
       scope_summary: '',
       reserve_price_usdc: '',
       // Numeric <Input>s are uncontrolled HTML - undefined is safe.
+      // biome-ignore lint/suspicious/noExplicitAny: numeric input default
       bid_window_hours: undefined as any,
+      // biome-ignore lint/suspicious/noExplicitAny: numeric input default
       reveal_window_hours: undefined as any,
+      // biome-ignore lint/suspicious/noExplicitAny: zod default vs RHF Resolver type drift
       bidder_visibility: '' as any,
     },
   });
@@ -259,9 +262,7 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
               them, then award the winner. The choice below adds a second privacy layer: keep bidder
               identities anonymous too.{' '}
               <a
-                href="https://github.com/0xharp/tender/blob/main/docs/PRIVACY-MODEL.md"
-                target="_blank"
-                rel="noreferrer"
+                href="/docs/privacy-model"
                 className="underline underline-offset-2 hover:text-primary"
               >
                 Read the model →

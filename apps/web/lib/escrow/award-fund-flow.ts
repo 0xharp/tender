@@ -31,11 +31,7 @@ import {
 import { instructions } from '@tender/tender-client';
 
 import { buildBidBindingMessage } from '@/lib/crypto/derive-ephemeral-bid-wallet';
-import {
-  fetchRfp,
-  findProviderReputationPda,
-  rfpStatusToString,
-} from '@/lib/solana/chain-reads';
+import { fetchRfp, findProviderReputationPda, rfpStatusToString } from '@/lib/solana/chain-reads';
 import { tenderProgramId } from '@/lib/solana/client';
 
 const ED25519_PROGRAM_ID = 'Ed25519SigVerify111111111111111111111111111' as Address;
@@ -192,8 +188,7 @@ export async function awardAndFund(input: AwardFundInput): Promise<AwardFundResu
   const needsReveal = needsSelect && !!reserveReveal;
   if (!needsFund) {
     throw new Error(
-      `awardAndFund: RFP is in status '${currentStatus}', past the awardable window. ` +
-        'Nothing to do — refresh the page to see the current state.',
+      `awardAndFund: RFP is in status '${currentStatus}', past the awardable window. Nothing to do - refresh the page to see the current state.`,
     );
   }
 
@@ -238,9 +233,7 @@ export async function awardAndFund(input: AwardFundInput): Promise<AwardFundResu
         signature: bidBindingSignature,
         message: bindingMessage,
       });
-      txs.push(
-        encodeTx([setComputeUnitLimitIx(1_400_000), ed25519Ix, selectIx], buyer, blockhash),
-      );
+      txs.push(encodeTx([setComputeUnitLimitIx(1_400_000), ed25519Ix, selectIx], buyer, blockhash));
     } else {
       txs.push(encodeTx([setComputeUnitLimitIx(1_400_000), selectIx], buyer, blockhash));
     }

@@ -79,14 +79,40 @@ export async function fetchRfp(pda: Address): Promise<RfpChain | null> {
 
 export interface ListRfpsFilter {
   buyer?: Address;
+  /** Filter to RFPs whose `winner_provider` is set to this main wallet. Both
+   *  public AND private (post-award) winners surface here - the on-chain
+   *  Ed25519SigVerify bind at select_bid time means winner_provider is
+   *  always the verified main wallet, regardless of bid mode. Use this to
+   *  enumerate "RFPs I won" for a given wallet. */
+  winnerProvider?: Address;
 }
 
-/** List all Rfp accounts owned by Tender, optionally filtered by buyer. */
+/** Rfp account byte layout for memcmp filters. Tracks the order of fields in
+ *  `programs/tender/src/state/rfp.rs::Rfp`. Anchor lays out fixed-size fields
+ *  contiguously; Option<T> is `1 + sizeof(T)` (tag byte + payload). Update
+ *  these offsets if the on-chain struct changes shape (and update the lite-svm
+ *  tests that exercise getProgramAccounts). */
+const RFP_OFFSET_BUYER = 8; // 0..8 disc, then 32 bytes
+const RFP_OFFSET_WINNER_PROVIDER = 165; // disc(8) + buyer(32) + buyer_enc(32)
+//   + title_hash(32) + category(1) + bid_open_at(8) + bid_close_at(8)
+//   + reveal_close_at(8) + milestone_count(1) + bidder_visibility(1)
+//   + status(1) + winner Option<Pubkey>(33) = 165
+
+/** List all Rfp accounts owned by Tender, optionally filtered by buyer or
+ *  by the main wallet that won the RFP. */
 export async function listRfps(filter: ListRfpsFilter = {}): Promise<RfpWithAddress[]> {
   const filters: GetProgramAccountsMemcmpFilter[] = [memcmp(0, RFP_DISCRIMINATOR)];
   if (filter.buyer) {
-    // Rfp layout: discriminator (0..8), buyer Pubkey (8..40), ...
-    filters.push(memcmp(8, addressEncoder.encode(filter.buyer)));
+    filters.push(memcmp(RFP_OFFSET_BUYER, addressEncoder.encode(filter.buyer)));
+  }
+  if (filter.winnerProvider) {
+    // winner_provider is Option<Pubkey>: 1-byte tag + 32-byte address. Match
+    // both the Some-tag (0x01) and the address bytes so we don't false-match
+    // None entries whose trailing bytes happen to coincide.
+    const tagAndAddr = new Uint8Array(33);
+    tagAndAddr[0] = 1;
+    tagAndAddr.set(addressEncoder.encode(filter.winnerProvider), 1);
+    filters.push(memcmp(RFP_OFFSET_WINNER_PROVIDER, tagAndAddr));
   }
 
   const result = await rpc
@@ -232,6 +258,7 @@ export function rfpStatusToString(status: RfpChain['status']): string {
     'cancelled', // 8
     'ghostedbybuyer', // 9
     'disputed', // 10
+    'expired', // 11 - reveal window closed without an award (terminal)
   ];
   return names[status as unknown as number] ?? 'unknown';
 }
@@ -341,6 +368,82 @@ export async function fetchProviderReputation(
   return accounts.getProviderReputationDecoder().decode(new Uint8Array(b64ToBytes.encode(b64)));
 }
 
+/* -------------------------------------------------------------------------- */
+/* Reputation list reads (leaderboard, dashboard)                              */
+/* -------------------------------------------------------------------------- */
+
+export interface BuyerReputationWithAddress {
+  /** PDA address (derived from `["buyer_rep", buyer]`). */
+  address: Address;
+  data: BuyerReputationChain;
+}
+
+export interface ProviderReputationWithAddress {
+  address: Address;
+  data: ProviderReputationChain;
+}
+
+/**
+ * List every `BuyerReputation` account on-chain. Used by `/leaderboard` and
+ * dashboard surfaces. Defensive: drop accounts whose decode fails (likely a
+ * stale layout from a pre-upgrade deploy) instead of throwing the whole list.
+ *
+ * The `dataSlice` optimization isn't applied because the BuyerReputation
+ * struct is small (~75 bytes) - reading the full account is already cheap.
+ */
+export async function listBuyerReputations(): Promise<BuyerReputationWithAddress[]> {
+  const filters: GetProgramAccountsMemcmpFilter[] = [
+    memcmp(0, accounts.BUYER_REPUTATION_DISCRIMINATOR),
+  ];
+  const result = await rpc
+    .getProgramAccounts(tenderProgramId, { encoding: 'base64', filters })
+    .send();
+  return result
+    .map(({ pubkey, account }) => {
+      const dataField = account.data;
+      const b64 = Array.isArray(dataField) ? (dataField[0] as string) : (dataField as string);
+      const bytes = new Uint8Array(b64ToBytes.encode(b64));
+      try {
+        return {
+          address: pubkey as Address,
+          data: accounts.getBuyerReputationDecoder().decode(bytes),
+        };
+      } catch (e) {
+        console.warn(`[listBuyerReputations] decode failed for ${pubkey}: ${(e as Error).message}`);
+        return null;
+      }
+    })
+    .filter((r): r is BuyerReputationWithAddress => r != null);
+}
+
+/** List every `ProviderReputation` account on-chain. */
+export async function listProviderReputations(): Promise<ProviderReputationWithAddress[]> {
+  const filters: GetProgramAccountsMemcmpFilter[] = [
+    memcmp(0, accounts.PROVIDER_REPUTATION_DISCRIMINATOR),
+  ];
+  const result = await rpc
+    .getProgramAccounts(tenderProgramId, { encoding: 'base64', filters })
+    .send();
+  return result
+    .map(({ pubkey, account }) => {
+      const dataField = account.data;
+      const b64 = Array.isArray(dataField) ? (dataField[0] as string) : (dataField as string);
+      const bytes = new Uint8Array(b64ToBytes.encode(b64));
+      try {
+        return {
+          address: pubkey as Address,
+          data: accounts.getProviderReputationDecoder().decode(bytes),
+        };
+      } catch (e) {
+        console.warn(
+          `[listProviderReputations] decode failed for ${pubkey}: ${(e as Error).message}`,
+        );
+        return null;
+      }
+    })
+    .filter((r): r is ProviderReputationWithAddress => r != null);
+}
+
 export function milestoneStatusToString(s: MilestoneStateChain['status']): string {
   // Codama generates `MilestoneStatus` as a TS numeric enum (Pending=0, ...),
   // so the decoder yields a NUMBER, not a string or {__kind: ...} object.
@@ -357,8 +460,7 @@ export function milestoneStatusToString(s: MilestoneStateChain['status']): strin
     'disputedefault', // 7
     'cancelledbybuyer', // 8
   ];
-  // biome-ignore lint/suspicious/noExplicitAny: runtime introspection covers
-  // both the numeric-enum path AND legacy string / discriminated-union shapes.
+  // biome-ignore lint/suspicious/noExplicitAny: runtime introspection covers both numeric-enum and legacy string / discriminated-union shapes
   const v = s as any;
   if (typeof v === 'number') return names[v] ?? `unknown(${v})`;
   if (typeof v === 'string') return v.toLowerCase();

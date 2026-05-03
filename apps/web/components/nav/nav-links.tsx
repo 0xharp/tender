@@ -17,10 +17,12 @@ export interface NavLink {
 export const PUBLIC_LINKS: NavLink[] = [
   { href: '/rfps', label: 'Browse RFPs', matchPrefix: '/rfps' },
   { href: '/leaderboard', label: 'Leaderboard' },
+  { href: '/docs', label: 'Docs', matchPrefix: '/docs' },
 ];
 
 export const AUTHED_LINKS: NavLink[] = [
   { href: '/dashboard', label: 'Dashboard', matchPrefix: '/dashboard', authOnly: true },
+  { href: '/me/projects', label: 'My projects', matchPrefix: '/me/projects', authOnly: true },
 ];
 
 export function NavLinks({

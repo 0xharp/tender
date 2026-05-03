@@ -10,9 +10,12 @@ import type { Address } from '@solana/kit';
  */
 import { useSelectedWalletAccount, useSignTransactions } from '@solana/react';
 import type { UiWalletAccount } from '@wallet-standard/react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { MilestoneNotesThread } from '@/components/escrow/milestone-notes-thread';
+import { ProviderWinnerBidDecryptBanner } from '@/components/escrow/winner-bid-decrypt-banner';
 import { LocalTime } from '@/components/local-time';
 import { TxToastDescription } from '@/components/primitives/tx-toast';
 import { Button } from '@/components/ui/button';
@@ -20,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { friendlyBidError } from '@/lib/bids/error-utils';
+import type { SealedBidPlaintext } from '@/lib/bids/schema';
 import {
   autoReleaseMilestone,
   disputeDefaultSplit,
@@ -27,7 +31,9 @@ import {
   startMilestone,
   submitMilestone,
 } from '@/lib/escrow/milestone-flow';
+import { postMilestoneNote } from '@/lib/milestones/notes';
 import { rpc } from '@/lib/solana/client';
+import type { MilestoneNoteRow } from '@tender/shared';
 
 import type { MilestoneSummary } from './buyer-action-panel';
 
@@ -45,6 +51,9 @@ export interface ProviderActionPanelProps {
   /** rfp.active_milestone_index - sentinel 255 = none in flight. Drives the
    *  Start-button gating (only one milestone can be Started at a time). */
   activeMilestoneIndex: number;
+  /** Off-chain notes attached to milestone state transitions, grouped by
+   *  milestone_index. Render at the bottom of each row. */
+  notesByMilestoneIndex: Record<number, MilestoneNoteRow[]>;
 }
 
 export function ProviderActionPanel(props: ProviderActionPanelProps) {
@@ -67,9 +76,11 @@ function ConnectedProviderPanel({
   rfpPda,
   rfpStatus,
   buyerWallet,
+  winnerBidPda,
   winnerProvider,
   milestones,
   activeMilestoneIndex,
+  notesByMilestoneIndex,
 }: ProviderActionPanelProps & { account: UiWalletAccount }) {
   const signTransactions = useSignTransactions(account, 'solana:devnet');
   const wallet = account.address as Address;
@@ -79,6 +90,18 @@ function ConnectedProviderPanel({
   }
 
   const slotTaken = activeMilestoneIndex !== 255;
+
+  // Lazily-decrypted winning-bid plaintext. A single decrypt unlocks the
+  // success-criteria acceptance bar in every milestone row + the dispute UI.
+  // State lives at this level so the decrypt button is shown once at the top
+  // of the card, not per-row.
+  const [plaintext, setPlaintext] = useState<SealedBidPlaintext | null>(null);
+  const successByIndex: Record<number, string | undefined> = {};
+  if (plaintext) {
+    plaintext.milestones.forEach((m, i) => {
+      successByIndex[i] = m.successCriteria;
+    });
+  }
 
   return (
     <Card>
@@ -95,6 +118,14 @@ function ConnectedProviderPanel({
             </span>
           )}
         </p>
+        {winnerBidPda && (
+          <ProviderWinnerBidDecryptBanner
+            rfpPda={rfpPda as Address}
+            winnerBidPda={winnerBidPda as Address}
+            hasPlaintext={!!plaintext}
+            onDecrypted={setPlaintext}
+          />
+        )}
         {milestones.map((ms) => (
           <ProviderMilestoneRow
             key={ms.index}
@@ -103,6 +134,8 @@ function ConnectedProviderPanel({
             buyerWallet={buyerWallet as Address}
             winnerProvider={winnerProvider as Address}
             milestone={ms}
+            successCriteria={successByIndex[ms.index]}
+            notes={notesByMilestoneIndex[ms.index] ?? []}
             slotTaken={slotTaken}
             // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook
             signTransactions={signTransactions as any}
@@ -119,6 +152,8 @@ function ProviderMilestoneRow({
   buyerWallet,
   winnerProvider,
   milestone,
+  successCriteria,
+  notes,
   slotTaken,
   signTransactions,
 }: {
@@ -127,20 +162,55 @@ function ProviderMilestoneRow({
   buyerWallet: Address;
   winnerProvider: Address;
   milestone: MilestoneSummary;
+  /** What the provider committed this milestone would deliver, sourced from
+   *  the decrypted bid envelope. Undefined when not yet decrypted OR when
+   *  the provider declined to set one. */
+  successCriteria?: string;
+  /** Off-chain notes already posted against this milestone. Rendered as a
+   *  thread at the bottom of the row. */
+  notes: MilestoneNoteRow[];
   slotTaken: boolean;
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard
   signTransactions: any;
 }) {
   const [busy, setBusy] = useState(false);
   const [splitInput, setSplitInput] = useState('5000');
+  /** Inline note that ships with the next Submit click. Cleared after a
+   *  successful post. Strongly encouraged: gives the buyer the deliverable
+   *  link / what-shipped context inline with the on-chain Submit. */
+  const [submitNote, setSubmitNote] = useState('');
+  const router = useRouter();
 
-  async function run(action: () => Promise<string>, label: string) {
+  async function run(
+    action: () => Promise<string>,
+    label: string,
+    opts?: {
+      note?: { kind: MilestoneNoteRow['kind']; body: string; onPosted?: () => void };
+    },
+  ) {
     setBusy(true);
     try {
       const sig = await action();
       toast.success(`${label} done`, {
         description: <TxToastDescription hash={sig} prefix="Tx" />,
       });
+      const body = opts?.note?.body.trim();
+      if (body && opts?.note) {
+        const res = await postMilestoneNote({
+          rfp_pda: rfpPda,
+          milestone_index: milestone.index,
+          kind: opts.note.kind,
+          body,
+          tx_signature: sig,
+        });
+        if (res.ok) {
+          opts.note.onPosted?.();
+        } else {
+          toast.warning('Note not saved', { description: res.error });
+        }
+      }
+      // Re-fetch on-chain state so the next render reflects reality.
+      router.refresh();
     } catch (e) {
       toast.error(`${label} failed`, { description: friendlyBidError(e), duration: 12000 });
     } finally {
@@ -166,6 +236,17 @@ function ProviderMilestoneRow({
         </span>
       </div>
 
+      {/* Acceptance bar - what YOU committed at submit time. Shown inline so
+          you can re-read it before clicking Submit, and so it's right there
+          when reviewing dispute UI. Hidden until plaintext is decrypted at
+          the panel level + when no criterion was set. */}
+      {successCriteria && milestone.status !== 'disputed' && (
+        <p className="rounded-md border border-primary/15 bg-primary/5 px-3 py-2 text-[11px] leading-relaxed text-foreground/80">
+          <span className="font-medium text-primary/80">Your committed acceptance bar:</span>{' '}
+          {successCriteria}
+        </p>
+      )}
+
       {milestone.status === 'pending' && (
         <div className="flex flex-col gap-2">
           <p className="text-xs text-muted-foreground">
@@ -173,7 +254,7 @@ function ProviderMilestoneRow({
             with a 50% penalty (paid to you) - unless you miss your delivery deadline, in which case
             they can cancel with a full refund and a late mark goes on your reputation.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
               size="sm"
@@ -212,7 +293,29 @@ function ProviderMilestoneRow({
             Submit when the work is delivery-ready. Buyer then has the review window to accept,
             request changes, or reject.
           </p>
-          <div className="flex">
+          {/* Inline delivery note - what's shipping in this submit. Optional
+              but strongly encouraged: the buyer is reviewing on-chain status
+              + this note together, so a deliverable link or summary here
+              cuts back-and-forth. Posted as an off-chain note attached to
+              the Submit tx signature on success. */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`submit-note-${milestone.index}`} className="text-[11px]">
+              What's shipping?{' '}
+              <span className="text-muted-foreground">
+                (optional, posts with Submit - link the deliverable, summarize the work)
+              </span>
+            </Label>
+            <textarea
+              id={`submit-note-${milestone.index}`}
+              className="min-h-[60px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-xs leading-relaxed shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+              placeholder="e.g. https://github.com/me/repo/pull/42 — implements the access-control checks per the acceptance bar; ready for buyer review."
+              maxLength={2000}
+              value={submitNote}
+              onChange={(e) => setSubmitNote(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+          <div className="flex justify-end">
             <Button
               type="button"
               size="sm"
@@ -228,6 +331,13 @@ function ProviderMilestoneRow({
                       rpc,
                     }),
                   'Submit milestone',
+                  {
+                    note: {
+                      kind: 'submit',
+                      body: submitNote,
+                      onPosted: () => setSubmitNote(''),
+                    },
+                  },
                 )
               }
             >
@@ -260,6 +370,7 @@ function ProviderMilestoneRow({
                           rfpPda,
                           milestoneIndex: milestone.index,
                           mint: DEVNET_MOCK_USDC_MINT,
+                          buyerWallet,
                           providerPayoutWallet: winnerProvider,
                           signTransactions,
                           rpc,
@@ -277,13 +388,30 @@ function ProviderMilestoneRow({
 
       {milestone.status === 'disputed' && (
         <div className="flex flex-col gap-2">
+          {/* In a dispute, the acceptance bar IS the resolution reference -
+              both parties can re-read what the provider committed to vs what
+              actually shipped. Surface it more prominently than in other
+              states so you can ground your proposed split in the original
+              commitment, not vibes. */}
+          {successCriteria && (
+            <div className="flex flex-col gap-1 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                Your committed acceptance bar
+              </span>
+              <p className="text-xs leading-relaxed text-foreground/85">{successCriteria}</p>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                Use this as the reference when proposing a split - it's the bar you signed up to at
+                submit time.
+              </p>
+            </div>
+          )}
           {milestone.disputeDeadlineIso && (
             <p className="text-xs text-muted-foreground">
               Cool-off ends <LocalTime iso={milestone.disputeDeadlineIso} />. Settle off-platform
               with the buyer first, then both of you propose the SAME split here.
             </p>
           )}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Label className="text-xs">Your split bps (0=nothing, 10000=full)</Label>
             <Input
               type="number"
@@ -344,6 +472,8 @@ function ProviderMilestoneRow({
           </div>
         </div>
       )}
+
+      <MilestoneNotesThread notes={notes} />
     </div>
   );
 }

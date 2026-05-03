@@ -99,6 +99,40 @@ export type ReputationCacheRow = {
 };
 
 // ---------------------------------------------------------------------------
+// milestone_notes (migration 0008)
+// ---------------------------------------------------------------------------
+
+/** Off-chain context attached to a milestone state transition. The on-chain
+ *  Milestone account is the source of truth for status; this table carries
+ *  the human-readable rationale ("here's the link", "section 3 needs work").
+ *  Append-only by RLS - notes can't be rewritten after-the-fact. */
+export type MilestoneNoteKind =
+  | 'submit'
+  | 'request_changes'
+  | 'reject'
+  | 'accept'
+  | 'dispute_propose'
+  | 'comment';
+
+export type MilestoneNoteRow = {
+  id: string;
+  rfp_pda: string;
+  milestone_index: number;
+  author_wallet: string;
+  kind: MilestoneNoteKind;
+  body: string;
+  /** Solana tx signature of the on-chain action this note attaches to.
+   *  Nullable for free-form 'comment' notes that aren't tied to a specific tx. */
+  tx_signature: string | null;
+  created_at: string;
+};
+
+export type MilestoneNoteInsert = Omit<MilestoneNoteRow, 'id' | 'created_at'> & {
+  id?: string;
+  created_at?: string;
+};
+
+// ---------------------------------------------------------------------------
 // Database root — feed this to createClient<Database>()
 // ---------------------------------------------------------------------------
 
@@ -121,6 +155,15 @@ export type Database = {
         Row: ReputationCacheRow;
         Insert: ReputationCacheRow;
         Update: Partial<Omit<ReputationCacheRow, 'wallet'>>;
+        Relationships: [];
+      };
+      milestone_notes: {
+        Row: MilestoneNoteRow;
+        Insert: MilestoneNoteInsert;
+        // Append-only by RLS. The Update type has no fields, so any
+        // attempted .update() call is a typecheck error - matches the
+        // database policy.
+        Update: Record<string, never>;
         Relationships: [];
       };
     };

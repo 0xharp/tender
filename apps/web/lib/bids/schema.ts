@@ -24,6 +24,14 @@ export const sealedBidPlaintextSchema = z.object({
          *  for this milestone). Sum of durations should typically equal
          *  `timelineDays`. */
         durationDays: z.number().int().min(0).max(365),
+        /** Optional success criteria / KPI for this milestone. Free-text the
+         *  provider commits to in their bid. Surfaces in the milestone row
+         *  for both parties + referenced inline in dispute UI. Encrypted
+         *  along with the rest of the bid envelope - same privacy guarantees
+         *  as scope/price. Optional (no default) so the plaintext schema's
+         *  input/output shapes line up; consumers should treat absence as
+         *  "provider declined to set one." */
+        successCriteria: z.string().max(1000).optional(),
       }),
     )
     .min(1)
@@ -53,6 +61,12 @@ export const bidFormSchema = z
           description: z.string().min(1).max(2000),
           amount_usdc: z.string().regex(/^\d+(\.\d{1,6})?$/),
           duration_days: z.number().int().min(0).max(365),
+          /** What the provider commits this milestone will deliver - the
+           *  acceptance bar. Optional; useful inline in dispute UI when
+           *  buyer + provider disagree on whether a milestone met spec.
+           *  Stored as plain optional (no default) to keep zod input/output
+           *  shapes aligned for react-hook-form's Resolver. */
+          success_criteria: z.string().max(1000).optional(),
         }),
       )
       .min(1)
