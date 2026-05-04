@@ -113,7 +113,12 @@ export default async function Page({ params }: PageProps) {
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
       <SectionHeader
         eyebrow="Public buyer profile"
-        title="Pseudonymous buyer"
+        // Use the wallet's tendr identity (e.g. `0xharp.tendr.sol`) as the
+        // heading when it has one claimed. Falls back to "Pseudonymous
+        // buyer" only when the wallet has no SNS claim — preferredProfileSlug
+        // returns the raw pubkey in that case, which we detect via the
+        // .sol suffix and map to the legacy fallback.
+        title={shareSlug.endsWith('.sol') ? shareSlug : 'Pseudonymous buyer'}
         description={
           <span className="inline-flex flex-col gap-1.5 text-muted-foreground">
             <HashLink hash={wallet} kind="account" visibleChars={22} withSns />

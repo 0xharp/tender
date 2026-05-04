@@ -194,7 +194,7 @@ Two on-chain account types — `BuyerReputation` and `ProviderReputation`, one p
 
 ### Is my reputation portable?
 
-It's on the Tender program on Solana — anyone can read it via `getProgramAccounts` without our app being online. Other Solana programs can reference it freely. Cross-program reputation portability (mirroring to a generic on-chain registry) is a future v2 feature.
+It's on the Tender program on Solana — anyone can read it via `getProgramAccounts` without our app being online. Other Solana programs can reference it freely. Reputation is also paired with your `<handle>.tendr.sol` SNS identity (see the [Identity](#identity) section), which means the *recognizable name* attached to your reputation travels with you across every Solana app that resolves SNS. Cross-program reputation portability (mirroring to a generic on-chain registry) is a future v2 feature.
 
 ### Does losing a bid hurt my reputation?
 
@@ -207,6 +207,40 @@ Reputation accrues to your main wallet identically to public-mode wins. The Ed25
 ### Why don't I have a reputation account yet?
 
 It gets lazy-initialized the first time it's needed (your first award as buyer, your first win as provider). New wallets won't have one until they actually do something.
+
+---
+
+## Identity
+
+### What's `<handle>.tendr.sol`?
+
+Your **tendr identity** — a Solana Name Service (SNS) subdomain we mint for you under our parent `tendr.sol` the first time you sign in. It surfaces everywhere a wallet is rendered in the app: leaderboard, buyer/provider profile pages, RFP cards, milestone notes, wallet popover, and shared profile URLs. It's also the hero label on the share-card that unfurls when you paste your profile URL into X / Slack / Discord.
+
+### Do I have to claim one?
+
+No, but you should — without a tendr identity, every UI surface that lists you shows your truncated wallet hash. Claiming takes one click in the onboarding modal that pops up after sign-in: pick a handle (3-20 chars, alphanumeric + hyphens), confirm. **No wallet popup, no signature.** Tendr signs the mint server-side and assigns the subdomain to your wallet in the same transaction.
+
+### Why no signature?
+
+Tendr's parent-domain owner keypair signs the mint atomically and assigns the new subdomain to your wallet. You receive it without authorizing anything on chain — same UX shape as receiving an airdrop.
+
+### Is the subdomain actually mine?
+
+Yes — the on-chain SPL Name Service account that backs `<handle>.tendr.sol` has its `owner` field set to your wallet. Tendr (the parent owner) cannot move it without your signature.
+
+### What handles are reserved?
+
+Hand-curated blocklist of ~70 entries: admin/system roles (admin, root, system, mod, support…), common web reserved (www, api, login, dashboard…), tendr brand (tendr, tendrbid, official…), high-confusion crypto terms (wallet, escrow, treasury, usdc…), and obvious test/placeholder strings (test, demo, null…). Full list in `apps/web/lib/sns/devnet/handle-validation.ts`.
+
+### What does my tendr identity NOT do?
+
+- It does NOT change anything on the privacy side. We never resolve `.tendr.sol` for per-RFP ephemeral bid signers; that's defended in code (`withSns` is opt-in default-false on every render call, plus an explicit "INTENTIONALLY NO withSns" comment on the ephemeral-signer HashLink). Full detail in [identity](/docs/identity).
+- It does NOT gate any product behavior. Wallets without a claimed identity can still bid, post RFPs, win projects, accumulate reputation. The name is purely a display + portability layer.
+- It does NOT give Tendr any new control over your wallet. We only ever sign mint transactions; the resulting subdomain is yours.
+
+### Is this on mainnet?
+
+No — tendr.bid runs on devnet today, including the identity layer. Same as the rest of the product.
 
 ---
 

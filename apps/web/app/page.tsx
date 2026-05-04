@@ -3,7 +3,6 @@ import {
   GitBranchIcon,
   KeyRoundIcon,
   LockKeyholeIcon,
-  ShieldCheckIcon,
   ShuffleIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -190,40 +189,16 @@ function DiagramCard({
 }
 
 function TrustStrip() {
-  const facts = [
-    { icon: ShieldCheckIcon, label: 'Time-locked storage', value: 'MagicBlock PER · TEE' },
-    { icon: ShuffleIcon, label: 'Bidder unlinkability', value: 'Cloak shielded UTXO' },
-    { icon: LockKeyholeIcon, label: 'Cryptography', value: 'X25519 + XChaCha20' },
-  ];
-
+  // The new PoweredByLogos block already names each partner's role + what
+  // it does for tendr.bid in plain English (MagicBlock = bid-content
+  // privacy, Cloak = bidder unlinkability, SNS = identity layer). The
+  // separate "facts" row that previously sat under the logos repeated the
+  // same info in different shorthand ("MagicBlock PER · TEE" etc.) — pure
+  // duplication. Single descriptive block reads cleaner.
   return (
     <section className="px-6 pb-24 sm:pb-32">
-      <div className="mx-auto flex max-w-5xl flex-col rounded-2xl border border-border/60 bg-card/40 p-2 backdrop-blur-md">
-        {/* Partner attribution leads - the card opens with WHO powers it,
-            then the trust facts ABOUT it sit underneath. */}
-        <div className="flex items-center justify-center border-b border-border/40 px-4 py-4">
-          <PoweredByLogos />
-        </div>
-        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {facts.map(({ icon: Icon, label, value }) => (
-            // `justify-center` centers each fact within its grid column so
-            // the row reads as a balanced cluster (matching the centered
-            // Powered by row above), instead of three items left-hugging
-            // their columns and leaving big asymmetric gaps on the edges.
-            <div
-              key={label}
-              className="flex items-center justify-center gap-3 rounded-xl px-4 py-3"
-            >
-              <Icon className="size-4 text-primary" />
-              <div className="flex flex-col">
-                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {label}
-                </span>
-                <span className="font-mono text-sm tabular-nums">{value}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="mx-auto max-w-5xl rounded-2xl border border-border/60 bg-card/40 p-8 backdrop-blur-md sm:p-12">
+        <PoweredByLogos />
       </div>
     </section>
   );

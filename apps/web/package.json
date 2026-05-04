@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
+    "@bonfida/spl-name-service": "^3.0.21",
     "@cloak.dev/sdk-devnet": "0.1.5-devnet.1",
     "@hookform/resolvers": "^5.2.2",
     "@magicblock-labs/ephemeral-rollups-kit": "0.12.0",

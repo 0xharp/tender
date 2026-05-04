@@ -22,6 +22,7 @@ import 'server-only';
 import { redirect } from 'next/navigation';
 
 import { resolveSnsToWallet } from './resolve';
+import { resolveTendrSubdomain } from './devnet/resolve';
 import { snsRpc } from '@/lib/solana/client';
 
 /** Cheap heuristic — base58 pubkeys are 32-44 chars and contain no `.`. */
@@ -67,21 +68,19 @@ export async function tryResolveWalletParam(param: string): Promise<string | nul
 }
 
 /**
- * Server-side helper: resolve a wallet's primary `.sol` name (if any)
- * for use as a URL slug. Returns the `.sol` when set, otherwise the raw
- * pubkey. Use this anywhere a server component builds a /providers/
- * or /buyers/ link so the URL is human-readable.
+ * Server-side helper: resolve a wallet's tendr identity name (if any)
+ * for use as a URL slug. Returns `<handle>.tendr.sol` when claimed,
+ * otherwise the raw pubkey. Use this anywhere a server component builds
+ * a /providers/ or /buyers/ link so the URL is human-readable.
  *
- * Lazy import of the SDK + null-safe — never throws. Failures fall
- * back to the pubkey, so the link always works.
+ * Null-safe — never throws. Failures fall back to the pubkey so the
+ * link always works.
  */
 export async function preferredProfileSlug(walletPubkey: string): Promise<string> {
   try {
-    const { getPrimaryDomain } = await import('@solana-name-service/sns-sdk-kit');
-    // biome-ignore lint/suspicious/noExplicitAny: snsRpc and Address branding
-    const result = await getPrimaryDomain({ rpc: snsRpc as any, walletAddress: walletPubkey as any });
-    if (result.stale) return walletPubkey;
-    return `${result.domainName}.sol`;
+    // biome-ignore lint/suspicious/noExplicitAny: snsRpc and Address branding nominal cast
+    const hit = await resolveTendrSubdomain(snsRpc, walletPubkey as any);
+    return hit?.name ?? walletPubkey;
   } catch {
     return walletPubkey;
   }

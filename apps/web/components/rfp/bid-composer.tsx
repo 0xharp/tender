@@ -708,7 +708,10 @@ export function EphemeralFundingPanel({
         signMessage: signMessageProp,
         ephemeralPubkey: new PublicKey(ephemeralPubkey),
         depositLamports: 60_000_000n, // 0.06 SOL - covers Cloak fee + ephemeral rent + bid PDA rent (envelope-size dependent) + tx fees with comfortable headroom
-        connection: new Connection('https://api.devnet.solana.com', 'confirmed'),
+        connection: new Connection(
+          process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? 'https://api.devnet.solana.com',
+          'confirmed',
+        ),
         onProgress: (p) => setFundProgress(p.stage),
       });
       toast.success('Privacy wallet funded via Cloak shielded pool', {

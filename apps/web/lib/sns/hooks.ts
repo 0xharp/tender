@@ -18,10 +18,16 @@ import { readSnsCache, writeSnsCache } from './cache';
 import { resolveWalletToSns } from './resolve';
 
 /**
- * Returns the wallet's primary `.sol` name, or null if unresolved /
- * unknown. The undefined return means "not yet resolved this render"
- * — caller should treat that as the loading state if it cares. Most UIs
- * just `return name ?? <fallback />` and don't distinguish.
+ * Returns the wallet's tendr identity (`<handle>.tendr.sol`) if it has
+ * one claimed, or null if not. Undefined means "not yet resolved this
+ * render" — caller should treat that as the loading state if it cares.
+ * Most UIs just `return name ?? <fallback />` and don't distinguish.
+ *
+ * Resolves against the Tendr-issued subdomain layer on devnet (see
+ * `lib/sns/devnet/resolve.ts`). Does NOT query the global SNS primary-
+ * domain mechanism — wallets with mainnet `.sol` primaries set will
+ * still return null here unless the same wallet has also claimed a
+ * `.tendr.sol` via `/api/identity/claim`.
  *
  * Hydration-safe: ALWAYS returns undefined on the first render (server
  * + first client render produce identical DOM), then reads cache + fires

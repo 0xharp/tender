@@ -20,8 +20,8 @@ const fmtUsd = (microUsdc: bigint): string => {
   return '$0';
 };
 
-const truncate = (wallet: string, head = 8, tail = 8): string =>
-  wallet.length <= head + tail + 1 ? wallet : `${wallet.slice(0, head)}…${wallet.slice(-tail)}`;
+const truncateForHero = (wallet: string): string =>
+  wallet.length <= 9 ? wallet : `${wallet.slice(0, 4)}…${wallet.slice(-4)}`;
 
 export default async function Image({
   params,
@@ -34,7 +34,6 @@ export default async function Image({
   // through with sane defaults so we always return an image. A 307 from
   // the OG route would mean X / Slack / Discord see no card at all.
   let display = 'Pseudonymous provider';
-  let walletShort = '—';
   let stats = [
     { value: '0', label: 'wins' },
     { value: '0', label: 'completed' },
@@ -44,12 +43,11 @@ export default async function Image({
   try {
     const wallet = await tryResolveWalletParam(rawWallet);
     if (wallet) {
-      walletShort = truncate(wallet);
       const slug = await preferredProfileSlug(wallet);
-      // `preferredProfileSlug` returns either the .sol or the raw pubkey -
-      // surface the .sol prominently if we got one, otherwise the
-      // truncated hash (the full one is in walletShort below).
-      display = slug.endsWith('.sol') ? slug : truncate(wallet, 4, 4);
+      // preferredProfileSlug returns the .tendr.sol when claimed, raw
+      // pubkey otherwise. Surface the name when we have one; truncated
+      // hash is the cleaner-looking fallback for unclaimed wallets.
+      display = slug.endsWith('.sol') ? slug : truncateForHero(wallet);
 
       const rep = await fetchProviderReputation(wallet as Address);
       if (rep) {
@@ -65,7 +63,7 @@ export default async function Image({
   }
 
   return new ImageResponse(
-    <ProfileOgCard role="provider" display={display} walletShort={walletShort} stats={stats} />,
+    <ProfileOgCard role="provider" display={display} stats={stats} />,
     size,
   );
 }

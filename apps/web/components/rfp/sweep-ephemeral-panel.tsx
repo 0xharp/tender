@@ -83,7 +83,10 @@ function Connected({
     async function check() {
       try {
         const { Connection, PublicKey } = await import('@solana/web3.js');
-        const conn = new Connection('https://api.devnet.solana.com', 'confirmed');
+        const conn = new Connection(
+          process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? 'https://api.devnet.solana.com',
+          'confirmed',
+        );
         const lamports = await conn.getBalance(new PublicKey(ephemeralPubkey!));
         if (!cancelled) setBalance(lamports / 1e9);
       } catch {
@@ -110,7 +113,10 @@ function Connected({
         throw new Error('Derived ephemeral pubkey mismatch');
       }
       const { Connection, PublicKey } = await import('@solana/web3.js');
-      const conn = new Connection('https://api.devnet.solana.com', 'confirmed');
+      const conn = new Connection(
+        process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? 'https://api.devnet.solana.com',
+        'confirmed',
+      );
       const lamports = await conn.getBalance(new PublicKey(ephemeralPubkey));
       // The ephemeral signs Cloak's deposit tx, so it needs to fund:
       // - tx fee (~0.000005 SOL)

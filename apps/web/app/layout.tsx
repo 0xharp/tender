@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from 'next/font/google';
 
 import { BufferPolyfillProvider } from '@/components/buffer-polyfill-provider';
 import { DotMatrix } from '@/components/effects/dot-matrix';
+import { IdentityModalProvider } from '@/components/identity/identity-modal-provider';
+import { getCurrentWallet } from '@/lib/auth/session';
 import { PageTransition } from '@/components/motion/page-transition';
 import { SiteFooter } from '@/components/nav/site-footer';
 import { TopNav } from '@/components/nav/top-nav';
@@ -44,11 +46,17 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Read the signed-in wallet server-side so IdentityModalProvider knows
+  // when to auto-open the claim modal. We deliberately gate on "signed in"
+  // (SIWS session cookie present + verified) rather than "wallet connected"
+  // — otherwise the modal would pop while the SIWS dialog is still open,
+  // stacking popups on top of each other.
+  const signedInWallet = await getCurrentWallet();
   return (
     <html
       lang="en"
@@ -66,12 +74,14 @@ export default function RootLayout({
         >
           <TooltipProvider>
             <WalletProviders>
-              <div className="flex min-h-screen flex-col">
-                <TopNav />
-                <PageTransition>{children}</PageTransition>
-                <SiteFooter />
-              </div>
-              <Toaster />
+              <IdentityModalProvider signedInWallet={signedInWallet}>
+                <div className="flex min-h-screen flex-col">
+                  <TopNav />
+                  <PageTransition>{children}</PageTransition>
+                  <SiteFooter />
+                </div>
+                <Toaster />
+              </IdentityModalProvider>
             </WalletProviders>
           </TooltipProvider>
         </ThemeProvider>

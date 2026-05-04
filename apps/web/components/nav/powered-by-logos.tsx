@@ -1,82 +1,99 @@
 /**
- * Partner-credit row for the site footer ("Powered by · MagicBlock · Cloak").
+ * Partner-credit block on the homepage trust strip.
  *
- * Renders both logos as a single tone driven by `currentColor`, so they pick
- * up whatever text color the parent sets (we use `text-muted-foreground` →
- * mid-grey in both light + dark mode without per-theme overrides).
+ * Three columns, each presenting a partner as `<role>` (headline) + logo
+ * (by-line) + one-line plain-English tagline. Reads as "we composed three
+ * orthogonal primitives" rather than a sponsor logo wall — each column
+ * communicates WHAT that partner does for tendr.bid, not just THAT they
+ * exist. Mobile stacks vertically.
  *
- * Implementation choices:
+ * Logo rendering choices:
  *
- *   - Cloak ships as an SVG. We inline it (instead of `<img>`) so each `<path>`
- *     can be filled with `currentColor` - that's the only way to retint a
- *     vector to whatever the parent text color resolves to.
+ *   - Cloak + SNS ship as SVGs. We inline them (instead of `<img>`) so each
+ *     `<path>` can be filled with `currentColor` - that's the only way to
+ *     retint a vector to whatever the parent text color resolves to.
  *
  *   - MagicBlock ships as a black-on-transparent PNG. SVG `<path>` recolor
  *     doesn't apply, so we use CSS `mask-image` with the PNG as the alpha
  *     source: the resulting box is fully painted with `currentColor`,
  *     visible only where the PNG had pixels. Same monochrome retint result.
  *
- *  Lives in the footer (not as a standalone landing section) - partner
- *  attribution is conventional below-the-fold furniture; surfacing it
- *  mid-page felt placed for placement's sake.
+ * The whole row uses `text-muted-foreground/80` so logos + role labels read
+ * as a single restrained tone; the role headline is the loudest element to
+ * keep the message ("what each one does") above the credit.
  */
 import Link from 'next/link';
 
 export function PoweredByLogos() {
+  // No global "Powered by" header here — each column's `by [logo]` line
+  // carries the partner-credit framing on its own, and an extra header
+  // above just repeats the same idea twice.
   return (
-    <div className="flex flex-col items-center justify-center gap-y-3 text-muted-foreground/80 transition-colors sm:flex-row sm:flex-wrap sm:gap-x-6">
-      {/* Stack vertically on mobile - the inline "Powered by ... MagicBlock"
-          first row was leaving Cloak orphaned on its own line below with no
-          label. Vertical stack gives "Powered by" its own row above the
-          logos, then logos sit symmetrically beneath. Switches back to a
-          single horizontal row on sm+ where there's enough width. */}
-      <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">
-        Powered by
-      </span>
-      <PartnerLink href="https://www.magicblock.gg/" label="MagicBlock - Private Ephemeral Rollups">
-        <MagicBlockMark />
-      </PartnerLink>
-      {/* Inter-logo dot only makes sense in horizontal layout - hide on
-          mobile where logos are stacked vertically (a lone dot between two
-          rows reads as visual noise). */}
-      <span aria-hidden className="hidden text-muted-foreground/40 sm:inline">
-        ·
-      </span>
-      <PartnerLink href="https://cloak.ag/" label="Cloak - shielded UTXO pool">
-        <CloakMark />
-      </PartnerLink>
-      <span aria-hidden className="hidden text-muted-foreground/40 sm:inline">
-        ·
-      </span>
-      <PartnerLink href="https://www.sns.id/" label="Solana Name Service - .sol identity">
-        <SnsMark />
-      </PartnerLink>
+    <div className="grid w-full grid-cols-1 gap-10 text-muted-foreground/80 sm:grid-cols-3 sm:gap-6">
+      <PartnerColumn
+        role="Private Ephemeral Rollup"
+        tagline="Bid contents stay sealed even from the buyer until the reveal window opens."
+        partnerName="MagicBlock"
+        href="https://www.magicblock.gg/"
+        mark={<MagicBlockMark />}
+      />
+      <PartnerColumn
+        role="Shielded UTXO Pool"
+        tagline="Per-RFP ephemeral wallet keeps bidders unlinkable to their main wallet on chain."
+        partnerName="Cloak"
+        href="https://cloak.ag/"
+        mark={<CloakMark />}
+      />
+      <PartnerColumn
+        role="Identity Layer"
+        tagline="Free <handle>.tendr.sol per user - recognizable identity reputation accrues to."
+        partnerName="Solana Name Service"
+        href="https://www.sns.id/"
+        mark={<SnsMark />}
+      />
     </div>
   );
 }
 
-function PartnerLink({
+/**
+ * One column in the partner grid. Three vertically-stacked elements:
+ * uppercase role headline (loudest), partner logo (mid), one-line tagline
+ * (smallest). The whole column is a single anchor so click anywhere goes
+ * to the partner's site.
+ */
+function PartnerColumn({
+  role,
+  tagline,
+  partnerName,
   href,
-  label,
-  children,
+  mark,
 }: {
+  role: string;
+  tagline: string;
+  partnerName: string;
   href: string;
-  label: string;
-  children: React.ReactNode;
+  mark: React.ReactNode;
 }) {
   return (
     <Link
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title={label}
-      aria-label={label}
-      className="inline-flex items-center transition-colors hover:text-foreground"
+      aria-label={`${role} — by ${partnerName}`}
+      className="group flex flex-col items-center gap-3 px-2 text-center transition-colors hover:text-foreground"
     >
-      {children}
+      <span className="font-display text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
+        {role}
+      </span>
+      <div className="flex items-center gap-2 opacity-90 transition-opacity group-hover:opacity-100">
+        <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">by</span>
+        {mark}
+      </div>
+      <p className="max-w-[28ch] text-xs leading-relaxed text-muted-foreground">{tagline}</p>
     </Link>
   );
 }
+
 
 /** PNG-backed mark - see file header on why mask-image. */
 function MagicBlockMark() {

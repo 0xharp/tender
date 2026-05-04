@@ -129,10 +129,13 @@ export async function listRfps(filter: ListRfpsFilter = {}): Promise<RfpWithAddr
         return { address: pubkey as Address, data: accounts.getRfpDecoder().decode(bytes) };
       } catch (e) {
         // Decode mismatch usually means the account was created against an
-        // older program deploy with a smaller Rfp struct. We silently drop it
-        // from the list (so the marketplace doesn't break), but log so devs
-        // see what's happening when "missing RFP" is actually "stale schema."
-        console.warn(
+        // older program deploy with a smaller Rfp struct. We silently drop
+        // it from the list (so the marketplace doesn't break). Logged at
+        // `debug` so it stays out of the default dev console (noisy: same
+        // ~6 stale accounts re-decoded on every page render); enable via
+        // Node `--inspect` or by setting NODE_OPTIONS to surface it when
+        // genuinely diagnosing "where did my RFP go".
+        console.debug(
           `[listRfps] decoder failed for ${pubkey} (${bytes.length} bytes) - likely stale on-chain layout. ${(e as Error).message}`,
         );
         return null;

@@ -129,7 +129,15 @@ export default async function Page({ params }: PageProps) {
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
       <SectionHeader
         eyebrow="Public provider profile"
-        title={profile?.display_name ?? 'Pseudonymous provider'}
+        // Heading precedence: custom display_name from supabase (provider
+        // explicitly set it) → tendr identity (e.g. `0xharp.tendr.sol`) →
+        // legacy "Pseudonymous provider" fallback for wallets with neither.
+        // shareSlug returns either `<handle>.tendr.sol` or the raw pubkey;
+        // .sol suffix tells us we got a real identity.
+        title={
+          profile?.display_name ??
+          (shareSlug.endsWith('.sol') ? shareSlug : 'Pseudonymous provider')
+        }
         description={
           <span className="inline-flex flex-col gap-1.5 text-muted-foreground">
             <HashLink hash={wallet} kind="account" visibleChars={22} withSns />

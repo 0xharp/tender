@@ -17,8 +17,8 @@ const fmtUsd = (microUsdc: bigint): string => {
   return '$0';
 };
 
-const truncate = (wallet: string, head = 8, tail = 8): string =>
-  wallet.length <= head + tail + 1 ? wallet : `${wallet.slice(0, head)}…${wallet.slice(-tail)}`;
+const truncateForHero = (wallet: string): string =>
+  wallet.length <= 9 ? wallet : `${wallet.slice(0, 4)}…${wallet.slice(-4)}`;
 
 export default async function Image({
   params,
@@ -28,7 +28,6 @@ export default async function Image({
   const { wallet: rawWallet } = await params;
 
   let display = 'Pseudonymous buyer';
-  let walletShort = '—';
   let stats = [
     { value: '0', label: 'rfps' },
     { value: '0', label: 'funded' },
@@ -38,9 +37,8 @@ export default async function Image({
   try {
     const wallet = await tryResolveWalletParam(rawWallet);
     if (wallet) {
-      walletShort = truncate(wallet);
       const slug = await preferredProfileSlug(wallet);
-      display = slug.endsWith('.sol') ? slug : truncate(wallet, 4, 4);
+      display = slug.endsWith('.sol') ? slug : truncateForHero(wallet);
 
       const rep = await fetchBuyerReputation(wallet as Address);
       if (rep) {
@@ -56,7 +54,7 @@ export default async function Image({
   }
 
   return new ImageResponse(
-    <ProfileOgCard role="buyer" display={display} walletShort={walletShort} stats={stats} />,
+    <ProfileOgCard role="buyer" display={display} stats={stats} />,
     size,
   );
 }

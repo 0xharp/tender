@@ -98,6 +98,20 @@ export function primeSnsCache(results: Map<Address, string | null>): void {
   }
 }
 
+/** Invalidate a single wallet's cache entry across both tiers. Used
+ *  after a successful claim so the freshly-minted name supersedes any
+ *  stale negative cache from a pre-claim resolve attempt. */
+export function invalidateSnsCache(wallet: Address): void {
+  memoryCache.delete(wallet);
+  if (typeof window !== 'undefined') {
+    try {
+      window.sessionStorage.removeItem(storageKey(wallet));
+    } catch {
+      // ignore - in-memory delete is enough; next session resets sessionStorage
+    }
+  }
+}
+
 /** Test-only escape hatch. Don't call from product code. */
 export function _clearSnsCacheForTests(): void {
   memoryCache.clear();

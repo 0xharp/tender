@@ -19,21 +19,24 @@ export const rpcSubscriptions = createSolanaRpcSubscriptions(HELIUS_WSS);
 export const tenderProgramId: Address = address(PROGRAM_ID);
 
 /**
- * SEPARATE mainnet RPC for SNS reads.
+ * RPC for SNS reads (now DEVNET, post tendr-subdomain switch).
  *
- * The Tender program lives on devnet, but SNS data lives on MAINNET ONLY —
- * the SNS program is not deployed to devnet, so a devnet RPC will never
- * return SNS records even for wallets that own + have set primary `.sol`
- * names. Routing SNS calls through a mainnet RPC fixes this without
- * disrupting any other read path.
+ * The tendr identity layer mints `<handle>.tendr.sol` subdomains on
+ * devnet under our own parent domain (see `lib/sns/devnet/`). All SNS
+ * resolution — both reverse-lookup (wallet → name) and forward-lookup
+ * (name → wallet) — runs against the SAME devnet hierarchy where the
+ * Tender program already lives. Mainnet `.sol` names are NOT resolved
+ * here — that's intentional scope (SNS is now Tender-issued identity,
+ * not a wrapper around any wallet's mainnet primary).
  *
- * Default = public mainnet endpoint (rate-limited but free; SNS reads are
- * cached in sessionStorage so we hit it sparingly). Override via
- * NEXT_PUBLIC_SNS_RPC_URL if you have a paid mainnet RPC handy.
+ * Default: same Helius devnet URL as the rest of the app (HELIUS_HTTP).
+ * Override via NEXT_PUBLIC_SNS_RPC_URL if you want to route SNS reads
+ * to a different devnet endpoint (e.g. a separate billing/observability
+ * project to keep getProgramAccounts traffic isolated).
  */
 const SNS_RPC_HTTP =
   process.env.NEXT_PUBLIC_SNS_RPC_URL && process.env.NEXT_PUBLIC_SNS_RPC_URL.length > 0
     ? process.env.NEXT_PUBLIC_SNS_RPC_URL
-    : 'https://api.mainnet-beta.solana.com';
+    : HELIUS_HTTP;
 
 export const snsRpc = createSolanaRpc(SNS_RPC_HTTP);

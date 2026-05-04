@@ -7,6 +7,7 @@ import {
   ListChecksIcon,
   LogOutIcon,
   ScrollTextIcon,
+  SparklesIcon,
   UserIcon,
   Wallet2Icon,
 } from 'lucide-react';
@@ -15,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { ClientOnly } from '@/components/client-only';
+import { useIdentityModal } from '@/components/identity/identity-modal-provider';
 import { HashLink } from '@/components/primitives/hash-link';
 import { useSnsName } from '@/lib/sns/hooks';
 import { Button } from '@/components/ui/button';
@@ -105,9 +107,10 @@ function SignedInPopover({ wallet }: { wallet: string }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const actionCount = useActionCount({ pollMs: 60_000, refetchOnOpen: open });
-  // Reverse-resolve to .sol so the navbar trigger label matches the brand
-  // identity shown everywhere else. Falls back to truncated hash if no
-  // primary domain is set.
+  const { openClaimModal } = useIdentityModal();
+  // Reverse-resolve to .tendr.sol so the navbar trigger label matches the
+  // brand identity shown everywhere else. Falls back to truncated hash
+  // when the wallet hasn't claimed a tendr identity yet.
   const snsName = useSnsName(wallet as Address);
   const triggerLabel = snsName ?? shortAddress(wallet);
 
@@ -196,6 +199,18 @@ function SignedInPopover({ wallet }: { wallet: string }) {
             label="Your buyer profile"
             onNavigate={() => setOpen(false)}
           />
+          {/* Show "Claim tendr identity" only when this wallet hasn't
+              claimed yet. snsName === null after the resolver returns
+              with no hit; undefined while loading (don't render then to
+              avoid flicker). Hides automatically once claimed. */}
+          {snsName === null && (
+            <ClaimIdentityItem
+              onClick={() => {
+                setOpen(false);
+                openClaimModal();
+              }}
+            />
+          )}
           <SignOutItem
             onAfter={() => {
               setOpen(false);
@@ -237,6 +252,25 @@ function PopoverItem({
         </span>
       )}
     </Link>
+  );
+}
+
+/**
+ * Button-shaped popover item — same visual as `PopoverItem` but triggers
+ * an `onClick` callback (vs. navigating). Used for the "Claim tendr
+ * identity" CTA which opens the global modal rather than a page route.
+ * Sparkle icon + primary tint signals "this is special / take action".
+ */
+function ClaimIdentityItem({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-primary transition-colors hover:bg-primary/10"
+    >
+      <SparklesIcon className="size-4" />
+      <span className="flex-1">Claim tendr identity</span>
+    </button>
   );
 }
 

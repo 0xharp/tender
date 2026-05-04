@@ -16,10 +16,8 @@ import type { ReactElement } from 'react';
 export interface ProfileOgCardProps {
   /** Drives the role chip text + tints. */
   role: 'provider' | 'buyer';
-  /** Hero label - `.sol` name if SNS resolves, else truncated pubkey. */
+  /** Hero label - `.tendr.sol` name when claimed, else truncated pubkey. */
   display: string;
-  /** Always-shown supporting line under the hero so viewers can verify the wallet behind a `.sol`. */
-  walletShort: string;
   /** Three reputation cards along the bottom rail. */
   stats: Array<{ value: string; label: string }>;
 }
@@ -39,7 +37,6 @@ const COLORS = {
 export function ProfileOgCard({
   role,
   display,
-  walletShort,
   stats,
 }: ProfileOgCardProps): ReactElement {
   // Pick a font size that lets the longest expected `.sol` name + role
@@ -139,18 +136,6 @@ export function ProfileOgCard({
           }}
         >
           {display}
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            marginTop: 18,
-            fontSize: 22,
-            color: COLORS.fgMuted,
-            fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
-            letterSpacing: '0.02em',
-          }}
-        >
-          {walletShort}
         </div>
       </div>
 
