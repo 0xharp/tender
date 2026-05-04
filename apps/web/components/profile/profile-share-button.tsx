@@ -1,7 +1,7 @@
 'use client';
 
 import { CheckIcon, LinkIcon, ShareIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 
@@ -22,9 +22,15 @@ interface ProfileShareButtonProps {
  */
 export function ProfileShareButton({ href, shareText }: ProfileShareButtonProps) {
   const [copied, setCopied] = useState(false);
-
-  const fullUrl =
-    typeof window === 'undefined' ? href : new URL(href, window.location.origin).toString();
+  // Initialize with the relative href so the SSR-rendered HTML and the
+  // first client render produce the same DOM (no hydration mismatch).
+  // Expand to the absolute URL after mount via useEffect — by then React
+  // has already hydrated and we're free to mutate state without
+  // tripping the SSR/CSR diff check.
+  const [fullUrl, setFullUrl] = useState(href);
+  useEffect(() => {
+    setFullUrl(new URL(href, window.location.origin).toString());
+  }, [href]);
 
   async function handleCopy() {
     try {

@@ -15,13 +15,18 @@
  *   - all-zero stats (rep account exists but no activity) render with em-dash
  *     placeholders for ratios so we don't divide by zero
  */
+import type { Address } from '@solana/kit';
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { LocalTime } from '@/components/local-time';
 import { HashLink } from '@/components/primitives/hash-link';
 import { Card, CardContent } from '@/components/ui/card';
+import { primeSnsCache } from '@/lib/sns/cache';
+import { useSnsName } from '@/lib/sns/hooks';
+import { resolveWalletsToSns } from '@/lib/sns/resolve';
+import { snsRpc } from '@/lib/solana/client';
 import { cn } from '@/lib/utils';
 
 export interface ProviderRow {
@@ -67,6 +72,19 @@ export function LeaderboardTables({
   buyers: BuyerRow[];
 }) {
   const [tab, setTab] = useState<Tab>('providers');
+
+  // Bulk-prime the SNS cache with one batched RPC call covering every wallet
+  // on both tabs. Without this, each row's HashLink (with withSns) would fire
+  // its own resolveWalletToSns - 20+ round-trips per leaderboard render.
+  // After the prime, individual hooks hit the in-memory cache instantly.
+  useEffect(() => {
+    const wallets = [
+      ...providers.map((r) => r.wallet),
+      ...buyers.map((r) => r.wallet),
+    ] as Address[];
+    if (wallets.length === 0) return;
+    void resolveWalletsToSns(snsRpc, wallets).then(primeSnsCache);
+  }, [providers, buyers]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -210,17 +228,15 @@ function ProvidersTable({ rows }: { rows: ProviderRow[] }) {
                     #{i + 1}
                   </td>
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/providers/${row.wallet}`}
-                      className="font-mono text-xs text-foreground hover:text-primary"
-                    >
+                    <ProfileLink kind="providers" wallet={row.wallet}>
                       <HashLink
                         hash={row.wallet}
                         kind="account"
                         visibleChars={6}
                         linkable={false}
+                        withSns
                       />
-                    </Link>
+                    </ProfileLink>
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">
                     {row.completedProjects}
@@ -379,17 +395,15 @@ function BuyersTable({ rows }: { rows: BuyerRow[] }) {
                     #{i + 1}
                   </td>
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/buyers/${row.wallet}`}
-                      className="font-mono text-xs text-foreground hover:text-primary"
-                    >
+                    <ProfileLink kind="buyers" wallet={row.wallet}>
                       <HashLink
                         hash={row.wallet}
                         kind="account"
                         visibleChars={6}
                         linkable={false}
+                        withSns
                       />
-                    </Link>
+                    </ProfileLink>
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">
                     {row.completedRfps}
@@ -486,6 +500,41 @@ function EmptyTab({ message }: { message: string }) {
     <div className="rounded-2xl border border-dashed border-border/60 bg-card/40 p-8 text-center text-sm text-muted-foreground">
       {message}
     </div>
+  );
+}
+
+/**
+ * Per-row link wrapper that builds the profile URL using `.sol` slug when
+ * the wallet has a primary domain, falling back to the pubkey otherwise.
+ *
+ * Hook is fine inside this component since it's rendered per-row inside
+ * `.map()` — each row gets its own hook instance. The bulk-prime in the
+ * parent already populated the cache, so reads here are synchronous from
+ * the in-memory layer once mounted.
+ *
+ * Initial render uses the pubkey URL (the hook returns undefined on the
+ * first frame to stay hydration-safe). After mount + cache hit, the href
+ * swaps to the .sol form. Attribute updates don't trigger hydration
+ * mismatches; only DOM-text or initial-attribute mismatches do.
+ */
+function ProfileLink({
+  kind,
+  wallet,
+  children,
+}: {
+  kind: 'providers' | 'buyers';
+  wallet: string;
+  children: React.ReactNode;
+}) {
+  const snsName = useSnsName(wallet as Address);
+  const slug = snsName ?? wallet;
+  return (
+    <Link
+      href={`/${kind}/${slug}`}
+      className="font-mono text-xs text-foreground hover:text-primary"
+    >
+      {children}
+    </Link>
   );
 }
 

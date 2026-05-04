@@ -1,5 +1,6 @@
 'use client';
 
+import type { Address } from '@solana/kit';
 import { useSelectedWalletAccount } from '@solana/react';
 import {
   GavelIcon,
@@ -15,6 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { ClientOnly } from '@/components/client-only';
 import { HashLink } from '@/components/primitives/hash-link';
+import { useSnsName } from '@/lib/sns/hooks';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -103,6 +105,11 @@ function SignedInPopover({ wallet }: { wallet: string }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const actionCount = useActionCount({ pollMs: 60_000, refetchOnOpen: open });
+  // Reverse-resolve to .sol so the navbar trigger label matches the brand
+  // identity shown everywhere else. Falls back to truncated hash if no
+  // primary domain is set.
+  const snsName = useSnsName(wallet as Address);
+  const triggerLabel = snsName ?? shortAddress(wallet);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -125,7 +132,7 @@ function SignedInPopover({ wallet }: { wallet: string }) {
                   : 'bg-emerald-500 shadow-emerald-500/60',
               )}
             />
-            {shortAddress(wallet)}
+            <span title={wallet}>{triggerLabel}</span>
             {/* Numbered pip - only renders when at least one project needs
                 action. Sized to fit single + double digits without reflow. */}
             {actionCount > 0 && (
@@ -148,7 +155,7 @@ function SignedInPopover({ wallet }: { wallet: string }) {
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Connected wallet
           </p>
-          <HashLink hash={wallet} kind="account" visibleChars={6} />
+          <HashLink hash={wallet} kind="account" visibleChars={6} withSns />
         </div>
 
         <nav className="mt-1 flex flex-col">
@@ -173,15 +180,19 @@ function SignedInPopover({ wallet }: { wallet: string }) {
               hasn't acted in a role yet still has a destination to inspect
               its zero-state - cleaner than asymmetric "provider profile but
               no buyer profile" linkage. */}
+          {/* Profile URLs prefer the .sol name when set so the address bar
+              stays readable (and shareable). Both routes also accept raw
+              pubkeys; .sol just looks better. Falls back to pubkey when
+              the wallet has no primary domain. */}
           <PopoverItem
             icon={GavelIcon}
-            href={`/providers/${wallet}`}
+            href={`/providers/${snsName ?? wallet}`}
             label="Your provider profile"
             onNavigate={() => setOpen(false)}
           />
           <PopoverItem
             icon={ScrollTextIcon}
-            href={`/buyers/${wallet}`}
+            href={`/buyers/${snsName ?? wallet}`}
             label="Your buyer profile"
             onNavigate={() => setOpen(false)}
           />

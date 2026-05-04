@@ -95,6 +95,7 @@ psql "$DATABASE_URL" -f supabase/migrations/0008_milestone_notes.sql
 - ✅ Distinct terminal states — `Completed` (work delivered) vs `Cancelled` (all milestones refunded, no work) — so buyer reputation can't be inflated by serial cancellation
 - ✅ "Your projects" workbench with next-action surfacing per RFP, including time-gated escape hatches (auto-release, mark-ghosted, default-50/50, cancel-late)
 - ✅ Off-chain milestone notes (deliverable links, change requests) attached to on-chain transitions
+- ✅ Identity layer via SNS — `.sol` names render across every wallet display surface (profiles, leaderboard, RFP cards, milestone notes, wallet popover). Privacy-safe: never resolves ephemeral bid signers; expands zero new public-identity surface. See `docs/identity.md`.
 - ✅ In-app docs at `/docs/[slug]` rendering the same `.md` files GitHub serves — single source of truth
 
 ## What's intentionally not here yet

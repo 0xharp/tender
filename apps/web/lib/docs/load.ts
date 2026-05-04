@@ -43,6 +43,13 @@ const DOCS_REGISTRY = {
     description:
       'What every BuyerReputation + ProviderReputation field counts, which actions update it, and the derived metrics the UI shows.',
   },
+  identity: {
+    file: 'docs/identity.md',
+    title: 'Identity (SNS)',
+    eyebrow: 'Reference',
+    description:
+      'How `.sol` names work in tendr.bid — and what this layer does NOT change about the privacy guarantees you get from the rest of the system.',
+  },
 } as const;
 
 export type DocSlug = keyof typeof DOCS_REGISTRY;

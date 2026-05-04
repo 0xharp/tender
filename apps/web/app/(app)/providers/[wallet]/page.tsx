@@ -10,6 +10,7 @@ import { ProfileShareButton } from '@/components/profile/profile-share-button';
 import { YourBidsList } from '@/components/rfp/your-bids-list';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCurrentWallet } from '@/lib/auth/session';
+import { preferredProfileSlug, resolveWalletParam } from '@/lib/sns/resolve-server';
 import {
   fetchProviderReputation,
   listBids,
@@ -26,8 +27,39 @@ interface PageProps {
   params: Promise<{ wallet: string }>;
 }
 
+export async function generateMetadata({ params }: PageProps) {
+  // Two jobs:
+  // 1. Set <link rel="canonical"> at the pubkey URL so search engines +
+  //    analytics dedupe `/providers/<sol>` and `/providers/<pubkey>` to
+  //    one entry. Browser bar still shows whatever the user typed.
+  // 2. Override the layout-level OpenGraph + Twitter title/description so
+  //    a share-card on X / Slack / Discord reads `sharpre.sol on tendr.bid`
+  //    instead of the generic site copy. The OG image itself comes from
+  //    the colocated `opengraph-image.tsx` route.
+  const { wallet: rawWallet } = await params;
+  try {
+    const pubkey = await resolveWalletParam(rawWallet);
+    const slug = await preferredProfileSlug(pubkey);
+    const handle = slug.endsWith('.sol') ? slug : `${pubkey.slice(0, 4)}…${pubkey.slice(-4)}`;
+    const title = `${handle} · provider on tendr.bid`;
+    const description = `Public on-chain reputation for ${handle} - sealed-bid procurement on Solana.`;
+    return {
+      title,
+      description,
+      alternates: { canonical: `/providers/${pubkey}` },
+      openGraph: { title, description, type: 'profile' as const },
+      twitter: { title, description, card: 'summary_large_image' as const },
+    };
+  } catch {
+    return {};
+  }
+}
+
 export default async function Page({ params }: PageProps) {
-  const { wallet } = await params;
+  const { wallet: rawWallet } = await params;
+  // Resolve `.sol → pubkey` (no-op for pubkey input). URL bar preserved
+  // — page renders with the canonical pubkey internally.
+  const wallet = await resolveWalletParam(rawWallet);
   const supabase = await serverSupabase();
   const walletAddr = wallet as Address;
   const sessionWallet = await getCurrentWallet();
@@ -88,6 +120,11 @@ export default async function Page({ params }: PageProps) {
     (r) => !inProgressRows.includes(r) && !completedRows.includes(r),
   );
 
+  // Use the .sol slug for the share/copy URL when this wallet has a primary
+  // domain set. Same readability win as the leaderboard links: shared URLs
+  // become /providers/sharpre.sol on X / clipboard, not the 44-char pubkey.
+  const shareSlug = await preferredProfileSlug(wallet);
+
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
       <SectionHeader
@@ -95,7 +132,7 @@ export default async function Page({ params }: PageProps) {
         title={profile?.display_name ?? 'Pseudonymous provider'}
         description={
           <span className="inline-flex flex-col gap-1.5 text-muted-foreground">
-            <HashLink hash={wallet} kind="account" visibleChars={22} />
+            <HashLink hash={wallet} kind="account" visibleChars={22} withSns />
             <span className="text-[11px]">
               Public on-chain reputation card. Visible to anyone evaluating this provider before
               awarding an RFP.
@@ -105,7 +142,7 @@ export default async function Page({ params }: PageProps) {
         size="md"
         actions={
           <ProfileShareButton
-            href={`/providers/${wallet}`}
+            href={`/providers/${shareSlug}`}
             shareText={
               profile?.display_name
                 ? `${profile.display_name} on @tendrdotbid - sealed-bid procurement on Solana. {url}`
@@ -226,7 +263,7 @@ export default async function Page({ params }: PageProps) {
           <CardTitle className="text-base">On-chain</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2.5">
-          <DataField label="wallet" value={<HashLink hash={wallet} kind="account" />} />
+          <DataField label="wallet" value={<HashLink hash={wallet} kind="account" withSns />} />
           <DataField label="program" value={<HashLink hash={TENDER_PROGRAM_ID} kind="account" />} />
         </CardContent>
       </Card>

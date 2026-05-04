@@ -6,6 +6,7 @@ import { DashboardShell } from '@/components/dashboard/dashboard-shell';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCurrentWallet } from '@/lib/auth/session';
+import { preferredProfileSlug } from '@/lib/sns/resolve-server';
 import {
   fetchBuyerReputation,
   fetchProviderReputation,
@@ -31,11 +32,15 @@ export default async function DashboardHome() {
   // that has never awarded an RFP has no BuyerReputation; one that has never
   // won has no ProviderReputation. UI renders a quiet empty state in either
   // case rather than zeroes (which would imply "active but with zero stats").
-  const [allRfps, ownBids, buyerRep, providerRep] = await Promise.all([
+  const [allRfps, ownBids, buyerRep, providerRep, profileSlug] = await Promise.all([
     listRfps(),
     listBids({ providerWallet: walletAddr }),
     fetchBuyerReputation(walletAddr),
     fetchProviderReputation(walletAddr),
+    // Prefer the connected wallet's .sol name in profile-link URLs so
+    // hovering "your provider profile →" shows /providers/sharpre.sol
+    // not /providers/CRZUd…1JYv. Falls back to pubkey if no primary set.
+    preferredProfileSlug(wallet),
   ]);
 
   const myRfps = allRfps.filter((r) => r.data.buyer === walletAddr);
@@ -101,7 +106,7 @@ export default async function DashboardHome() {
               Your provider rep
             </CardTitle>
             <Link
-              href={`/providers/${wallet}`}
+              href={`/providers/${profileSlug}`}
               className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
             >
               your provider profile →
@@ -139,7 +144,7 @@ export default async function DashboardHome() {
               Your buyer rep
             </CardTitle>
             <Link
-              href={`/buyers/${wallet}`}
+              href={`/buyers/${profileSlug}`}
               className="font-mono text-[10px] text-muted-foreground hover:text-foreground"
             >
               your buyer profile →

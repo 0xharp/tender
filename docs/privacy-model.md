@@ -154,6 +154,19 @@ What this design does NOT promise, and why:
 
 ---
 
+## What SNS adds (and what it does NOT change)
+
+tendr.bid integrates [Solana Name Service](/docs/identity) to render `.sol` names everywhere wallet hashes appear. **SNS does not weaken any of the privacy guarantees above.** Specifically:
+
+- **SNS resolution is read-only browser-side.** The Tendr Anchor program touches no SNS accounts. SNS is a display-layer enhancement, not a chain-state change.
+- **SNS only resolves ALREADY-PUBLIC wallets.** In private-bidder mode, the bid signer is a per-RFP ephemeral wallet — we never SNS-resolve ephemerals. Code convention enforces it (see `apps/web/lib/sns/resolve.ts` precondition + `apps/web/components/escrow/confirm-dialogs.tsx` explicit "no withSns" comment on the ephemeral signer's display).
+- **Losing bidders' main wallets stay sealed.** Their main wallets are never linked to their bids on chain. SNS resolution can't surface what was never linked. Always.
+- **Winners' main wallets are revealed via the existing Ed25519 binding signature** at `select_bid` time — same mechanism as before SNS existed. We then render the winner's `.sol` name (if set) on their profile, leaderboard, etc. SNS adds no new disclosure here; it labels public data.
+
+Net effect: SNS makes already-public wallets human-readable. It expands zero new public surface. Full detail in [identity](/docs/identity).
+
+---
+
 ## Reference
 
 - `programs/tender/src/instructions/commit_bid_init.rs` — bid init (provider field = main wallet in default mode, ephemeral in private-bidder mode)

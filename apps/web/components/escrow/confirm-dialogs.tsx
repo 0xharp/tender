@@ -133,11 +133,15 @@ export function AwardConfirmDialog({
           <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-card/40 p-3 text-xs">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-muted-foreground">Payout to</span>
-              <HashLink hash={pending.payoutWallet} kind="account" visibleChars={6} />
+              {/* payoutWallet is the verified main wallet (winner_provider
+                  post-binding-sig) - safe for SNS. */}
+              <HashLink hash={pending.payoutWallet} kind="account" visibleChars={6} withSns />
             </div>
             {pending.isPrivate && (
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-muted-foreground">Bid signer (ephemeral)</span>
+                {/* INTENTIONALLY NO withSns - this is a per-RFP ephemeral
+                    wallet. Privacy invariant: never resolve SNS for ephemerals. */}
                 <HashLink hash={pending.bidSignerWallet} kind="account" visibleChars={6} />
               </div>
             )}

@@ -28,6 +28,7 @@ import {
   submitBid,
 } from '@/lib/bids/submit-flow';
 import { prefetchCloak } from '@/lib/sdks/cloak';
+import { useSnsName } from '@/lib/sns/hooks';
 import { rpc } from '@/lib/solana/client';
 import type { Address } from '@solana/kit';
 
@@ -578,14 +579,21 @@ function PrivacyModeIndicator({
   isPrivate,
   mainWallet,
 }: { isPrivate: boolean; mainWallet: string }) {
+  // SNS resolution for the connected main wallet — safe (this IS the user's
+  // main wallet, already known to be public when bidding in non-private mode).
+  // In private mode the bid signer is the ephemeral, NOT main; we still
+  // resolve main here only to render the "you'll bid AS alice.sol" indicator
+  // — the resolution is local, no on-chain trace tied to the bid.
+  const mainSnsName = useSnsName(mainWallet as Address);
+  const mainDisplay = mainSnsName ?? `${mainWallet.slice(0, 8)}…${mainWallet.slice(-4)}`;
   if (!isPrivate) {
     return (
       <div className="rounded-xl border border-border bg-card/30 p-4 text-xs leading-relaxed">
         <div className="mb-1 text-sm font-medium text-foreground">Public bidder list</div>
         <p className="text-muted-foreground">
           Anyone scanning this RFP on-chain will see your bid was placed by
-          <span className="ml-1 font-mono">
-            {mainWallet.slice(0, 8)}…{mainWallet.slice(-4)}
+          <span className="ml-1 font-mono" title={mainWallet}>
+            {mainDisplay}
           </span>
           . Bid contents (price, scope, milestones) stay sealed until the buyer reveals. Reputation
           accrues to your main wallet on each accepted milestone.

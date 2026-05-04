@@ -52,7 +52,7 @@ export function MilestoneNotesThread({ notes }: { notes: MilestoneNoteRow[] }) {
                 {KIND_LABEL[n.kind]}
               </span>
               <span className="font-mono text-muted-foreground">
-                <HashLink hash={n.author_wallet} kind="account" visibleChars={10} />
+                <HashLink hash={n.author_wallet} kind="account" visibleChars={10} withSns />
               </span>
               <span className="text-muted-foreground">·</span>
               <span className="text-muted-foreground">

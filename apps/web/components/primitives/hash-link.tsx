@@ -1,10 +1,12 @@
 'use client';
 
+import type { Address } from '@solana/kit';
 import { ArrowUpRightIcon, CheckIcon, CopyIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { useSnsName } from '@/lib/sns/hooks';
 import { cn } from '@/lib/utils';
 
 export interface HashLinkProps {
@@ -27,6 +29,17 @@ export interface HashLinkProps {
   copyable?: boolean;
   /** Render the truncated text as a link. Default true if a URL is resolvable. */
   linkable?: boolean;
+  /**
+   * Opt-in: resolve the hash as a Solana wallet against SNS and render the
+   * `.sol` name (e.g. `alice.sol`) instead of the truncated hash if found.
+   * Tooltip continues to show the underlying wallet hash so users can verify.
+   *
+   * PRIVACY INVARIANT — only set true for ALREADY-PUBLIC wallets (buyer
+   * wallets on RFPs, winner_provider wallets post-award, leaderboard
+   * entries, profile pages). NEVER set true on a HashLink rendering a
+   * per-RFP ephemeral bid signer. See `lib/sns/resolve.ts` for why.
+   */
+  withSns?: boolean;
   className?: string;
 }
 
@@ -50,19 +63,32 @@ export function HashLink({
   external,
   copyable = true,
   linkable = true,
+  withSns = false,
   className,
 }: HashLinkProps) {
   const [copied, setCopied] = useState(false);
+
+  // SNS reverse-resolution: only when explicitly opted in by the caller
+  // AND the kind suggests this is a wallet (not a tx hash). Hook returns
+  // undefined while loading + null if no .sol set; either way we fall
+  // back to the truncated-hash display.
+  const snsName = useSnsName(withSns && kind === 'account' ? (hash as Address) : null);
 
   const resolvedHref =
     href ?? (kind === 'none' ? null : `https://solscan.io/${kind}/${hash}?cluster=${cluster}`);
   const showLink = linkable && resolvedHref !== null;
   const opensExternal = external ?? !href;
 
-  const display =
+  const truncated =
     hash.length <= visibleChars * 2 + 1
       ? hash
       : `${hash.slice(0, visibleChars)}…${hash.slice(-visibleChars)}`;
+
+  // When SNS resolves, swap the visible label to the .sol name. Tooltip
+  // (title attr) keeps the underlying wallet visible so users can verify
+  // they're looking at the right wallet.
+  const display = snsName ?? truncated;
+  const titleAttr = snsName ? `${snsName} · ${hash}` : undefined;
 
   const copy = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -78,7 +104,10 @@ export function HashLink({
   };
 
   const labelEl = (
-    <span className="inline-flex items-center gap-1 font-mono text-xs tabular-nums">
+    <span
+      className="inline-flex items-center gap-1 font-mono text-xs tabular-nums"
+      title={titleAttr}
+    >
       {display}
       {showLink && (
         <ArrowUpRightIcon className="size-3 opacity-50 transition-opacity group-hover/hashlink:opacity-100" />

@@ -8,6 +8,7 @@ import { SectionHeader } from '@/components/primitives/section-header';
 import { ProfileShareButton } from '@/components/profile/profile-share-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCurrentWallet } from '@/lib/auth/session';
+import { preferredProfileSlug, resolveWalletParam } from '@/lib/sns/resolve-server';
 import {
   fetchBuyerReputation,
   listRfps,
@@ -25,11 +26,39 @@ interface PageProps {
   params: Promise<{ wallet: string }>;
 }
 
+export async function generateMetadata({ params }: PageProps) {
+  // See providers/[wallet]/page.tsx for the rationale on the OG/Twitter
+  // overrides - same pattern, different copy.
+  const { wallet: rawWallet } = await params;
+  try {
+    const pubkey = await resolveWalletParam(rawWallet);
+    const slug = await preferredProfileSlug(pubkey);
+    const handle = slug.endsWith('.sol') ? slug : `${pubkey.slice(0, 4)}…${pubkey.slice(-4)}`;
+    const title = `${handle} · buyer on tendr.bid`;
+    const description = `Public on-chain reputation for ${handle} - sealed-bid procurement on Solana.`;
+    return {
+      title,
+      description,
+      alternates: { canonical: `/buyers/${pubkey}` },
+      openGraph: { title, description, type: 'profile' as const },
+      twitter: { title, description, card: 'summary_large_image' as const },
+    };
+  } catch {
+    return {};
+  }
+}
+
 export default async function Page({ params }: PageProps) {
-  const { wallet } = await params;
+  const { wallet: rawWallet } = await params;
+  // Resolve `.sol → pubkey`. URL bar stays as-typed (.sol if .sol, pubkey
+  // if pubkey). Page renders with the canonical pubkey internally.
+  const wallet = await resolveWalletParam(rawWallet);
   const walletAddr = wallet as Address;
   const sessionWallet = await getCurrentWallet();
   const isOwnProfile = sessionWallet === wallet;
+  // Slug used in the share/copy URL — .sol when this wallet has a primary
+  // domain, otherwise pubkey. Same readability win as the leaderboard links.
+  const shareSlug = await preferredProfileSlug(wallet);
 
   // Pull on-chain rep + every RFP this buyer has CREATED (not just awarded).
   // listRfps with the buyer memcmp filter gives us the full set including
@@ -87,7 +116,7 @@ export default async function Page({ params }: PageProps) {
         title="Pseudonymous buyer"
         description={
           <span className="inline-flex flex-col gap-1.5 text-muted-foreground">
-            <HashLink hash={wallet} kind="account" visibleChars={22} />
+            <HashLink hash={wallet} kind="account" visibleChars={22} withSns />
             <span className="text-[11px]">
               Public on-chain reputation card. Visible to anyone deciding whether to bid on this
               buyer's RFPs.
@@ -97,7 +126,7 @@ export default async function Page({ params }: PageProps) {
         size="md"
         actions={
           <ProfileShareButton
-            href={`/buyers/${wallet}`}
+            href={`/buyers/${shareSlug}`}
             shareText="My buyer profile on @tendrdotbid - sealed-bid procurement on Solana. {url}"
           />
         }
@@ -232,7 +261,7 @@ export default async function Page({ params }: PageProps) {
           <CardTitle className="text-base">On-chain</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2.5">
-          <DataField label="wallet" value={<HashLink hash={wallet} kind="account" />} />
+          <DataField label="wallet" value={<HashLink hash={wallet} kind="account" withSns />} />
           <DataField label="program" value={<HashLink hash={TENDER_PROGRAM_ID} kind="account" />} />
         </CardContent>
       </Card>

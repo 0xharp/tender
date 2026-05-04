@@ -39,6 +39,36 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+export async function generateMetadata({ params }: PageProps) {
+  // Per-RFP OpenGraph + Twitter title/description so a shared link reads
+  // as the actual RFP rather than the generic site copy. Image itself
+  // comes from the colocated `opengraph-image.tsx` route. Defensive: if
+  // the RFP doesn't exist in supabase yet (race during create flow) we
+  // fall through to the layout-level metadata.
+  const { id } = await params;
+  try {
+    const supabase = await serverSupabase();
+    const { data } = await supabase
+      .from('rfps')
+      .select('title, scope_summary')
+      .eq('on_chain_pda', id)
+      .maybeSingle();
+    if (!data?.title) return {};
+    const title = `${data.title} · tendr.bid`;
+    const description = data.scope_summary
+      ? `${data.scope_summary.slice(0, 180)}${data.scope_summary.length > 180 ? '…' : ''}`
+      : 'Sealed-bid procurement RFP on Solana - bids stay private until the window closes.';
+    return {
+      title,
+      description,
+      openGraph: { title, description, type: 'article' as const },
+      twitter: { title, description, card: 'summary_large_image' as const },
+    };
+  } catch {
+    return {};
+  }
+}
+
 function formatBudget(usdc: string): string {
   const n = Number(usdc);
   if (Number.isNaN(n)) return `${usdc} USDC`;
@@ -215,7 +245,18 @@ export default async function Page({ params }: PageProps) {
           <CardHeader className="flex flex-row items-baseline justify-between gap-3">
             <CardTitle className="text-base">Scope</CardTitle>
             <span className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-              buyer · <HashLink hash={buyerWallet} kind="account" visibleChars={4} />
+              buyer ·{' '}
+              <HashLink
+                hash={buyerWallet}
+                kind="account"
+                visibleChars={4}
+                withSns
+                // Wrapper span sets `uppercase tracking-[0.16em]` for the
+                // label style; cancel both on the address itself so a `.sol`
+                // name renders as `sharpre.sol`, not `SHARPRE.SOL`, and the
+                // hash keeps its base58 case + spacing intact.
+                className="normal-case tracking-normal"
+              />
               {/* Inline trust badge: signals to bidders whether the buyer
                   has a track record of funding + completing past RFPs.
                   Reads tone:
