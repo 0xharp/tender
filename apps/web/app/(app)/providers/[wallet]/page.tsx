@@ -325,7 +325,10 @@ function AwardedProjectGroup({ label, rows }: { label: string; rows: AwardedProj
                 <StatusPill tone={awardedStatusTone(r.status)}>{r.status}</StatusPill>
               </div>
               <div className="flex flex-wrap items-baseline gap-3 font-mono text-[11px] text-muted-foreground">
-                <HashLink hash={r.pda} kind="account" visibleChars={6} />
+                {/* linkable={false} — outer <Link> wraps the whole card,
+                    nesting another <a> (default Solscan link) is invalid
+                    HTML. Copy still works. */}
+                <HashLink hash={r.pda} kind="account" visibleChars={6} linkable={false} />
                 <span>·</span>
                 <span>${microUsdcToDecimal(r.contractValueMicroUsdc)}</span>
               </div>

@@ -167,7 +167,11 @@ function ProjectCard({ row }: { row: ProjectRow }) {
             <StatusPill tone={statusTone(row.status)}>{row.status}</StatusPill>
           </div>
           <div className="flex flex-wrap items-baseline gap-3 font-mono text-[11px] text-muted-foreground">
-            <HashLink hash={row.rfpPda} kind="account" visibleChars={6} />
+            {/* linkable={false} — the whole card is already wrapped in a
+                <Link> to the RFP detail; nesting another <a> here (the
+                default Solscan link) is invalid HTML + a hydration error.
+                Copy still works. */}
+            <HashLink hash={row.rfpPda} kind="account" visibleChars={6} linkable={false} />
             <span>·</span>
             <span>${microUsdcToDecimal(row.contractValueMicroUsdc)}</span>
             {row.milestoneCount > 0 && (
