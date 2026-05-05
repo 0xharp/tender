@@ -38,16 +38,13 @@ RUN npm install --omit=dev
 # ─── model + config ───────────────────────────────────────────────────────────
 COPY qvac.config.json ./
 
-# Preload the model at build time so the container doesn't have to download
-# ~4 GB on every cold start. The exact URL + filename match QWEN3_7B_INST_Q4
-# from QVAC's model registry.
-#
-# If you want to cut image size + accept first-request latency, comment this
-# block out and let qvac auto-download on first preload.
-RUN mkdir -p /root/.qvac/models && \
-    curl -L --fail --retry 3 \
-      -o /root/.qvac/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf \
-      https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf
+# We DON'T bake the model into the image — QVAC's loader resolves the
+# `QWEN3_4B_Q4_K_M` constant in qvac.config.json to its own registry
+# download URL on first preload. Tradeoff: smaller image (~700 MB
+# instead of ~3 GB), ~30s cold-start delay on the first container boot
+# while the model downloads (subsequent restarts on the same Nosana
+# host hit the local cache). Acceptable for the demo; revisit if cold
+# starts become painful at scale.
 
 # ─── runtime ──────────────────────────────────────────────────────────────────
 EXPOSE 11434

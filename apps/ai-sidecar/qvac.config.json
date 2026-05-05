@@ -3,7 +3,7 @@
   "serve": {
     "models": {
       "tendr-llm": {
-        "model": "QWEN3_7B_INST_Q4",
+        "model": "QWEN3_4B_Q4_K_M",
         "default": true,
         "preload": true,
         "config": {

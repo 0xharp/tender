@@ -7,8 +7,8 @@ Local-first LLM sidecar for tendr.bid, powered by [Tether QVAC](https://qvac.tet
 | File | Purpose |
 |---|---|
 | `package.json` | Bare-runtime deps: `@qvac/sdk`, `@qvac/cli`, `@qvac/llm-llamacpp`, `@qvac/dl-filesystem` |
-| `qvac.config.json` | One model alias (`tendr-llm`) → Qwen 2.5 7B Instruct Q4. Preloaded at boot. |
-| `Dockerfile` | Bare runtime + QVAC + model preload. Built for Nosana GPU deploy. |
+| `qvac.config.json` | One model alias (`tendr-llm`) → Qwen 3 4B Q4_K_M (largest Qwen3 in QVAC's registry). Preloaded at boot. |
+| `Dockerfile` | Bare runtime + QVAC. Model downloaded on first boot via QVAC's registry (~30s cold start). Built for Nosana GPU deploy. |
 
 ## Run locally
 
@@ -21,7 +21,7 @@ npm install
 qvac serve openai --cors --host 0.0.0.0 --port 11434
 ```
 
-First boot downloads ~4 GB of model weights to `~/.qvac/models/` (one-time). Subsequent boots are fast.
+First boot downloads ~2.5 GB of model weights (Qwen 3 4B Q4_K_M) to `~/.qvac/models/` (one-time). Subsequent boots are fast.
 
 Smoke-test:
 ```bash
@@ -55,7 +55,7 @@ The repo deploys as a single container — no orchestration needed.
 3. **Create a Nosana deployment** at https://dashboard.nosana.com:
    - Template: **Custom Docker Image**
    - Image: `<yourname>/tendr-ai-sidecar:latest`
-   - GPU: NVIDIA 4090 or equivalent (Qwen 7B Q4 fits in <8 GB VRAM)
+   - GPU: anything with ≥6 GB VRAM (Qwen 3 4B Q4_K_M fits in ~3-4 GB; T4 / L4 / 3060 12GB / 4080 / 4090 all work)
    - Exposed port: `11434`
    - Strategy: SIMPLE, 1 replica
 4. **Copy the endpoint URL** Nosana gives you (`https://<id>.node.k8s.prd.nos.ci`)
@@ -64,7 +64,7 @@ The repo deploys as a single container — no orchestration needed.
    NEXT_PUBLIC_QVAC_BASE_URL=https://<your-id>.node.k8s.prd.nos.ci/v1
    ```
 
-The deployment auto-starts. First request after start may take ~30s for model preload (the Dockerfile bakes weights in so we skip the download step on every cold boot — just CPU→GPU memory copy).
+The deployment auto-starts. First request after start takes ~30-60s while QVAC downloads the model from its registry to the Nosana host's local cache; subsequent requests on that same deployment are fast (model stays in GPU memory).
 
 ## Why this architecture
 
