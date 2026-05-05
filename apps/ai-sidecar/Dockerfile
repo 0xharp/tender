@@ -24,14 +24,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       tini \
     && rm -rf /var/lib/apt/lists/*
 
-# Bare runtime — QVAC requires Bare ≥ 1.24
-RUN npm install -g bare@^1.24 @qvac/cli@latest
+# Bare runtime — QVAC requires Bare ≥ 1.24. Bare is installed globally
+# because @qvac/cli's bundled native deps need a system-wide bare binary.
+# `@qvac/cli` itself is installed LOCALLY (per-project, not globally) so
+# it resolves @qvac/sdk from /app/node_modules — without that, the cli's
+# `loadModelConstants` falls back to a bundled older sdk that doesn't
+# know about the larger Qwen3 model constants we use in qvac.config.json.
+RUN npm install -g bare@^1.24
 
 WORKDIR /app
 
 # ─── deps install ─────────────────────────────────────────────────────────────
 # Copy only package.json first so this layer caches when only the model
-# config changes.
+# config changes. All qvac packages pinned to specific versions in
+# package.json (not `*`) so the model registry is deterministic across
+# rebuilds.
 COPY package.json ./
 RUN npm install --omit=dev
 
@@ -60,7 +67,7 @@ ENTRYPOINT ["/usr/bin/tini", "--"]
 # --cors lets the buyer's browser hit this directly (no preflight rejection).
 # --host 0.0.0.0 binds to all interfaces inside the container; Nosana exposes
 # port 11434 to the public via its own ingress.
-CMD ["qvac", "serve", "openai", \
+CMD ["npx", "qvac", "serve", "openai", \
      "--cors", \
      "--host", "0.0.0.0", \
      "--port", "11434", \
