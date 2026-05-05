@@ -9,7 +9,7 @@
         "config": {
           "ctx_size": 8192,
           "device": "gpu",
-          "gpu_layers": "999",
+          "gpu_layers": 999,
           "tools": false
         }
       }
