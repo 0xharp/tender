@@ -30,7 +30,12 @@ import {
   buildBidDraftUserPrompt,
   buildRfpScopeUserPrompt,
 } from './prompts';
-import { type BidComparison, parseBidComparison } from './types';
+import {
+  type BidComparison,
+  type BidDraft,
+  parseBidComparison,
+  parseBidDraft,
+} from './types';
 
 export type AiResult<T> =
   | { ok: true; value: T }
@@ -38,6 +43,23 @@ export type AiResult<T> =
 
 const NOT_CONFIGURED_REASON =
   'AI is not configured for this app. Set NEXT_PUBLIC_QVAC_BASE_URL to enable AI features.';
+
+/**
+ * Strip Qwen3 reasoning blocks from a model response.
+ *
+ * Qwen3 wraps chain-of-thought in `<think>…</think>`. We tell the model
+ * to skip thinking via `/no_think` in every system prompt (see
+ * prompts.ts), but if the directive is ignored or the response includes
+ * partial reasoning we strip it here before returning to the UI. Both
+ * a complete `<think>...</think>` block and a leading unclosed `<think>`
+ * (when generation hit max_tokens mid-reasoning) are removed.
+ */
+function stripThinking(raw: string): string {
+  // Closed blocks first - greedy across newlines.
+  const closed = raw.replace(/<think>[\s\S]*?<\/think>\s*/gi, '');
+  // Then any leading unclosed <think> ... (no closer because gen ran out).
+  return closed.replace(/^[\s\S]*?<think>[\s\S]*$/i, '').trim() || closed.trim();
+}
 
 // ─── 1. RFP scope drafting ───────────────────────────────────────────────────
 
@@ -58,7 +80,7 @@ export async function draftRfpScope(args: {
         { role: 'user', content: buildRfpScopeUserPrompt(args) },
       ],
     });
-    const text = completion.choices[0]?.message?.content?.trim();
+    const text = stripThinking(completion.choices[0]?.message?.content ?? '');
     if (!text) return { ok: false, reason: 'AI returned an empty response.' };
     return { ok: true, value: text };
   } catch (e) {
@@ -110,26 +132,47 @@ export async function compareBids(args: {
 
 // ─── 3. Provider bid drafting ────────────────────────────────────────────────
 
+/** Same parsed/raw discriminator as `compareBids` — when the model
+ *  returns valid JSON we hand back the structured draft (which the
+ *  modal uses to populate every bid form field on accept). When it
+ *  drifts off-format we hand back the raw text so the user at least
+ *  has something to copy. */
+export type DraftBidValue =
+  | { kind: 'parsed'; draft: BidDraft }
+  | { kind: 'raw'; text: string };
+
 export async function draftBid(args: {
   rfpScope: string;
   rfpTitle?: string;
   category?: string;
-  buyerSuggestedBudgetUsdc?: string;
-}): Promise<AiResult<string>> {
+  /** Free-text the provider typed in the modal (tech stack, target
+   *  price, preferred timeline, specialization). Anchors the model's
+   *  pricing + approach. */
+  providerContext?: string;
+}): Promise<AiResult<DraftBidValue>> {
   const client = getQvacClient();
   if (!client) return { ok: false, reason: NOT_CONFIGURED_REASON };
   try {
     const completion = await client.chat.completions.create({
       model: TENDR_MODEL_ALIAS,
       ...DEFAULT_GEN_PARAMS,
+      // Structured bid output runs longer than the old markdown blob —
+      // ~2000 tokens covers price + timeline + scope markdown + 5
+      // milestones with descriptions + risk flags. Prompt enforces the
+      // 7000 char total budget.
+      max_tokens: 2500,
       messages: [
         { role: 'system', content: BID_DRAFT_SYSTEM_PROMPT },
         { role: 'user', content: buildBidDraftUserPrompt(args) },
       ],
     });
-    const text = completion.choices[0]?.message?.content?.trim();
+    const text = stripThinking(completion.choices[0]?.message?.content ?? '').trim();
     if (!text) return { ok: false, reason: 'AI returned an empty response.' };
-    return { ok: true, value: text };
+    const parsed = parseBidDraft(text);
+    if (parsed) return { ok: true, value: { kind: 'parsed', draft: parsed } };
+    // Off-format fallback — surface the raw text so the user at least
+    // gets something to copy. Modal renders it in a read-only block.
+    return { ok: true, value: { kind: 'raw', text } };
   } catch (e) {
     return { ok: false, reason: friendlyError(e) };
   }
@@ -161,4 +204,4 @@ function friendlyError(e: unknown): string {
 // ─── re-exports ──────────────────────────────────────────────────────────────
 
 export { isAiAvailable };
-export type { BidComparison } from './types';
+export type { BidComparison, BidDraft, BidDraftMilestone } from './types';

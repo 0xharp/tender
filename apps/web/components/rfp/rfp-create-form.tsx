@@ -23,13 +23,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import { Textarea } from '@/components/ui/textarea';
 import { friendlyBidError } from '@/lib/bids/error-utils';
 import { type SubmitStage, submitRfpCreate } from '@/lib/rfps/create-flow';
 import { RFP_CATEGORIES, type RfpFormValues, rfpFormSchema } from '@/lib/rfps/schema';
 import { rpc, rpcSubscriptions } from '@/lib/solana/client';
 
-function CharCounter({ value, min, max }: { value: string; min: number; max: number }) {
+function CharCounter({
+  value,
+  min,
+  max,
+  hint,
+}: { value: string; min: number; max: number; hint?: string }) {
   const len = value.length;
   const tooShort = len < min;
   const tooLong = len > max;
@@ -41,7 +47,7 @@ function CharCounter({ value, min, max }: { value: string; min: number; max: num
           : 'text-[10px] text-muted-foreground'
       }
     >
-      {len} / {max} characters
+      {len} / {max} characters{hint ? ` · ${hint}` : ''}
       {tooShort && ` · ${min - len} more required`}
       {tooLong && ` · ${len - max} over the limit`}
     </p>
@@ -198,17 +204,37 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
                   onClick={() => setAiOpen(true)}
                 >
                   <SparklesIcon className="size-3.5" />
-                  Draft with AI
+                  Draft with QVAC Private AI
                 </Button>
               )}
             </div>
-            <Textarea
+            {/* MarkdownEditor instead of plain Textarea — AI-drafted scopes
+                arrive as markdown, and we render markdown on the RFP detail
+                page. Tabbed Edit/Preview lets the buyer verify formatting
+                before posting. RHF.register doesn't compose with this
+                component (custom value/onChange API), so we read/write via
+                watch + setValue. shouldDirty/shouldTouch keep the form
+                state honest for validation + submit-button enabling. */}
+            <MarkdownEditor
               id="scope_summary"
               rows={6}
-              placeholder="What you need delivered, success criteria, exclusions, deadlines."
-              {...form.register('scope_summary')}
+              placeholder="What you need delivered, success criteria, exclusions, deadlines. Markdown supported."
+              value={form.watch('scope_summary') ?? ''}
+              onChange={(text) =>
+                form.setValue('scope_summary', text, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                  shouldValidate: true,
+                })
+              }
+              ariaInvalid={!!form.formState.errors.scope_summary}
             />
-            <CharCounter value={form.watch('scope_summary') ?? ''} min={20} max={4000} />
+            <CharCounter
+              value={form.watch('scope_summary') ?? ''}
+              min={20}
+              max={4000}
+              hint="markdown source"
+            />
             {form.formState.errors.scope_summary && (
               <p className="text-xs text-destructive">
                 {form.formState.errors.scope_summary.message}
@@ -222,13 +248,16 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
             mode={{
               kind: 'rfp-scope',
               category: form.watch('category'),
-              budgetUsdc: form.watch('contract_value_usdc'),
+              budgetUsdc: form.watch('reserve_price_usdc') || undefined,
               timelineDays: form.watch('bid_window_hours')
                 ? Math.ceil(Number(form.watch('bid_window_hours')) / 24)
                 : undefined,
-            }}
-            onAccept={(text) => {
-              form.setValue('scope_summary', text, { shouldValidate: true, shouldDirty: true });
+              onAccept: (text) => {
+                form.setValue('scope_summary', text, {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                });
+              },
             }}
           />
 

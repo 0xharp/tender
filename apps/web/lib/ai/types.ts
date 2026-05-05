@@ -88,3 +88,75 @@ function extractFirstJsonObject(s: string): string | null {
   }
   return null;
 }
+
+// ─── draftBid JSON schema ────────────────────────────────────────────────────
+//
+// Bid drafting now returns structured JSON so the modal can populate every
+// field of the bid form (price, timeline, scope markdown, milestones array)
+// instead of dropping a markdown blob into just the scope textarea. The
+// schema is a SUBSET of the bid composer's own form fields — we deliberately
+// keep field names + bounds in sync so the AI's output is drop-in compatible:
+//
+//   priceUsdc           ← form `price_usdc`           (regex: digits + optional cents)
+//   timelineDays        ← form `timeline_days`        (1-365)
+//   scope               ← form `scope`                (20-8000 chars, markdown ok)
+//   milestones[].name           ← form milestones[].name           (1-120)
+//   milestones[].description    ← form milestones[].description    (1-2000)
+//   milestones[].amountUsdc     ← form milestones[].amount_usdc    (regex)
+//   milestones[].durationDays   ← form milestones[].duration_days  (0-365)
+//   milestones[].successCriteria← form milestones[].success_criteria (≤1000)
+//
+// If the AI drifts off-schema we fall back to `kind: 'raw'` (raw text in the
+// modal preview, user copies/pastes manually). Same pattern as bid comparison.
+
+export const bidDraftMilestoneSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().min(1).max(2000),
+  // Accept number or string — Qwen sometimes emits unquoted numerics for
+  // the amount; we coerce to canonical string downstream.
+  amountUsdc: z.union([z.string(), z.number()]).transform((v) => String(v)),
+  durationDays: z.number().int().min(0).max(365),
+  successCriteria: z.string().max(1000).optional(),
+});
+
+export const bidDraftSchema = z.object({
+  priceUsdc: z.union([z.string(), z.number()]).transform((v) => String(v)),
+  timelineDays: z.number().int().min(1).max(365),
+  scope: z.string().min(20).max(8000),
+  milestones: z.array(bidDraftMilestoneSchema).min(1).max(8),
+  /** Optional — short bullet-style flags surfaced in the modal preview
+   *  but never written into the form. Provider can read and decide. */
+  riskFlags: z.array(z.string()).optional().default([]),
+});
+
+export type BidDraftMilestone = z.infer<typeof bidDraftMilestoneSchema>;
+export type BidDraft = z.infer<typeof bidDraftSchema>;
+
+/**
+ * Same tolerant-parse pattern as `parseBidComparison` — direct, then
+ * fence-stripped, then balanced-object extraction. Returns null if the
+ * response can't be coerced into the schema.
+ */
+export function parseBidDraft(raw: string): BidDraft | null {
+  const direct = tryParseBidDraft(raw);
+  if (direct) return direct;
+  const fenceStripped = raw.replace(/```(?:json)?\n?|\n?```/g, '').trim();
+  const fromFence = tryParseBidDraft(fenceStripped);
+  if (fromFence) return fromFence;
+  const match = extractFirstJsonObject(raw);
+  if (match) {
+    const fromExtract = tryParseBidDraft(match);
+    if (fromExtract) return fromExtract;
+  }
+  return null;
+}
+
+function tryParseBidDraft(s: string): BidDraft | null {
+  try {
+    const parsed = JSON.parse(s);
+    const validated = bidDraftSchema.safeParse(parsed);
+    return validated.success ? validated.data : null;
+  } catch {
+    return null;
+  }
+}

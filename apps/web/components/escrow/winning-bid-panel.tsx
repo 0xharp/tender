@@ -41,6 +41,7 @@ import { friendlyBidError, humanizeStage } from '@/lib/bids/error-utils';
 import type { SealedBidPlaintext } from '@/lib/bids/schema';
 import { fetchBidCommit } from '@/lib/solana/chain-reads';
 import { rpc } from '@/lib/solana/client';
+import { InlineMarkdown } from '@/components/ui/markdown';
 import { cn } from '@/lib/utils';
 
 /* -------------------------------------------------------------------------- */
@@ -396,11 +397,12 @@ function BidPlaintextDetails({ plaintext }: { plaintext: SealedBidPlaintext }) {
         </Field>
       </div>
 
-      {/* Scope */}
+      {/* Scope — full markdown render. Bid scope can be markdown (AI-drafted
+          or user-typed). The provider also sees this same render in
+          your-bid-panel; consistency matters since they're looking at the
+          same string from two angles. */}
       <Field label="Scope">
-        <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-foreground/85">
-          {plaintext.scope}
-        </p>
+        <InlineMarkdown source={plaintext.scope} className="flex flex-col gap-2 text-[11px]" />
       </Field>
 
       {/* Milestone breakdown */}

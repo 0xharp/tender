@@ -1,86 +1,92 @@
-# AI on tendr.bid (QVAC)
+# AI on tendr.bid (powered by QVAC)
 
-> Three buttons across the app — **Draft scope with AI** on the RFP create form, **Compare bids with AI** on the buyer's award screen, **Draft starting bid with AI** in the bid composer. All three run on a local-first LLM (Tether QVAC), called directly from your browser. No third-party AI provider sees your data.
+Tendr ships three AI surfaces — RFP scope drafting, bid drafting, and post-decrypt bid comparison — using [Tether QVAC](https://qvac.tether.io/) as the inference engine. Same workflow shape as ChatGPT-style "draft this for me", but the bytes never leave for OpenAI / Anthropic / Google. They go from your browser straight to a QVAC sidecar we operate ourselves.
 
 ## Where the AI shows up
 
 | Surface | Who uses it | What it does |
 |---|---|---|
-| RFP create → "Draft with AI" button next to **Scope summary** | Buyer | Type a paragraph describing what you need; AI returns a structured scope (objectives, deliverables, milestones, success criteria) you can edit before posting. |
-| Award screen → "Compare bids with AI" button under the decrypted bid list | Buyer | After you've decrypted the sealed bids, AI generates a side-by-side comparison table + recommends a winner with reasoning. |
-| Bid composer → "Draft starting bid with AI" button next to **Scope** | Provider | AI reads the RFP scope and proposes a starting-point bid (price, timeline, milestones). Edit before submitting. |
+| RFP create → **Draft with AI** button next to *Scope summary* | Buyer | Type a paragraph describing what you need; QVAC returns a structured scope (objectives, deliverables, milestones, success criteria) you can edit before posting. |
+| Bid composer → **Start drafting bid with AI** button next to *Scope* | Provider | Reads the RFP scope + your optional context (tech stack, target price, timeline). Returns a complete bid draft — price, timeline, scope markdown, and a populated milestones array with acceptance criteria. Every field of the bid form gets filled in on accept. |
+| Award screen → **Compare bids with AI** button under the decrypted bid list | Buyer | After you've decrypted the sealed bids, QVAC generates a side-by-side comparison table + recommends a winner with reasoning. |
 
-All three buttons hide themselves automatically when the AI sidecar isn't configured — the rest of the product works identically without AI.
+All three buttons hide themselves automatically when the QVAC sidecar URL isn't configured (`NEXT_PUBLIC_QVAC_BASE_URL`). The rest of the product works identically without AI — nothing in the bidding, awarding, escrow, milestone, or reputation flows depends on AI being present.
 
-## How it works (the short version)
+## How it works
 
 1. **Your browser** calls the QVAC sidecar directly over HTTPS.
-2. **The QVAC sidecar** is a small process running [Tether QVAC](https://qvac.tether.io)'s OpenAI-compatible HTTP server. It loads a Qwen 2.5 7B Instruct (4-bit quantized) model from disk and runs inference on the GPU.
-3. **The response** comes back to your browser. The buyer's bid plaintexts (or RFP scope, or whatever you sent) never persist anywhere — request in, response out.
+2. **The QVAC sidecar** is a small process running [QVAC](https://qvac.tether.io/) on the [Bare runtime](https://bare.pears.com/), exposing an OpenAI-compatible HTTP server (`POST /v1/chat/completions`). It loads the [Qwen3 4B Instruct (Q4_K_M quant)](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507-GGUF) model into a single dedicated GPU and runs inference there.
+3. **The response** comes back to your browser. The sidecar holds no per-user state — request in, response out.
 
 ```
 Your browser  ───────HTTPS──────▶  QVAC sidecar (Nosana GPU)
               ◀──────HTTPS──────
-              (decrypted bids)        (Qwen 2.5 7B,
-              (RFP scope, etc.)        local llama.cpp inference)
+              (decrypted bids)        (Qwen3 4B Instruct Q4_K_M
+              (RFP scope, etc.)        via QVAC's OpenAI-compatible server)
 ```
 
-What's **not** in this path: Tendr's Next.js server, OpenAI's API, Anthropic's API, any cloud AI provider, Tether's servers.
+What's **not** in this path:
+- Tendr's Next.js server (we never see the prompts or responses).
+- Any closed AI provider (OpenAI, Anthropic, Google, etc.).
+- Any multi-tenant inference API.
 
 ## Why "OpenAI-compatible" doesn't mean OpenAI
 
-QVAC's HTTP server speaks the same API shape as OpenAI's official API (`POST /v1/chat/completions` with the same JSON schema). That's so we can use the standard `openai` npm package on the client side without writing custom QVAC client code. **The bytes never leave for openai.com.** The shape is mimicked; the destination is our infrastructure.
+QVAC's serve mode speaks the same wire format as OpenAI's official API (`POST /v1/chat/completions` with the same JSON schema). That's so we can use the standard `openai` npm package on the client without writing custom QVAC code. **The bytes don't leave for openai.com.** The protocol shape is mimicked; the destination is our sidecar's URL.
 
-Same idea as "S3-compatible storage" — that's anyone's storage that mimics S3's API. The bytes don't go to AWS.
+Same idea as "S3-compatible storage" — the API is mimicked but the bytes go to whoever's storage is configured, not to AWS.
 
-## The privacy story, honestly
+## The privacy story (what we actually deliver)
 
-Tendr's existing privacy stack (sealed bids, ephemeral wallets, etc.) is unchanged by AI. The thing the AI integration adds is one new question: **where do decrypted bid contents go when the buyer clicks "Compare with AI"?**
+Here's the architecture, with no embellishment:
 
-Answer: from the buyer's browser straight to **our** Tendr-operated QVAC sidecar (a Docker container we run on Nosana GPU). Specifically:
+- **No closed AI providers in the pipeline.** The model is open-weight (Qwen3 4B Instruct, Q4_K_M) and the inference engine is QVAC. No OpenAI API key, no Anthropic API key, no third-party AI vendor's data-collection policy applies.
+- **Tendr backend never sees AI data.** The browser hits the Nosana endpoint directly via the env var `NEXT_PUBLIC_QVAC_BASE_URL`. There is no Tendr API route that proxies the call. Our Vercel servers — where wallet sessions, RFP metadata, and bid index live — never see prompts, decrypted bid plaintexts, or the model's response. Verifiable by reading [`apps/web/lib/ai/client.ts`](https://github.com/0xharp/tender/blob/main/apps/web/lib/ai/client.ts) — the OpenAI client's `baseURL` points at the Nosana endpoint, not at any `/api/*` Tendr path.
+- **Single-tenant inference.** The Nosana GPU is a dedicated container running our QVAC image. Not a multi-tenant inference API serving 50 other apps. No prompt-mixing.
 
-- ✅ Decrypted bids do **not** touch Tendr's Next.js backend. We don't have any API route that proxies AI calls — verified by reading `apps/web/lib/ai/client.ts`: the OpenAI client's `baseURL` points at the Nosana endpoint, not at any Tendr API path.
-- ✅ Decrypted bids do **not** go to OpenAI, Anthropic, or any other third-party AI provider. The entire inference stack is open source: QVAC's [`qvac-fabric-llm.cpp`](https://github.com/tetherto/qvac-fabric-llm.cpp) (a fork of `llama.cpp`) + the Qwen 2.5 model weights. Our Dockerfile is in the repo at `apps/ai-sidecar/Dockerfile`.
-- ✅ The sidecar doesn't log or persist the bid contents anywhere. Request → inference → response → done.
-- ⚠️ Decrypted bids **do** leave the buyer's browser to reach the sidecar. This is a real change from "AI = nothing leaves my machine" — and we want to be honest about it. The compromise is that running a 7B-parameter LLM on a buyer's browser is not realistic today, so the sidecar runs on infra we control rather than infra a third party controls.
+What we are NOT claiming:
 
-Net comparison vs. the alternatives:
+- ❌ NOT local-first inference for end users. The model runs on a Nosana GPU we operate, not on your laptop. Running a 4B-parameter model on a buyer's browser isn't realistic today.
+- ❌ NOT zero trust. You're trusting our Nosana deployment instead of trusting OpenAI's data policies. Different threat model, real privacy improvement, not "no trust required".
+- ❌ NOT an escape hatch for individual users to swap to their own local QVAC. Tendr is a hosted consumer app — env vars are baked into the Vercel build, end users can't reroute the AI calls without forking and self-deploying the entire app.
+
+## Comparison vs. the alternatives
 
 | Setup | Where bid plaintext lives | Privacy strength |
 |---|---|---|
-| Local-only sidecar (advanced users self-host) | Buyer's machine only | Maximum |
-| **Tendr-hosted Nosana sidecar (default)** | Buyer's machine + our Nosana node | **Strong — open-source code on infra we run; no SaaS AI provider involved** |
-| Browser → OpenAI API | Buyer's machine + OpenAI's data centers | Weakest — your bids end up in someone else's logs / training data |
-
-For users who want strict local-only operation, the same sidecar runs on a laptop with one command (`bare apps/ai-sidecar/index.js` — see `apps/ai-sidecar/README.md`). Set `NEXT_PUBLIC_QVAC_BASE_URL=http://localhost:11434/v1` in your env and AI calls stay on your machine.
+| Browser → OpenAI API | Buyer's machine + OpenAI's data centers + their training set if you don't opt out | Weakest |
+| Browser → Tendr backend → some AI provider | Buyer's machine + Tendr's servers + the AI provider's servers | Worse than today's setup |
+| **Browser → QVAC sidecar on Nosana (today's setup)** | Buyer's machine + our dedicated Nosana node | **Strong — open-weight model on infra we run; no closed AI provider; Tendr backend out of the loop** |
 
 ## What the AI is good at + not good at
 
 **Good at:** structured tasks with clear inputs and a known output shape.
-- Drafting RFP scopes from short descriptions
-- Comparing bids on observable dimensions (price, timeline, scope coverage, milestone realism)
-- Drafting starting-point bids that match an RFP's scope
+- Drafting RFP scopes from a few sentences of intent
+- Drafting starting-point bids that respect the provider's stated context (tech stack, target price, timeline)
+- Comparing decrypted bids on observable dimensions (price, timeline, scope coverage, milestone realism, risk flags)
 
-**Not good at:** anything requiring real-world judgment about counterparties, niche technical evaluation, or facts the model wasn't trained on.
-- Don't trust the AI's "recommended winner" without reading the bids yourself — it's a starting point, not a decision
-- Don't trust price recommendations on niche or new specialties — the model's training data is uneven
-- Don't paste sensitive secondary info into the AI's input fields (PII, internal docs, etc.) — the privacy guarantees above cover bid contents going through our sidecar, not arbitrary text you decide to send
+**Not good at:**
+- Replacing your judgment about counterparties — the recommended winner is a starting point, not a decision
+- Niche technical evaluation outside the model's training data
+- Pricing on rare specialties (the model's training data on, say, M&A advisory or quant trading audits is uneven)
+
+The right mental model: a structured-output assistant. Treat its output as a draft you'll always edit.
 
 ## What we don't do
 
-- **No AI key in your wallet.** The AI doesn't sign anything, doesn't move money, doesn't touch the on-chain side at all. It only reads inputs you give it and returns text.
-- **No required AI for product behavior.** Every flow that has an AI button works identically without clicking it. Bidding, awarding, escrow, milestones, reputation — all unchanged.
-- **No conversation history.** Each AI call is a one-shot completion. The sidecar holds no per-user state.
-- **No third-party AI provider.** Discussed above; named here so it's a one-line claim too.
+- **No AI signing.** The model never signs a transaction, never moves money, never touches the on-chain side. It only reads inputs and returns text.
+- **No required AI for product behavior.** Every flow that has an AI button works identically without it — bidding, awarding, escrow, milestones, reputation are all independent.
+- **No conversation history.** Each AI call is a one-shot completion. The sidecar holds no per-user state between requests.
 
 ## Reference
 
-- `apps/ai-sidecar/` — the QVAC sidecar (Bare runtime + `qvac serve openai` + Qwen 2.5 7B Q4)
-- `apps/ai-sidecar/Dockerfile` — full container build for Nosana GPU deploy
-- `apps/web/lib/ai/client.ts` — browser-side OpenAI SDK pointed at the sidecar URL
-- `apps/web/lib/ai/prompts.ts` — system prompts for the three AI surfaces
-- `apps/web/lib/ai/types.ts` — JSON-schema parsing for the bid-comparison response
-- `apps/web/components/ai/ai-draft-modal.tsx` — the "draft something" modal (RFP scope + provider bid)
-- `apps/web/components/ai/ai-bid-comparison-panel.tsx` — the comparison table that appears after decrypt
-- QVAC docs: <https://docs.qvac.tether.io>
-- Nosana docs: <https://learn.nosana.com>
+- [`apps/ai-sidecar/`](https://github.com/0xharp/tender/tree/main/apps/ai-sidecar) — QVAC sidecar source (Bare runtime + `qvac serve openai` + Qwen3 4B Q4_K_M via the model registry)
+- [`apps/ai-sidecar/Dockerfile`](https://github.com/0xharp/tender/blob/main/apps/ai-sidecar/Dockerfile) — container build for Nosana GPU deploy (Vulkan + NVIDIA runtime)
+- [`apps/ai-sidecar/qvac.config.json`](https://github.com/0xharp/tender/blob/main/apps/ai-sidecar/qvac.config.json) — model + serve config
+- [`apps/web/lib/ai/client.ts`](https://github.com/0xharp/tender/blob/main/apps/web/lib/ai/client.ts) — browser-side OpenAI SDK wrapper pointed at the sidecar URL
+- [`apps/web/lib/ai/prompts.ts`](https://github.com/0xharp/tender/blob/main/apps/web/lib/ai/prompts.ts) — system prompts for the three AI surfaces
+- [`apps/web/lib/ai/types.ts`](https://github.com/0xharp/tender/blob/main/apps/web/lib/ai/types.ts) — Zod schemas + tolerant parsers for the structured bid-draft and bid-comparison responses
+- [`apps/web/components/ai/ai-draft-modal.tsx`](https://github.com/0xharp/tender/blob/main/apps/web/components/ai/ai-draft-modal.tsx) — the "draft something with AI" modal (RFP scope + provider bid)
+- [`apps/web/components/ai/ai-bid-comparison-panel.tsx`](https://github.com/0xharp/tender/blob/main/apps/web/components/ai/ai-bid-comparison-panel.tsx) — the comparison table that appears post-decrypt
+- QVAC: <https://qvac.tether.io/>
+- Nosana: <https://nosana.com/>

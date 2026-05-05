@@ -108,7 +108,12 @@
   --accent-foreground: oklch(0.97 0.01 260);
   --destructive: oklch(0.65 0.22 25);
   --border: oklch(0.24 0.02 260);
-  --input: oklch(0.16 0.015 260);
+  /* Bumped from oklch(0.16 …) — was identical to --card, which made
+     `bg-input/30` and `border-input` invisible against form cards in
+     dark mode (textareas in particular vanished into the card surface).
+     0.28 sits between --border and --muted so it gives visible chrome
+     to every input/textarea/select without looking neon. */
+  --input: oklch(0.28 0.02 260);
   --ring: oklch(0.704 0.158 292);
   --chart-1: oklch(0.704 0.158 292);
   --chart-2: oklch(0.74 0.16 250);

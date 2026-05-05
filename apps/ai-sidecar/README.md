@@ -1,6 +1,6 @@
 # tendr ai-sidecar — QVAC LLM serving
 
-Local-first LLM sidecar for tendr.bid, powered by [Tether QVAC](https://qvac.tether.io). Exposes an OpenAI-compatible HTTP API on port `11434`. The web app's browser code calls this endpoint directly — Tendr's Next.js server is intentionally NOT in the AI data path.
+Private AI sidecar for tendr.bid, powered by [Tether QVAC](https://qvac.tether.io). Exposes an OpenAI-compatible HTTP API on port `11434`. The web app's browser code calls this endpoint directly — Tendr's Next.js server is intentionally NOT in the AI data path, and no closed AI provider (OpenAI, Anthropic, etc.) is in the pipeline.
 
 ## What's in here
 

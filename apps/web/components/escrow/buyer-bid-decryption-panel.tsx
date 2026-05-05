@@ -1,11 +1,13 @@
 'use client';
 
 import { AiBidComparisonPanel } from '@/components/ai/ai-bid-comparison-panel';
+import { BidDetailDrawer } from '@/components/escrow/bid-detail-drawer';
 import { AwardConfirmDialog, type AwardConfirmPayload } from '@/components/escrow/confirm-dialogs';
 import { HashLink } from '@/components/primitives/hash-link';
 import { PrivacyTag } from '@/components/primitives/privacy-tag';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { stripMarkdown } from '@/lib/markdown/strip';
 import {
   type BuyerRevealStage,
   type DecryptedBid,
@@ -363,6 +365,11 @@ function BidRow({
     );
   }
   const pt = bid.plaintext!;
+  // Drawer state is row-local — each row has its own "View full bid"
+  // button + sheet. Side-by-side comparison still works because the
+  // drawer overlay is translucent enough to leave the list partially
+  // visible behind it.
+  const [drawerOpen, setDrawerOpen] = useState(false);
   return (
     <div
       className={cn(
@@ -399,7 +406,21 @@ function BidRow({
         </Button>
       </div>
 
-      <p className="text-xs leading-relaxed text-foreground/80 line-clamp-3">{pt.scope}</p>
+      {/* Stripped + clamped scope preview. Markdown source lives in the
+          plaintext (AI drafts and user-typed bids both produce markdown);
+          stripping here keeps `**` and heading hashes from showing literally
+          inside the 3-line clamp. Full markdown render is one click away
+          via "View full bid". */}
+      <p className="text-xs leading-relaxed text-foreground/80 line-clamp-3">
+        {stripMarkdown(pt.scope)}
+      </p>
+      <button
+        type="button"
+        onClick={() => setDrawerOpen(true)}
+        className="self-start text-[11px] font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+      >
+        View full bid →
+      </button>
 
       <div className="flex flex-col gap-1">
         <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -448,6 +469,20 @@ function BidRow({
           </span>
         )}
       </div>
+
+      <BidDetailDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        bidPda={bid.bidPda}
+        isPrivate={bid.isPrivate}
+        plaintext={pt}
+        onAward={() => {
+          setDrawerOpen(false);
+          void onAward();
+        }}
+        awarding={awarding}
+        awardDisabled={disabled}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
   "name": "@tender/ai-sidecar",
   "version": "0.0.1",
   "private": true,
-  "description": "QVAC-powered local-first LLM sidecar for tendr.bid. Exposes an OpenAI-compatible HTTP API on port 11434 that the tendr.bid web app calls directly from the browser. Tendr's Next.js server is intentionally not in the AI data path - decrypted bid contents go from the buyer's browser straight to this sidecar.",
+  "description": "QVAC-powered Private AI sidecar for tendr.bid. Exposes an OpenAI-compatible HTTP API on port 11434 that the tendr.bid web app calls directly from the browser. Tendr's Next.js server is intentionally not in the AI data path, and no closed AI provider is in the pipeline - decrypted bid contents go from the buyer's browser straight to this sidecar.",
   "scripts": {
     "start": "npx qvac serve openai --cors --host 0.0.0.0 --port 11434"
   },

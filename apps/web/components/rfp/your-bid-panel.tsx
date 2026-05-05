@@ -68,6 +68,7 @@ import {
 } from '@/lib/sdks/magicblock';
 import { listBids } from '@/lib/solana/chain-reads';
 import { rpc } from '@/lib/solana/client';
+import { InlineMarkdown } from '@/components/ui/markdown';
 import { cn } from '@/lib/utils';
 
 export interface YourBidPanelProps {
@@ -588,7 +589,10 @@ function Connected({
               </UnlockField>
               <UnlockField delay={0.1}>
                 <Stat label="Scope">
-                  <p className="text-xs leading-relaxed text-foreground/90">{plaintext.scope}</p>
+                  {/* Full markdown render — bid scope can be AI-drafted (or
+                      user-typed markdown) and the buyer sees the same
+                      formatted version on their side. */}
+                  <InlineMarkdown source={plaintext.scope} className="flex flex-col gap-2" />
                 </Stat>
               </UnlockField>
               <UnlockField delay={0.2}>

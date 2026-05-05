@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { type PrivacyMode, PrivacyTag } from '@/components/primitives/privacy-tag';
 import { ReserveTag } from '@/components/primitives/reserve-tag';
 import { StatusPill, type StatusTone } from '@/components/primitives/status-pill';
+import { stripMarkdown } from '@/lib/markdown/strip';
 import { cn } from '@/lib/utils';
 
 export interface RfpCardData {
@@ -123,8 +124,11 @@ export function RfpCard({ rfp }: { rfp: RfpCardData }) {
         <h3 className="font-display text-lg font-semibold leading-tight tracking-tight text-foreground transition-colors group-hover:text-primary">
           {rfp.title}
         </h3>
+        {/* Strip markdown source for the snippet — `**bold**` literals
+            look ugly in line-clamp-2. Full markdown render lives on the
+            RFP detail page (one click away via the wrapping <Link>). */}
         <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-          {rfp.scope_summary}
+          {stripMarkdown(rfp.scope_summary)}
         </p>
       </div>
 
@@ -135,9 +139,14 @@ export function RfpCard({ rfp }: { rfp: RfpCardData }) {
           </span>
           <span className="font-mono text-xs text-foreground/80">
             {time.tone === 'closed'
-              ? new Date(rfp.bid_close_at).toLocaleDateString('en-US', {
+              ? // Pin to UTC so server (UTC by default) and client (local TZ)
+                // both render the same calendar day. Without timeZone:'UTC'
+                // a bid_close_at near midnight UTC formats as e.g. "May 5"
+                // on the server and "May 6" in IST/JST → hydration mismatch.
+                new Date(rfp.bid_close_at).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
+                  timeZone: 'UTC',
                 })
               : time.label}
           </span>

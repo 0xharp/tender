@@ -68,8 +68,7 @@ export default async function RootLayout({
         <DotMatrix />
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="light"
           disableTransitionOnChange
         >
           <TooltipProvider>
