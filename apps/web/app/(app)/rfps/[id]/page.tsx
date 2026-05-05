@@ -399,6 +399,8 @@ export default async function Page({ params }: PageProps) {
           bids={bidsForAwardPanel}
           isPastBidClose={isPastBidClose}
           notesByMilestoneIndex={notesByMilestoneIndex}
+          rfpScope={meta.scope_summary ?? undefined}
+          rfpTitle={meta.title}
         />
       )}
 

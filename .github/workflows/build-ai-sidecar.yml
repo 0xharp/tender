@@ -1,0 +1,79 @@
+name: Build + push ai-sidecar image
+
+# Triggers:
+#   - push to main when anything in apps/ai-sidecar/ changes (typical case
+#     once the sidecar config is stable)
+#   - manual via "Run workflow" in the GitHub Actions tab (handy when you
+#     want to rebuild even though no source changed - e.g. to refresh the
+#     baked model weights)
+on:
+  push:
+    # Build on main and on the QVAC integration feature branch so we can
+    # iterate on the Dockerfile + qvac.config.json without merging
+    # half-broken images to main. Drop the branch from the list once the
+    # integration is stable on main.
+    branches: [main, 'feat/qvac-sidecar']
+    paths:
+      - 'apps/ai-sidecar/**'
+      - '.github/workflows/build-ai-sidecar.yml'
+  workflow_dispatch:
+
+# Permissions: GHCR push needs the workflow's auto-provisioned token to
+# have `packages: write`. `contents: read` is the read-only repo access
+# the checkout step needs.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    # The QVAC image bakes in the Qwen 7B Q4 weights (~4.5 GB) at build
+    # time. The default ubuntu-latest runner has 14 GB free disk; that's
+    # enough but tight. Bumping the timeout so we don't fail at 6 hours.
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tag with both `latest` (so Nosana's `:latest` ref auto-picks up
+      # new builds) and the commit SHA (so we can pin a specific build
+      # if we ever need to roll back).
+      - name: Compute image tags
+        id: tags
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "latest=ghcr.io/${REPO_LOWER}/tendr-ai-sidecar:latest" >> "$GITHUB_OUTPUT"
+          echo "sha=ghcr.io/${REPO_LOWER}/tendr-ai-sidecar:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build + push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/ai-sidecar
+          file: ./apps/ai-sidecar/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.latest }}
+            ${{ steps.tags.outputs.sha }}
+          # Cache via GHA so the `npm install` + `apt install` layers
+          # don't re-run when only qvac.config.json changes. The 4 GB
+          # model weights still re-download if the curl URL changes,
+          # which is what we want.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Print Nosana image reference
+        run: |
+          echo "::notice ::Push complete. Use this image in Nosana:"
+          echo "::notice ::  ${{ steps.tags.outputs.latest }}"

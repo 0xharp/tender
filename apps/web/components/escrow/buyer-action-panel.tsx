@@ -116,6 +116,11 @@ export interface BuyerActionPanelProps {
    *  milestone_index. Empty record when no notes posted yet. Threaded into
    *  each milestone row's bottom section. */
   notesByMilestoneIndex: Record<number, MilestoneNoteRow[]>;
+  /** Off-chain RFP scope text + title — passed through to AwardSection
+   *  → BuyerBidDecryptionPanel for the AI bid-comparison feature. The AI
+   *  needs the original scope to evaluate how well each bid covers it. */
+  rfpScope?: string;
+  rfpTitle?: string;
 }
 
 export function BuyerActionPanel(props: BuyerActionPanelProps) {
@@ -141,6 +146,12 @@ function ConnectedBuyerPanel({
   bids,
   isPastBidClose,
   notesByMilestoneIndex,
+  rfpScope,
+  // rfpTitle accepted for forward-compat but not currently surfaced in this
+  // component — the AI bid-comparison surface only needs the scope, not the
+  // title. Keeping the prop in the interface so callers can pass both
+  // without churn if we ever want to surface the title.
+  rfpTitle: _rfpTitle,
 }: BuyerActionPanelProps & { account: UiWalletAccount }) {
   const signTransactions = useSignTransactions(account, 'solana:devnet');
   const wallet = account.address as Address;
@@ -171,6 +182,7 @@ function ConnectedBuyerPanel({
         bids={bids}
         // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook type drift
         signTransactions={signTransactions as any}
+        rfpScope={rfpScope}
       />
     );
   }
@@ -297,6 +309,7 @@ function AwardSection({
   feeBps,
   bids,
   signTransactions,
+  rfpScope,
 }: {
   wallet: Address;
   rfpPda: Address;
@@ -305,6 +318,7 @@ function AwardSection({
   bids: { address: string; commitHashHex: string; submittedAtIso: string }[];
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard
   signTransactions: any;
+  rfpScope?: string;
 }) {
   const [stage, setStage] = useState<AwardStage | null>(null);
   const [awarding, setAwarding] = useState(false);
@@ -450,6 +464,7 @@ function AwardSection({
         onAward={handleAward}
         awarding={awarding}
         awardingBidPda={awardingBidPda ?? undefined}
+        rfpScope={rfpScope}
       />
     </div>
   );

@@ -9,8 +9,12 @@ import { useEffect, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
+import { SparklesIcon } from 'lucide-react';
+
+import { AiDraftModal } from '@/components/ai/ai-draft-modal';
 import { DataField } from '@/components/primitives/data-field';
 import { HashLink } from '@/components/primitives/hash-link';
+import { isAiAvailable } from '@/lib/ai';
 import { StatusPill } from '@/components/primitives/status-pill';
 import { TxToastDescription } from '@/components/primitives/tx-toast';
 import { Button } from '@/components/ui/button';
@@ -64,6 +68,12 @@ export interface BidComposerProps {
    *  `rfp.fee_bps` so it's locked per-RFP. Provider sees this transparently
    *  to price their bid net of fee. */
   feeBps: number;
+  /** Optional RFP context for the "Draft starting bid with AI" button.
+   *  When the AI sidecar URL isn't configured the button hides itself;
+   *  when scope is missing the button still renders but the AI has
+   *  less to work with. */
+  rfpTitle?: string;
+  rfpScope?: string;
 }
 
 function hexToBytes(hex: string): Uint8Array {
@@ -143,6 +153,7 @@ function ConnectedComposer({
   const [stage, setStage] = useState<BidSubmitStage | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<SubmitBidResult | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
   // Privacy mode is determined by the RFP's bidder_visibility setting (set by
   // the buyer at create time). Provider doesn't choose it - they get the mode
   // the buyer picked.
@@ -396,7 +407,24 @@ function ConnectedComposer({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scope">Scope</Label>
+            <div className="flex items-baseline justify-between gap-3">
+              <Label htmlFor="scope">Scope</Label>
+              {/* "Draft starting bid" only shows when both the AI sidecar
+                  is configured AND we have an RFP scope to feed it.
+                  Without scope context the AI has nothing to anchor on. */}
+              {isAiAvailable() && props.rfpScope && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto gap-1.5 px-2 py-1 text-xs text-primary hover:bg-primary/10"
+                  onClick={() => setAiOpen(true)}
+                >
+                  <SparklesIcon className="size-3.5" />
+                  Draft starting bid with AI
+                </Button>
+              )}
+            </div>
             <Textarea
               id="scope"
               rows={5}
@@ -408,6 +436,21 @@ function ConnectedComposer({
               <p className="text-xs text-destructive">{form.formState.errors.scope.message}</p>
             )}
           </div>
+
+          {props.rfpScope && (
+            <AiDraftModal
+              open={aiOpen}
+              onOpenChange={setAiOpen}
+              mode={{
+                kind: 'bid',
+                rfpScope: props.rfpScope,
+                rfpTitle: props.rfpTitle,
+              }}
+              onAccept={(text) => {
+                form.setValue('scope', text, { shouldValidate: true, shouldDirty: true });
+              }}
+            />
+          )}
 
           <div className="flex flex-col gap-3">
             <div className="flex items-baseline justify-between">

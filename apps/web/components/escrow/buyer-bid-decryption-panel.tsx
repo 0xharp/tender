@@ -1,5 +1,6 @@
 'use client';
 
+import { AiBidComparisonPanel } from '@/components/ai/ai-bid-comparison-panel';
 import { AwardConfirmDialog, type AwardConfirmPayload } from '@/components/escrow/confirm-dialogs';
 import { HashLink } from '@/components/primitives/hash-link';
 import { PrivacyTag } from '@/components/primitives/privacy-tag';
@@ -70,6 +71,10 @@ export interface BuyerBidDecryptionPanelProps {
   awarding?: boolean;
   /** PDA of the bid currently being awarded (for spinner state). */
   awardingBidPda?: string;
+  /** Off-chain RFP scope text — required by the AI bid-comparison surface
+   *  to evaluate how well each bid covers the original ask. When absent,
+   *  the AI compare button hides itself. */
+  rfpScope?: string;
 }
 
 type SortBy = 'price' | 'timeline' | 'submitted';
@@ -106,6 +111,7 @@ function Connected({
   onAward,
   awarding,
   awardingBidPda,
+  rfpScope,
 }: { account: UiWalletAccount } & BuyerBidDecryptionPanelProps) {
   const signMessage = useSignMessage(account);
   const signTransactions = useSignTransactions(account, 'solana:devnet');
@@ -274,6 +280,33 @@ function Connected({
             }}
           />
         ))}
+
+        {/* AI bid-comparison panel — only renders when the AI sidecar is
+            configured AND we have a non-trivial RFP scope to evaluate
+            against AND at least 2 successfully-decrypted bids to compare.
+            Sends the decrypted bids browser → QVAC sidecar directly;
+            Tendr's backend never sees the plaintext (see lib/ai/index.ts
+            + docs/ai.md for the data-flow explainer). */}
+        {rfpScope && rfpScope.length >= 20 && sortedBids.filter((b) => b.plaintext).length >= 2 && (
+          <AiBidComparisonPanel
+            rfpScope={rfpScope}
+            bids={sortedBids
+              .filter((b): b is DecryptedBid & { plaintext: NonNullable<DecryptedBid['plaintext']> } => !!b.plaintext)
+              .map((b, idx) => ({
+                bidIndex: idx,
+                bidPda: b.bidPda,
+                priceUsdc: b.plaintext.priceUsdc,
+                timelineDays: b.plaintext.timelineDays,
+                scope: b.plaintext.scope,
+                milestones: b.plaintext.milestones.map((m) => ({
+                  name: m.name,
+                  amountUsdc: m.amountUsdc,
+                  durationDays: m.durationDays,
+                })),
+              }))}
+          />
+        )}
+
         <div className="flex justify-end">
           <Button
             type="button"
