@@ -16,13 +16,31 @@ FROM node:22-bookworm-slim AS base
 # Bare native modules need build-essential + python at install time. curl for
 # model download. tini gives us PID 1 + signal handling so qvac shuts down
 # cleanly when Nosana stops the deployment.
+#
+# Vulkan: QVAC's llamacpp addon does GPU inference via Vulkan (their
+# hardware-agnostic engine). The container needs the Vulkan loader
+# (libvulkan1) installed; the actual NVIDIA Vulkan ICD comes from the
+# host driver via the NVIDIA Container Runtime when
+# NVIDIA_DRIVER_CAPABILITIES below includes 'graphics'. mesa-vulkan-drivers
+# pulled in as a fallback ICD so non-NVIDIA hosts (CPU smoke test, AMD,
+# Intel) can still cold-start without segfaulting on missing Vulkan.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential \
       python3 \
       curl \
       ca-certificates \
       tini \
+      libvulkan1 \
+      mesa-vulkan-drivers \
+      vulkan-tools \
     && rm -rf /var/lib/apt/lists/*
+
+# NVIDIA Container Runtime reads these env vars to decide what to mount
+# from the host driver into the container's /usr/lib/. `compute` gives us
+# CUDA; `graphics` gives us Vulkan ICD + EGL/GLX. Without `graphics`,
+# libvulkan1 inside the container can't find an NVIDIA Vulkan driver.
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
 
 # Bare runtime — QVAC requires Bare ≥ 1.24. Bare is installed globally
 # because @qvac/cli's bundled native deps need a system-wide bare binary.
