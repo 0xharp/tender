@@ -97,11 +97,40 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
+# Boot diagnostic: dump GPU + Vulkan visibility before qvac starts.
+# Why: llama.cpp's "no usable GPU found" warning gives no signal about
+# WHICH layer is broken — could be (a) NVIDIA Container Runtime didn't
+# mount the host driver libs, (b) Vulkan ICD JSON missing so the loader
+# enumerates zero devices, (c) llama.cpp build flags. This script writes
+# all three signals to stdout at boot so the Nosana logs show exactly
+# what's wrong.
+COPY <<'EOF' /app/probe-gpu.sh
+#!/bin/sh
+echo "─── GPU probe ─────────────────────────────────────────────────"
+echo "NVIDIA driver via container runtime:"
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi -L 2>&1 || echo "  nvidia-smi listed nothing"
+else
+  echo "  nvidia-smi NOT INSTALLED (NVIDIA Container Runtime probably not active)"
+fi
+echo ""
+echo "Vulkan ICDs visible to the loader:"
+ls -la /usr/share/vulkan/icd.d/ 2>&1 || echo "  /usr/share/vulkan/icd.d MISSING"
+ls -la /etc/vulkan/icd.d/ 2>&1 || echo "  /etc/vulkan/icd.d MISSING"
+echo ""
+echo "Vulkan device enumeration:"
+if command -v vulkaninfo >/dev/null 2>&1; then
+  vulkaninfo --summary 2>&1 | head -40 || echo "  vulkaninfo failed"
+else
+  echo "  vulkaninfo NOT INSTALLED"
+fi
+echo "─── end GPU probe ────────────────────────────────────────────"
+EOF
+RUN chmod +x /app/probe-gpu.sh
+
 # --cors lets the buyer's browser hit this directly (no preflight rejection).
 # --host 0.0.0.0 binds to all interfaces inside the container; Nosana exposes
 # port 11434 to the public via its own ingress.
-CMD ["npx", "qvac", "serve", "openai", \
-     "--cors", \
-     "--host", "0.0.0.0", \
-     "--port", "11434", \
-     "--config", "/app/qvac.config.json"]
+# Sh wrapper: run the GPU probe first so its output is visible in Nosana
+# logs, THEN exec qvac so tini still gets signal handling on PID 1.
+CMD ["/bin/sh", "-c", "/app/probe-gpu.sh && exec npx qvac serve openai --cors --host 0.0.0.0 --port 11434 --config /app/qvac.config.json"]
