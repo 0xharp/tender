@@ -3,7 +3,7 @@
   "serve": {
     "models": {
       "tendr-llm": {
-        "modelType": "llm",
+        "modelType": "llamacpp-completion",
         "model": "QWEN3_4B_INST_Q4_K_M",
         "default": true,
         "preload": true,

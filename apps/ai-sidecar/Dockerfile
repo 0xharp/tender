@@ -33,7 +33,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libvulkan1 \
       mesa-vulkan-drivers \
       vulkan-tools \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    # Build-time guard: fail loudly if the Vulkan loader isn't installed.
+    # Prevents shipping an image that boots but immediately crashes with
+    # "libvulkan.so.1: cannot open shared object file" the way we did
+    # when the apt-get install was silently a no-op (suspected upstream
+    # base-image change). Also runs ldconfig so newly-installed shared
+    # objects are added to the loader cache.
+    && ldconfig \
+    && test -f /usr/lib/x86_64-linux-gnu/libvulkan.so.1 \
+    && echo "vulkan loader OK: $(ls -l /usr/lib/x86_64-linux-gnu/libvulkan.so.1)"
+
+# Belt-and-braces: explicitly add the multiarch lib dir to the runtime
+# loader path. Default behavior should pick this up via /etc/ld.so.conf.d
+# but slim base images sometimes ship a trimmed config; setting it here
+# guarantees the bare native addon's dlopen call finds libvulkan.
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}
 
 # NVIDIA Container Runtime reads these env vars to decide what to mount
 # from the host driver into the container's /usr/lib/. `compute` gives us
