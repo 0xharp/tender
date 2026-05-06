@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { type PrivacyMode, PrivacyTag } from '@/components/primitives/privacy-tag';
 import { ReserveTag } from '@/components/primitives/reserve-tag';
 import { StatusPill, type StatusTone } from '@/components/primitives/status-pill';
+import { stripMarkdown } from '@/lib/markdown/strip';
 import { cn } from '@/lib/utils';
 
 export interface RfpCardData {
@@ -23,6 +24,10 @@ export interface RfpCardData {
   has_reserve?: boolean;
   /** Post-award only - revealed reserve value in USDC base units. */
   reserve_price_revealed_micro?: bigint;
+  /** True when the signed-in viewer is the buyer for this RFP. Drives a
+   *  visual highlight (primary ring + "YOURS" badge) so the buyer can
+   *  spot their own RFPs while browsing the marketplace. */
+  mine?: boolean;
 }
 
 function timeLeft(iso: string): { label: string; tone: 'normal' | 'urgent' | 'closed' } {
@@ -76,23 +81,47 @@ function displayStatus(
 export function RfpCard({ rfp }: { rfp: RfpCardData }) {
   const time = timeLeft(rfp.bid_close_at);
   const status = displayStatus(rfp.status, rfp.bid_close_at, rfp.reveal_close_at);
-  // Hide the top-right time chip when bidding is over - the StatusPill on the
-  // top-left already conveys the closed state, and the bottom-row "Bidding
-  // closes" shows the actual close time. Avoids a third "closed" label.
-  const showTimeChip = time.tone !== 'closed';
+  // Hide the top-right time chip when bidding is over (the StatusPill +
+  // bottom-row "Bidding closes" already convey it) OR when the "Mine"
+  // corner ribbon is on (the ribbon occupies the same top-right corner
+  // and the bottom-row date is enough).
+  const showTimeChip = time.tone !== 'closed' && !rfp.mine;
 
   return (
     <Link
       href={`/rfps/${rfp.on_chain_pda}`}
       className={cn(
-        'group relative flex h-full flex-col gap-4 overflow-hidden rounded-2xl border border-border/60 bg-card p-5 transition-all',
-        'hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5',
+        'group relative flex h-full flex-col gap-4 overflow-hidden rounded-2xl border bg-card p-5 transition-all',
+        'hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/5',
+        // "Your RFP" treatment: a stronger primary-tinted border + subtle
+        // background tint, so the buyer can scan the grid and spot their
+        // own RFPs at a glance. Falls back to the neutral border + hover
+        // accent for everyone else's RFPs.
+        rfp.mine
+          ? 'border-primary/50 bg-primary/[0.04] hover:border-primary/70'
+          : 'border-border/60 hover:border-primary/30',
       )}
     >
       <span
         aria-hidden
         className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
       />
+
+      {/* "Mine" corner ribbon — cheque-stamp style, sits diagonally across
+          the top-right corner. Clipped by the card's overflow-hidden so
+          it reads as a banner rather than an overflowing div. Kept inside
+          the Link so the whole card (including the ribbon area) is
+          clickable, and aria-hidden because the visual cue is supplemental
+          to the border-tint distinction; screen readers don't need it
+          announced separately from "Your RFP" semantics elsewhere. */}
+      {rfp.mine && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-14 top-5 z-10 rotate-45 bg-primary px-16 py-1 text-center font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-primary-foreground shadow-md shadow-primary/30 ring-1 ring-primary-foreground/10"
+        >
+          Mine
+        </div>
+      )}
 
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -123,8 +152,11 @@ export function RfpCard({ rfp }: { rfp: RfpCardData }) {
         <h3 className="font-display text-lg font-semibold leading-tight tracking-tight text-foreground transition-colors group-hover:text-primary">
           {rfp.title}
         </h3>
+        {/* Strip markdown source for the snippet — `**bold**` literals
+            look ugly in line-clamp-2. Full markdown render lives on the
+            RFP detail page (one click away via the wrapping <Link>). */}
         <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-          {rfp.scope_summary}
+          {stripMarkdown(rfp.scope_summary)}
         </p>
       </div>
 
@@ -135,9 +167,14 @@ export function RfpCard({ rfp }: { rfp: RfpCardData }) {
           </span>
           <span className="font-mono text-xs text-foreground/80">
             {time.tone === 'closed'
-              ? new Date(rfp.bid_close_at).toLocaleDateString('en-US', {
+              ? // Pin to UTC so server (UTC by default) and client (local TZ)
+                // both render the same calendar day. Without timeZone:'UTC'
+                // a bid_close_at near midnight UTC formats as e.g. "May 5"
+                // on the server and "May 6" in IST/JST → hydration mismatch.
+                new Date(rfp.bid_close_at).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
+                  timeZone: 'UTC',
                 })
               : time.label}
           </span>

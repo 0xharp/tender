@@ -22,6 +22,10 @@ export interface PrivateBidComposeGateProps {
   buyerEncryptionPubkeyHex: string;
   hasReserve?: boolean;
   feeBps: number;
+  /** Forwarded to BidComposer for the AI bid-drafting context. Optional;
+   *  if absent the AI button just gets less context to work with. */
+  rfpTitle?: string;
+  rfpScope?: string;
 }
 
 export function PrivateBidComposeGate(props: PrivateBidComposeGateProps) {
@@ -63,6 +67,8 @@ export function PrivateBidComposeGate(props: PrivateBidComposeGateProps) {
       buyerEncryptionPubkeyHex={props.buyerEncryptionPubkeyHex}
       hasReserve={props.hasReserve}
       feeBps={props.feeBps}
+      rfpTitle={props.rfpTitle}
+      rfpScope={props.rfpScope}
     />
   );
 }

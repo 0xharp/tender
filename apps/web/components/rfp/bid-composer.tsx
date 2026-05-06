@@ -9,14 +9,19 @@ import { useEffect, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
+import { SparklesIcon } from 'lucide-react';
+
+import { AiDraftModal } from '@/components/ai/ai-draft-modal';
 import { DataField } from '@/components/primitives/data-field';
 import { HashLink } from '@/components/primitives/hash-link';
+import { isAiAvailable } from '@/lib/ai';
 import { StatusPill } from '@/components/primitives/status-pill';
 import { TxToastDescription } from '@/components/primitives/tx-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import { Textarea } from '@/components/ui/textarea';
 import { friendlyBidError, humanizeStage } from '@/lib/bids/error-utils';
 import type { BidderVisibility } from '@/lib/bids/schema';
@@ -64,6 +69,12 @@ export interface BidComposerProps {
    *  `rfp.fee_bps` so it's locked per-RFP. Provider sees this transparently
    *  to price their bid net of fee. */
   feeBps: number;
+  /** Optional RFP context for the "Draft starting bid with AI" button.
+   *  When the AI sidecar URL isn't configured the button hides itself;
+   *  when scope is missing the button still renders but the AI has
+   *  less to work with. */
+  rfpTitle?: string;
+  rfpScope?: string;
 }
 
 function hexToBytes(hex: string): Uint8Array {
@@ -97,7 +108,12 @@ export function BidComposer(props: BidComposerProps) {
   return <ConnectedComposer account={account} {...props} />;
 }
 
-function BidCharCounter({ value, min, max }: { value: string; min: number; max: number }) {
+function BidCharCounter({
+  value,
+  min,
+  max,
+  hint,
+}: { value: string; min: number; max: number; hint?: string }) {
   const len = value.length;
   const tooShort = len < min;
   const tooLong = len > max;
@@ -109,7 +125,7 @@ function BidCharCounter({ value, min, max }: { value: string; min: number; max: 
           : 'text-[10px] text-muted-foreground'
       }
     >
-      {len} / {max} characters
+      {len} / {max} characters{hint ? ` · ${hint}` : ''}
       {tooShort && ` · ${min - len} more required`}
       {tooLong && ` · ${len - max} over the limit`}
     </p>
@@ -130,6 +146,8 @@ function ConnectedComposer({
   buyerEncryptionPubkeyHex,
   hasReserve,
   feeBps,
+  rfpTitle,
+  rfpScope,
 }: { account: UiWalletAccount } & BidComposerProps) {
   const feePct = (feeBps / 100).toFixed(feeBps % 100 === 0 ? 1 : 2);
   const netRatio = (10_000 - feeBps) / 10_000;
@@ -143,6 +161,7 @@ function ConnectedComposer({
   const [stage, setStage] = useState<BidSubmitStage | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<SubmitBidResult | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
   // Privacy mode is determined by the RFP's bidder_visibility setting (set by
   // the buyer at create time). Provider doesn't choose it - they get the mode
   // the buyer picked.
@@ -396,18 +415,92 @@ function ConnectedComposer({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scope">Scope</Label>
-            <Textarea
+            <div className="flex items-baseline justify-between gap-3">
+              <Label htmlFor="scope">Scope</Label>
+              {/* "Draft starting bid" only shows when both the AI sidecar
+                  is configured AND we have an RFP scope to feed it.
+                  Without scope context the AI has nothing to anchor on. */}
+              {isAiAvailable() && rfpScope && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto gap-1.5 px-2 py-1 text-xs text-primary hover:bg-primary/10"
+                  onClick={() => setAiOpen(true)}
+                >
+                  <SparklesIcon className="size-3.5" />
+                  Start drafting bid with QVAC Private AI
+                </Button>
+              )}
+            </div>
+            {/* MarkdownEditor for the bid scope. Same reasoning as the RFP
+                create form: AI-drafted bids arrive as markdown and the
+                buyer-side render (winning-bid-panel + drawer) renders it
+                as markdown. RHF.register doesn't compose with the editor's
+                custom value/onChange API, so we wire it via watch + setValue. */}
+            <MarkdownEditor
               id="scope"
               rows={5}
-              placeholder="What you&rsquo;ll deliver, your approach, exclusions, assumptions."
-              {...form.register('scope')}
+              placeholder="What you'll deliver, your approach, exclusions, assumptions. Markdown supported."
+              value={form.watch('scope') ?? ''}
+              onChange={(text) =>
+                form.setValue('scope', text, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                  shouldValidate: true,
+                })
+              }
+              ariaInvalid={!!form.formState.errors.scope}
             />
-            <BidCharCounter value={form.watch('scope') ?? ''} min={20} max={8000} />
+            <BidCharCounter value={form.watch('scope') ?? ''} min={20} max={8000} hint="markdown source" />
             {form.formState.errors.scope && (
               <p className="text-xs text-destructive">{form.formState.errors.scope.message}</p>
             )}
           </div>
+
+          {rfpScope && (
+            <AiDraftModal
+              open={aiOpen}
+              onOpenChange={setAiOpen}
+              mode={{
+                kind: 'bid',
+                rfpScope: rfpScope,
+                rfpTitle: rfpTitle,
+                onAccept: (draft) => {
+                  // Populate EVERY field of the bid form from the structured
+                  // AI draft. The provider lands on a fully-filled form they
+                  // can edit before submitting. Field name mapping mirrors
+                  // the BidDraft → BidFormValues bridge:
+                  //   priceUsdc           → price_usdc
+                  //   timelineDays        → timeline_days
+                  //   scope               → scope
+                  //   milestones[i]       → milestones[i]   (field names
+                  //                         transposed: amountUsdc → amount_usdc, etc.)
+                  // shouldValidate runs the zod resolver so any out-of-bounds
+                  // field flags inline immediately.
+                  const setOpts = {
+                    shouldValidate: true,
+                    shouldDirty: true,
+                    shouldTouch: true,
+                  } as const;
+                  form.setValue('price_usdc', draft.priceUsdc, setOpts);
+                  form.setValue('timeline_days', draft.timelineDays, setOpts);
+                  form.setValue('scope', draft.scope, setOpts);
+                  form.setValue(
+                    'milestones',
+                    draft.milestones.map((m) => ({
+                      name: m.name,
+                      description: m.description,
+                      amount_usdc: m.amountUsdc,
+                      duration_days: m.durationDays,
+                      success_criteria: m.successCriteria ?? '',
+                    })),
+                    setOpts,
+                  );
+                },
+              }}
+            />
+          )}
 
           <div className="flex flex-col gap-3">
             <div className="flex items-baseline justify-between">
@@ -728,8 +821,9 @@ export function EphemeralFundingPanel({
 
   if (balance === null) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-        Checking privacy wallet balance…
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+        <span>Checking privacy wallet balance…</span>
+        <HashLink hash={ephemeralPubkey} kind="account" visibleChars={6} />
       </div>
     );
   }
@@ -747,10 +841,16 @@ export function EphemeralFundingPanel({
   if (balance >= requiredSol) {
     return (
       <div className="flex flex-col gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-400">
-        <span>
-          Privacy wallet funded: <span className="font-mono">{balance.toFixed(4)} SOL</span>. Ready
-          to submit.
-        </span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span>
+            Privacy wallet funded: <span className="font-mono">{balance.toFixed(4)} SOL</span>.
+            Ready to submit.
+          </span>
+          {/* Address surfaced inline so the provider can verify the wallet
+              that just got Cloak-funded matches the one signing the bid +
+              copy it to the explorer. */}
+          <HashLink hash={ephemeralPubkey} kind="account" visibleChars={6} />
+        </div>
         <button
           type="button"
           onClick={handleFund}
@@ -767,11 +867,14 @@ export function EphemeralFundingPanel({
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
-      <p className="text-amber-700 dark:text-amber-400">
-        <strong>Privacy wallet needs SOL.</strong> Currently has{' '}
-        <span className="font-mono">{balance.toFixed(4)} SOL</span>; needs ≥{requiredSol} SOL for
-        bid PDA rent + PER infrastructure + tx fees. Rent is refunded on withdraw or after award.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-amber-700 dark:text-amber-400">
+          <strong>Privacy wallet needs SOL.</strong> Currently has{' '}
+          <span className="font-mono">{balance.toFixed(4)} SOL</span>; needs ≥{requiredSol} SOL for
+          bid PDA rent + PER infrastructure + tx fees. Rent is refunded on withdraw or after award.
+        </p>
+        <HashLink hash={ephemeralPubkey} kind="account" visibleChars={6} />
+      </div>
       <Button
         type="button"
         size="sm"

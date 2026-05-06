@@ -50,6 +50,13 @@ const DOCS_REGISTRY = {
     description:
       'How `.sol` names work in tendr.bid — and what this layer does NOT change about the privacy guarantees you get from the rest of the system.',
   },
+  ai: {
+    file: 'docs/ai.md',
+    title: 'AI (QVAC)',
+    eyebrow: 'Reference',
+    description:
+      'How the three AI buttons in the app work, where data flows when you use them, and what the privacy story is — without any third-party AI provider in the loop.',
+  },
 } as const;
 
 export type DocSlug = keyof typeof DOCS_REGISTRY;

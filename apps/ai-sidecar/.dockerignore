@@ -1,0 +1,5 @@
+node_modules
+.turbo
+README.md
+.dockerignore
+Dockerfile

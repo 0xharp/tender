@@ -1,24 +1,18 @@
 {
   "name": "@tender/ai-sidecar",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
-  "type": "module",
-  "main": "./dist/index.js",
+  "description": "QVAC-powered Private AI sidecar for tendr.bid. Exposes an OpenAI-compatible HTTP API on port 11434 that the tendr.bid web app calls directly from the browser. Tendr's Next.js server is intentionally not in the AI data path, and no closed AI provider is in the pipeline - decrypted bid contents go from the buyer's browser straight to this sidecar.",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist .turbo node_modules"
+    "start": "npx qvac serve openai --cors --host 0.0.0.0 --port 11434"
   },
   "dependencies": {
-    "@tender/shared": "workspace:*",
-    "express": "^4.21.1"
+    "@qvac/sdk": "^0.10.0",
+    "@qvac/cli": "^0.2.4",
+    "@qvac/llm-llamacpp": "^0.19.1",
+    "@qvac/dl-filesystem": "^0.2.1"
   },
-  "devDependencies": {
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.9.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+  "engines": {
+    "bare": ">=1.24"
   }
 }

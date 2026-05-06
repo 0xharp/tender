@@ -3,11 +3,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useSelectedWalletAccount, useSignMessage, useSignTransactions } from '@solana/react';
 import type { UiWalletAccount } from '@wallet-standard/react';
+import { SparklesIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { isAiAvailable } from '@/lib/ai';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
+import { AiDraftModal } from '@/components/ai/ai-draft-modal';
 import { TxToastDescription } from '@/components/primitives/tx-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,13 +23,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import { Textarea } from '@/components/ui/textarea';
 import { friendlyBidError } from '@/lib/bids/error-utils';
 import { type SubmitStage, submitRfpCreate } from '@/lib/rfps/create-flow';
 import { RFP_CATEGORIES, type RfpFormValues, rfpFormSchema } from '@/lib/rfps/schema';
 import { rpc, rpcSubscriptions } from '@/lib/solana/client';
 
-function CharCounter({ value, min, max }: { value: string; min: number; max: number }) {
+function CharCounter({
+  value,
+  min,
+  max,
+  hint,
+}: { value: string; min: number; max: number; hint?: string }) {
   const len = value.length;
   const tooShort = len < min;
   const tooLong = len > max;
@@ -38,7 +47,7 @@ function CharCounter({ value, min, max }: { value: string; min: number; max: num
           : 'text-[10px] text-muted-foreground'
       }
     >
-      {len} / {max} characters
+      {len} / {max} characters{hint ? ` · ${hint}` : ''}
       {tooShort && ` · ${min - len} more required`}
       {tooLong && ` · ${len - max} over the limit`}
     </p>
@@ -81,6 +90,7 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
   const router = useRouter();
   const [stage, setStage] = useState<SubmitStage | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const form = useForm<RfpFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: zod default + react-hook-form Resolver type drift
@@ -178,20 +188,81 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scope_summary">Scope summary</Label>
-            <Textarea
+            <div className="flex items-baseline justify-between gap-3">
+              <Label htmlFor="scope_summary">Scope summary</Label>
+              {/* AI draft trigger — only renders when QVAC sidecar URL is
+                  configured. Opens a modal where the buyer types a plain-
+                  English description; modal calls the sidecar directly
+                  (browser → Nosana, no Tendr backend hop) + drops the
+                  generated scope into this textarea on accept. */}
+              {isAiAvailable() && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto gap-1.5 px-2 py-1 text-xs text-primary hover:bg-primary/10"
+                  onClick={() => setAiOpen(true)}
+                >
+                  <SparklesIcon className="size-3.5" />
+                  Draft with QVAC Private AI
+                </Button>
+              )}
+            </div>
+            {/* MarkdownEditor instead of plain Textarea — AI-drafted scopes
+                arrive as markdown, and we render markdown on the RFP detail
+                page. Tabbed Edit/Preview lets the buyer verify formatting
+                before posting. RHF.register doesn't compose with this
+                component (custom value/onChange API), so we read/write via
+                watch + setValue. shouldDirty/shouldTouch keep the form
+                state honest for validation + submit-button enabling. */}
+            <MarkdownEditor
               id="scope_summary"
               rows={6}
-              placeholder="What you need delivered, success criteria, exclusions, deadlines."
-              {...form.register('scope_summary')}
+              placeholder="What you need delivered, success criteria, exclusions, deadlines. Markdown supported."
+              value={form.watch('scope_summary') ?? ''}
+              onChange={(text) =>
+                form.setValue('scope_summary', text, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                  shouldValidate: true,
+                })
+              }
+              ariaInvalid={!!form.formState.errors.scope_summary}
             />
-            <CharCounter value={form.watch('scope_summary') ?? ''} min={20} max={4000} />
+            <CharCounter
+              value={form.watch('scope_summary') ?? ''}
+              min={20}
+              max={4000}
+              hint="markdown source"
+            />
             {form.formState.errors.scope_summary && (
               <p className="text-xs text-destructive">
                 {form.formState.errors.scope_summary.message}
               </p>
             )}
           </div>
+
+          <AiDraftModal
+            open={aiOpen}
+            onOpenChange={setAiOpen}
+            mode={{
+              kind: 'rfp-scope',
+              category: form.watch('category'),
+              // Intentionally NO budgetUsdc here. The reserve_price_usdc
+              // field is sealed on chain; passing it to the AI risks the
+              // model echoing the number into the public scope summary.
+              // See lib/ai/prompts.ts CRITICAL PRIVACY RULE.
+              timelineDays: form.watch('bid_window_hours')
+                ? Math.ceil(Number(form.watch('bid_window_hours')) / 24)
+                : undefined,
+              onAccept: (text) => {
+                form.setValue('scope_summary', text, {
+                  shouldValidate: true,
+                  shouldDirty: true,
+                });
+              },
+            }}
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">

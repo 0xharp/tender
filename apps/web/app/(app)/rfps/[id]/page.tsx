@@ -16,6 +16,8 @@ import { RfpLifecycleBar } from '@/components/rfp/rfp-lifecycle-bar';
 import { SweepEphemeralPanel } from '@/components/rfp/sweep-ephemeral-panel';
 import { YourBidPanel } from '@/components/rfp/your-bid-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { InlineMarkdown } from '@/components/ui/markdown';
+import { stripMarkdown } from '@/lib/markdown/strip';
 import { getCurrentWallet } from '@/lib/auth/session';
 import { listMilestoneNotes } from '@/lib/milestones/notes-server';
 import {
@@ -55,8 +57,12 @@ export async function generateMetadata({ params }: PageProps) {
       .maybeSingle();
     if (!data?.title) return {};
     const title = `${data.title} · tendr.bid`;
-    const description = data.scope_summary
-      ? `${data.scope_summary.slice(0, 180)}${data.scope_summary.length > 180 ? '…' : ''}`
+    // Strip markdown for OG/Twitter description so social previews don't
+    // show literal `**` or heading hashes (those characters survive the
+    // 180-char slice and look broken in social-card snippets).
+    const plain = stripMarkdown(data.scope_summary ?? '');
+    const description = plain
+      ? `${plain.slice(0, 180)}${plain.length > 180 ? '…' : ''}`
       : 'Sealed-bid procurement RFP on Solana - bids stay private until the window closes.';
     return {
       title,
@@ -287,9 +293,10 @@ export default async function Page({ params }: PageProps) {
             </span>
           </CardHeader>
           <CardContent>
-            <p className="whitespace-pre-wrap text-sm leading-7 text-foreground/90">
-              {meta.scope_summary}
-            </p>
+            {/* scope_summary is now markdown-aware: buyers can drop AI-drafted
+                markdown from the modal and it renders properly. Plain-text
+                summaries from older RFPs still render fine (paragraphs). */}
+            <InlineMarkdown source={meta.scope_summary} />
           </CardContent>
         </Card>
 
@@ -399,6 +406,8 @@ export default async function Page({ params }: PageProps) {
           bids={bidsForAwardPanel}
           isPastBidClose={isPastBidClose}
           notesByMilestoneIndex={notesByMilestoneIndex}
+          rfpScope={meta.scope_summary ?? undefined}
+          rfpTitle={meta.title}
         />
       )}
 

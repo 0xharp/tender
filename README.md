@@ -97,6 +97,7 @@ psql "$DATABASE_URL" -f supabase/migrations/0008_milestone_notes.sql
 - ✅ Off-chain milestone notes (deliverable links, change requests) attached to on-chain transitions
 - ✅ Identity layer via SNS — `.sol` names render across every wallet display surface (profiles, leaderboard, RFP cards, milestone notes, wallet popover). Privacy-safe: never resolves ephemeral bid signers; expands zero new public-identity surface. See `docs/identity.md`.
 - ✅ In-app docs at `/docs/[slug]` rendering the same `.md` files GitHub serves — single source of truth
+- ✅ QVAC Private AI surfaces — RFP scope drafting, structured bid drafting (price + timeline + milestones populated end-to-end), and post-decrypt bid comparison — running on a [QVAC](https://qvac.tether.io/) sidecar deployed to a dedicated [Nosana](https://nosana.com/) GPU. Browser hits the sidecar directly via env var; Tendr's app servers never see prompts or bid plaintexts, and no closed AI provider (OpenAI, Anthropic, etc.) is in the pipeline. Open-weight model (Qwen3 4B Q4_K_M). See `docs/ai.md`.
 
 ## What's intentionally not here yet
 
@@ -186,6 +187,9 @@ tender/
 
 - **MagicBlock** for the Private Ephemeral Rollup primitives + the responsive support team.
 - **Cloak** for the shielded UTXO pool that makes private-mode bids cryptographically unlinkable.
+- **SNS (Solana Name Service)** for the identity layer — every wallet renders as `<handle>.tendr.sol` across the app.
+- **QVAC (by Tether)** for the open-source AI infrastructure that powers our Private AI sidecar — bid drafting + comparison run on QVAC, never on closed AI providers.
+- **Nosana** for the dedicated devnet GPU credits that host the QVAC sidecar.
 - **Colosseum + Solana Foundation** for the Frontier program.
 - **Superteam Earn** for the "Ideas → Prompt → Production" grant.
 

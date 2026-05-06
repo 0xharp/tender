@@ -1,0 +1,136 @@
+# Tendr AI sidecar — QVAC LLM serving via OpenAI-compatible HTTP API.
+# Built for deployment on Nosana GPU nodes; also runs locally.
+#
+# What this container does:
+#   1. Bare runtime (QVAC's required JS runtime)
+#   2. @qvac/cli + @qvac/sdk + @qvac/llm-llamacpp
+#   3. `qvac serve openai` exposes /v1/chat/completions on port 11434
+#   4. Model (Qwen 2.5 7B Instruct Q4_K_M) preloaded at boot
+#
+# Browser → this container directly. Tendr's Next.js server is NOT in
+# the path; the only thing on this Nosana node is the inference engine.
+
+FROM node:22-bookworm-slim AS base
+
+# ─── system deps ──────────────────────────────────────────────────────────────
+# Bare native modules need build-essential + python at install time. curl for
+# model download. tini gives us PID 1 + signal handling so qvac shuts down
+# cleanly when Nosana stops the deployment.
+#
+# Vulkan: QVAC's llamacpp addon does GPU inference via Vulkan (their
+# hardware-agnostic engine). The container needs the Vulkan loader
+# (libvulkan1) installed; the actual NVIDIA Vulkan ICD comes from the
+# host driver via the NVIDIA Container Runtime when
+# NVIDIA_DRIVER_CAPABILITIES below includes 'graphics'. mesa-vulkan-drivers
+# pulled in as a fallback ICD so non-NVIDIA hosts (CPU smoke test, AMD,
+# Intel) can still cold-start without segfaulting on missing Vulkan.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+      python3 \
+      curl \
+      ca-certificates \
+      tini \
+      libvulkan1 \
+      mesa-vulkan-drivers \
+      vulkan-tools \
+    && rm -rf /var/lib/apt/lists/* \
+    # Build-time guard: fail loudly if the Vulkan loader isn't installed.
+    # Prevents shipping an image that boots but immediately crashes with
+    # "libvulkan.so.1: cannot open shared object file" the way we did
+    # when the apt-get install was silently a no-op (suspected upstream
+    # base-image change). Also runs ldconfig so newly-installed shared
+    # objects are added to the loader cache.
+    && ldconfig \
+    && test -f /usr/lib/x86_64-linux-gnu/libvulkan.so.1 \
+    && echo "vulkan loader OK: $(ls -l /usr/lib/x86_64-linux-gnu/libvulkan.so.1)"
+
+# Belt-and-braces: explicitly add the multiarch lib dir to the runtime
+# loader path. Default behavior should pick this up via /etc/ld.so.conf.d
+# but slim base images sometimes ship a trimmed config; setting it here
+# guarantees the bare native addon's dlopen call finds libvulkan.
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}
+
+# NVIDIA Container Runtime reads these env vars to decide what to mount
+# from the host driver into the container's /usr/lib/. `compute` gives us
+# CUDA; `graphics` gives us Vulkan ICD + EGL/GLX. Without `graphics`,
+# libvulkan1 inside the container can't find an NVIDIA Vulkan driver.
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+
+# Bare runtime — QVAC requires Bare ≥ 1.24. Bare is installed globally
+# because @qvac/cli's bundled native deps need a system-wide bare binary.
+# `@qvac/cli` itself is installed LOCALLY (per-project, not globally) so
+# it resolves @qvac/sdk from /app/node_modules — without that, the cli's
+# `loadModelConstants` falls back to a bundled older sdk that doesn't
+# know about the larger Qwen3 model constants we use in qvac.config.json.
+RUN npm install -g bare@^1.24
+
+WORKDIR /app
+
+# ─── deps install ─────────────────────────────────────────────────────────────
+# Copy only package.json first so this layer caches when only the model
+# config changes. All qvac packages pinned to specific versions in
+# package.json (not `*`) so the model registry is deterministic across
+# rebuilds.
+COPY package.json ./
+RUN npm install --omit=dev
+
+# ─── model + config ───────────────────────────────────────────────────────────
+COPY qvac.config.json ./
+
+# We DON'T bake the model into the image — QVAC's loader resolves the
+# `QWEN3_4B_Q4_K_M` constant in qvac.config.json to its own registry
+# download URL on first preload. Tradeoff: smaller image (~700 MB
+# instead of ~3 GB), ~30s cold-start delay on the first container boot
+# while the model downloads (subsequent restarts on the same Nosana
+# host hit the local cache). Acceptable for the demo; revisit if cold
+# starts become painful at scale.
+
+# ─── runtime ──────────────────────────────────────────────────────────────────
+EXPOSE 11434
+
+# Health check: the OpenAI-compatible /v1/models endpoint should return 200
+# once the model is loaded. Use a generous start_period so model preload has
+# time to finish on cold boot.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+  CMD curl -fsS http://localhost:11434/v1/models > /dev/null || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Boot diagnostic: dump GPU + Vulkan visibility before qvac starts.
+# Why: llama.cpp's "no usable GPU found" warning gives no signal about
+# WHICH layer is broken — could be (a) NVIDIA Container Runtime didn't
+# mount the host driver libs, (b) Vulkan ICD JSON missing so the loader
+# enumerates zero devices, (c) llama.cpp build flags. This script writes
+# all three signals to stdout at boot so the Nosana logs show exactly
+# what's wrong.
+COPY <<'EOF' /app/probe-gpu.sh
+#!/bin/sh
+echo "─── GPU probe ─────────────────────────────────────────────────"
+echo "NVIDIA driver via container runtime:"
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi -L 2>&1 || echo "  nvidia-smi listed nothing"
+else
+  echo "  nvidia-smi NOT INSTALLED (NVIDIA Container Runtime probably not active)"
+fi
+echo ""
+echo "Vulkan ICDs visible to the loader:"
+ls -la /usr/share/vulkan/icd.d/ 2>&1 || echo "  /usr/share/vulkan/icd.d MISSING"
+ls -la /etc/vulkan/icd.d/ 2>&1 || echo "  /etc/vulkan/icd.d MISSING"
+echo ""
+echo "Vulkan device enumeration:"
+if command -v vulkaninfo >/dev/null 2>&1; then
+  vulkaninfo --summary 2>&1 | head -40 || echo "  vulkaninfo failed"
+else
+  echo "  vulkaninfo NOT INSTALLED"
+fi
+echo "─── end GPU probe ────────────────────────────────────────────"
+EOF
+RUN chmod +x /app/probe-gpu.sh
+
+# --cors lets the buyer's browser hit this directly (no preflight rejection).
+# --host 0.0.0.0 binds to all interfaces inside the container; Nosana exposes
+# port 11434 to the public via its own ingress.
+# Sh wrapper: run the GPU probe first so its output is visible in Nosana
+# logs, THEN exec qvac so tini still gets signal handling on PID 1.
+CMD ["/bin/sh", "-c", "/app/probe-gpu.sh && exec npx qvac serve openai --cors --host 0.0.0.0 --port 11434 --config /app/qvac.config.json"]

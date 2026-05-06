@@ -1,0 +1,20 @@
+{
+  "ops": [
+    {
+      "id": "tendr-ai-sidecar",
+      "args": {
+        "cmd": ["npx", "qvac", "serve", "openai", "--cors", "--host", "0.0.0.0", "--port", "11434", "--config", "/app/qvac.config.json"],
+        "gpu": true,
+        "image": "ghcr.io/0xharp/tendr-ai-sidecar:latest",
+        "expose": 11434
+      },
+      "type": "container/run"
+    }
+  ],
+  "meta": {
+    "trigger": "dashboard",
+    "system_requirements": { "required_vram": 6 }
+  },
+  "type": "container",
+  "version": "0.1"
+}

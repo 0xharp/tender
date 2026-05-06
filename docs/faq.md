@@ -79,6 +79,54 @@ On devnet today, escrow + milestone releases are public USDC transfers. On mainn
 
 ---
 
+## AI (drafting + comparison)
+
+### What does the AI on tendr.bid actually do?
+
+Three surfaces:
+
+- **Draft RFP scope** — buyer types a paragraph, AI returns a structured scope (objectives, deliverables, milestones, success criteria) the buyer can edit before posting.
+- **Start drafting bid** — provider clicks the button on the bid composer, optionally adds context (tech stack, target price, preferred timeline), AI returns a complete bid draft. Price, timeline, scope markdown, and the milestones array (with acceptance criteria) all populate the form on accept.
+- **Compare bids** — after the buyer decrypts sealed bids at award time, AI generates a side-by-side comparison table + recommends a winner with reasoning.
+
+All three are optional. Skip them and the product works identically.
+
+### Where does the AI run? Do my bids go to OpenAI?
+
+No. The AI runs on a [QVAC](https://qvac.tether.io/) sidecar we operate on a dedicated [Nosana](https://nosana.com/) GPU. Browser → Nosana endpoint, direct. No OpenAI, no Anthropic, no closed AI provider. Open-weight model (Qwen3 4B Instruct), served via QVAC's OpenAI-compatible API.
+
+Full architecture detail in the [AI doc](/docs/ai).
+
+### Does Tendr's backend see my AI prompts?
+
+No. The browser hits the QVAC sidecar's URL directly via an env var (`NEXT_PUBLIC_QVAC_BASE_URL`). There's no Tendr API route in between. Decrypted bid plaintexts going through the AI compare flow, RFP scope drafts, provider bid drafts — none of these touch our Vercel servers.
+
+You can verify this by reading [`apps/web/lib/ai/client.ts`](https://github.com/0xharp/tender/blob/main/apps/web/lib/ai/client.ts) — the OpenAI SDK's `baseURL` is the Nosana endpoint, not any `/api/*` route on tendr.bid.
+
+### Is this "local-first AI"?
+
+No, not in the strict sense — the model runs on a GPU we operate, not on the user's laptop. Running a 4B-parameter LLM in a buyer's browser isn't realistic today. The honest framing: **a QVAC-based inference layer that avoids closed third-party AI providers and keeps Tendr's app servers out of the AI data path**. It's a meaningful privacy improvement over routing prompts through OpenAI; it's not zero-trust.
+
+### Why QVAC specifically?
+
+QVAC is open-source local-first AI infrastructure built by [Tether](https://qvac.tether.io/). Two reasons:
+
+1. We don't want a third-party AI provider's privacy policy to be the binding constraint on what tendr.bid can promise users about their bids.
+2. QVAC's serve mode is OpenAI-compatible, which means swapping out the inference engine later (if a better open-weight model ships) is a config change, not a refactor.
+
+### What if the AI suggests a bad bid winner?
+
+Treat the AI's "recommended winner" as a starting point, not a decision. The recommendation block tells you WHY it picked one — read the reasoning, look at the bids yourself, override if you disagree. The model is good at structured comparison on observable dimensions (price, timeline, milestone realism); it has no judgment about counterparties or domain context you didn't give it.
+
+### Can I see the AI's prompts and code?
+
+Yes — everything is in the public repo:
+- System prompts: [`apps/web/lib/ai/prompts.ts`](https://github.com/0xharp/tender/blob/main/apps/web/lib/ai/prompts.ts)
+- Sidecar Dockerfile + config: [`apps/ai-sidecar/`](https://github.com/0xharp/tender/tree/main/apps/ai-sidecar)
+- Client wrapper: [`apps/web/lib/ai/client.ts`](https://github.com/0xharp/tender/blob/main/apps/web/lib/ai/client.ts)
+
+---
+
 ## Bidding (provider side)
 
 ### How do I bid?

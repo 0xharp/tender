@@ -46,7 +46,7 @@ export default async function Page({ params }: PageProps) {
     fetchRfp(id as Address),
     supabase
       .from('rfps')
-      .select('id, on_chain_pda, rfp_nonce_hex, title')
+      .select('id, on_chain_pda, rfp_nonce_hex, title, scope_summary')
       .eq('on_chain_pda', id)
       .maybeSingle(),
   ]);
@@ -131,6 +131,8 @@ export default async function Page({ params }: PageProps) {
           buyerEncryptionPubkeyHex={buyerEncryptionPubkeyHex}
           hasReserve={hasReserve}
           feeBps={feeBps}
+          rfpTitle={meta.title}
+          rfpScope={meta.scope_summary ?? undefined}
         />
       ) : (
         <BidComposer
@@ -141,6 +143,8 @@ export default async function Page({ params }: PageProps) {
           buyerEncryptionPubkeyHex={buyerEncryptionPubkeyHex}
           hasReserve={hasReserve}
           feeBps={feeBps}
+          rfpTitle={meta.title}
+          rfpScope={meta.scope_summary ?? undefined}
         />
       )}
     </main>

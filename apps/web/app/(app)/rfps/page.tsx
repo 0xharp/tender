@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { SectionHeader } from '@/components/primitives/section-header';
 import { RfpMarketplaceGrid } from '@/components/rfp/rfp-marketplace-grid';
 import { buttonVariants } from '@/components/ui/button';
+import { getCurrentWallet } from '@/lib/auth/session';
 import {
   bidderVisibilityToString,
   listRfps,
@@ -21,13 +22,16 @@ export default async function Page() {
   // on_chain_pda. On-chain is the source of truth - supabase rows that don't
   // have a matching on-chain account are skipped (stale).
   const supabase = await serverSupabase();
-  const [chainRfpsResult, metaResult] = await Promise.all([
+  const [chainRfpsResult, metaResult, viewerWallet] = await Promise.all([
     listRfps(),
     supabase
       .from('rfps')
       .select('on_chain_pda, title, scope_summary, created_at')
       .order('created_at', { ascending: false })
       .limit(200),
+    // Used to flag "your RFPs" so the buyer can spot them in the grid.
+    // Returns null when no session — non-signed-in viewers see no badge.
+    getCurrentWallet(),
   ]);
 
   const error = metaResult.error;
@@ -51,6 +55,9 @@ export default async function Page() {
         bidder_visibility: bidderVisibilityToString(data.bidderVisibility),
         has_reserve: !data.reservePriceCommitment.every((b: number) => b === 0),
         reserve_price_revealed_micro: data.reservePriceRevealed,
+        // String compare on the base58 form — both sides are typed as
+        // `Address` (branded string) but normalize via String() for safety.
+        mine: viewerWallet != null && String(data.buyer) === viewerWallet,
       };
     })
     // Hand off ALL status'd RFPs to the client grid - the lifecycle pill

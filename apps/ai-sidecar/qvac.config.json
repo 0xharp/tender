@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.qvac.tether.io/schema/qvac.config.schema.json",
+  "serve": {
+    "models": {
+      "tendr-llm": {
+        "modelType": "llamacpp-completion",
+        "model": "QWEN3_4B_INST_Q4_K_M",
+        "default": true,
+        "preload": true,
+        "config": {
+          "ctx_size": 8192,
+          "device": "gpu",
+          "gpu_layers": 999,
+          "tools": false
+        }
+      }
+    }
+  }
+}

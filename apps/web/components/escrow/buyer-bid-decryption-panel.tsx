@@ -1,10 +1,13 @@
 'use client';
 
+import { AiBidComparisonPanel } from '@/components/ai/ai-bid-comparison-panel';
+import { BidDetailDrawer } from '@/components/escrow/bid-detail-drawer';
 import { AwardConfirmDialog, type AwardConfirmPayload } from '@/components/escrow/confirm-dialogs';
 import { HashLink } from '@/components/primitives/hash-link';
 import { PrivacyTag } from '@/components/primitives/privacy-tag';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { stripMarkdown } from '@/lib/markdown/strip';
 import {
   type BuyerRevealStage,
   type DecryptedBid,
@@ -70,6 +73,10 @@ export interface BuyerBidDecryptionPanelProps {
   awarding?: boolean;
   /** PDA of the bid currently being awarded (for spinner state). */
   awardingBidPda?: string;
+  /** Off-chain RFP scope text — required by the AI bid-comparison surface
+   *  to evaluate how well each bid covers the original ask. When absent,
+   *  the AI compare button hides itself. */
+  rfpScope?: string;
 }
 
 type SortBy = 'price' | 'timeline' | 'submitted';
@@ -106,6 +113,7 @@ function Connected({
   onAward,
   awarding,
   awardingBidPda,
+  rfpScope,
 }: { account: UiWalletAccount } & BuyerBidDecryptionPanelProps) {
   const signMessage = useSignMessage(account);
   const signTransactions = useSignTransactions(account, 'solana:devnet');
@@ -274,6 +282,33 @@ function Connected({
             }}
           />
         ))}
+
+        {/* AI bid-comparison panel — only renders when the AI sidecar is
+            configured AND we have a non-trivial RFP scope to evaluate
+            against AND at least 2 successfully-decrypted bids to compare.
+            Sends the decrypted bids browser → QVAC sidecar directly;
+            Tendr's backend never sees the plaintext (see lib/ai/index.ts
+            + docs/ai.md for the data-flow explainer). */}
+        {rfpScope && rfpScope.length >= 20 && sortedBids.filter((b) => b.plaintext).length >= 2 && (
+          <AiBidComparisonPanel
+            rfpScope={rfpScope}
+            bids={sortedBids
+              .filter((b): b is DecryptedBid & { plaintext: NonNullable<DecryptedBid['plaintext']> } => !!b.plaintext)
+              .map((b, idx) => ({
+                bidIndex: idx,
+                bidPda: b.bidPda,
+                priceUsdc: b.plaintext.priceUsdc,
+                timelineDays: b.plaintext.timelineDays,
+                scope: b.plaintext.scope,
+                milestones: b.plaintext.milestones.map((m) => ({
+                  name: m.name,
+                  amountUsdc: m.amountUsdc,
+                  durationDays: m.durationDays,
+                })),
+              }))}
+          />
+        )}
+
         <div className="flex justify-end">
           <Button
             type="button"
@@ -330,6 +365,11 @@ function BidRow({
     );
   }
   const pt = bid.plaintext!;
+  // Drawer state is row-local — each row has its own "View full bid"
+  // button + sheet. Side-by-side comparison still works because the
+  // drawer overlay is translucent enough to leave the list partially
+  // visible behind it.
+  const [drawerOpen, setDrawerOpen] = useState(false);
   return (
     <div
       className={cn(
@@ -366,7 +406,21 @@ function BidRow({
         </Button>
       </div>
 
-      <p className="text-xs leading-relaxed text-foreground/80 line-clamp-3">{pt.scope}</p>
+      {/* Stripped + clamped scope preview. Markdown source lives in the
+          plaintext (AI drafts and user-typed bids both produce markdown);
+          stripping here keeps `**` and heading hashes from showing literally
+          inside the 3-line clamp. Full markdown render is one click away
+          via "View full bid". */}
+      <p className="text-xs leading-relaxed text-foreground/80 line-clamp-3">
+        {stripMarkdown(pt.scope)}
+      </p>
+      <button
+        type="button"
+        onClick={() => setDrawerOpen(true)}
+        className="self-start text-[11px] font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+      >
+        View full bid →
+      </button>
 
       <div className="flex flex-col gap-1">
         <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -397,16 +451,34 @@ function BidRow({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
         <div className="flex items-center gap-3">
+          {/* SNS rules per surface — keep the privacy invariant intact:
+              - payout: this is the bid plaintext's `payoutPreference.address`
+                which defaults to `account.address` (the connected MAIN
+                wallet) at form submit time, regardless of privacy mode.
+                The "payoutDestination" that gets set to ephemeral in
+                private mode is a SEPARATE on-chain field — not what we
+                render here. So always-resolve SNS is correct.
+              - main: only present in private mode after decrypt; this IS
+                the verified main wallet, resolve OK.
+              - signer: in public mode signer == main (resolve OK).
+                In private mode signer == ephemeral (NEVER resolve). */}
           <span>
-            payout · <HashLink hash={pt.payoutPreference.address} kind="account" visibleChars={4} />
+            payout ·{' '}
+            <HashLink hash={pt.payoutPreference.address} kind="account" visibleChars={4} withSns />
           </span>
           {bid.isPrivate && bid.mainWallet && (
             <span>
-              main · <HashLink hash={bid.mainWallet} kind="account" visibleChars={4} />
+              main · <HashLink hash={bid.mainWallet} kind="account" visibleChars={4} withSns />
             </span>
           )}
           <span>
-            signer · <HashLink hash={bid.bidSignerWallet} kind="account" visibleChars={4} />
+            signer ·{' '}
+            <HashLink
+              hash={bid.bidSignerWallet}
+              kind="account"
+              visibleChars={4}
+              withSns={!bid.isPrivate}
+            />
           </span>
         </div>
         {pt.notes && (
@@ -415,6 +487,20 @@ function BidRow({
           </span>
         )}
       </div>
+
+      <BidDetailDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        bidPda={bid.bidPda}
+        isPrivate={bid.isPrivate}
+        plaintext={pt}
+        onAward={() => {
+          setDrawerOpen(false);
+          void onAward();
+        }}
+        awarding={awarding}
+        awardDisabled={disabled}
+      />
     </div>
   );
 }

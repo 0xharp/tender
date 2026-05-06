@@ -116,6 +116,11 @@ export interface BuyerActionPanelProps {
    *  milestone_index. Empty record when no notes posted yet. Threaded into
    *  each milestone row's bottom section. */
   notesByMilestoneIndex: Record<number, MilestoneNoteRow[]>;
+  /** Off-chain RFP scope text + title — passed through to AwardSection
+   *  → BuyerBidDecryptionPanel for the AI bid-comparison feature. The AI
+   *  needs the original scope to evaluate how well each bid covers it. */
+  rfpScope?: string;
+  rfpTitle?: string;
 }
 
 export function BuyerActionPanel(props: BuyerActionPanelProps) {
@@ -141,6 +146,12 @@ function ConnectedBuyerPanel({
   bids,
   isPastBidClose,
   notesByMilestoneIndex,
+  rfpScope,
+  // rfpTitle accepted for forward-compat but not currently surfaced in this
+  // component — the AI bid-comparison surface only needs the scope, not the
+  // title. Keeping the prop in the interface so callers can pass both
+  // without churn if we ever want to surface the title.
+  rfpTitle: _rfpTitle,
 }: BuyerActionPanelProps & { account: UiWalletAccount }) {
   const signTransactions = useSignTransactions(account, 'solana:devnet');
   const wallet = account.address as Address;
@@ -171,6 +182,7 @@ function ConnectedBuyerPanel({
         bids={bids}
         // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook type drift
         signTransactions={signTransactions as any}
+        rfpScope={rfpScope}
       />
     );
   }
@@ -297,6 +309,7 @@ function AwardSection({
   feeBps,
   bids,
   signTransactions,
+  rfpScope,
 }: {
   wallet: Address;
   rfpPda: Address;
@@ -305,6 +318,7 @@ function AwardSection({
   bids: { address: string; commitHashHex: string; submittedAtIso: string }[];
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard
   signTransactions: any;
+  rfpScope?: string;
 }) {
   const [stage, setStage] = useState<AwardStage | null>(null);
   const [awarding, setAwarding] = useState(false);
@@ -450,6 +464,7 @@ function AwardSection({
         onAward={handleAward}
         awarding={awarding}
         awardingBidPda={awardingBidPda ?? undefined}
+        rfpScope={rfpScope}
       />
     </div>
   );
@@ -479,6 +494,7 @@ function CloseBiddingSection({
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard
   signTransactions: any;
 }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<CloseBiddingStage | null>(null);
 
@@ -496,8 +512,13 @@ function CloseBiddingSection({
         description: <TxToastDescription hash={result.txSignature} prefix="Tx" />,
         duration: 8000,
       });
-      // Reload so the page re-renders with status=reveal → AwardSection appears.
-      window.location.reload();
+      // Soft refresh re-fetches the server-rendered page (so status flips
+      // from `open` → `reveal` and AwardSection mounts) WITHOUT remounting
+      // the wallet adapter. A hard `window.location.reload()` here was
+      // logging users out — during the reload's wallet-reconnect window,
+      // the account-change handler saw walletAccount===null while the
+      // session cookie still pointed at a wallet, mismatch fired sign-out.
+      router.refresh();
     } catch (e) {
       toast.error('Close bidding failed', { description: friendlyBidError(e), duration: 12000 });
     } finally {
@@ -574,6 +595,7 @@ function ResumeFundingSection({
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook
   signTransactions: any;
 }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<AwardStage | null>(null);
 
@@ -610,7 +632,9 @@ function ResumeFundingSection({
         description: <TxToastDescription hash={result.fundTxSignature} prefix="Tx" />,
         duration: 8000,
       });
-      window.location.reload();
+      // Soft refresh — see CloseBiddingSection for why hard reload was
+      // logging users out via the wallet-account-change handler race.
+      router.refresh();
     } catch (e) {
       toast.error('Resume funding failed', {
         description: friendlyBidError(e),
