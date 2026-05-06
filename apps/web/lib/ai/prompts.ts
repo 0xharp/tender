@@ -94,7 +94,7 @@ Output: ONLY a single valid JSON object matching this schema:
       "milestoneCount": <integer>,
       "scopeCoverage": "<one short phrase: 'covers all RFP items', 'partial — missing X', 'expanded scope', etc.>",
       "milestoneRealism": "<one short phrase: 'reasonable', 'aggressive — likely slip', 'underspecified', etc.>",
-      "riskFlags": ["<short flag 1>", "<short flag 2>"]  // 0-3 items, e.g. "very low price — possible underbid", "no acceptance criteria specified"
+      "riskFlags": ["<short flag 1>", "<short flag 2>"]  // 0-3 items. Each flag must be supported by SOMETHING IN THE BID DATA. Examples of evidence-backed flags: "no acceptance criteria on milestone 2", "milestone amounts don't sum to declared price", "scope skips RFP requirement X", "payout window <72h after delivery — unusual for this category". Empty array is the correct answer for any bid where you can't point to specific evidence.
     }
     // ... one row per bid
   ],
@@ -109,6 +109,13 @@ Rules:
 - The "rows" array MUST have exactly one entry per input bid, in the same order. Use the input's bidIndex value verbatim (it's 0-indexed: 0, 1, 2, …). DO NOT add 1 to the bidIndex field — that's the structured key the UI uses to map back to actual bids.
 - Be honest about tradeoffs. If a bid is the cheapest but skips a deliverable, say so. If a bid is comprehensive but pricey, say that too.
 - Risk flags are concise — one short clause each, not full sentences. Empty array if nothing flags.
+- RISK-FLAG EVIDENCE RULE — read carefully:
+  Every risk flag must point to specific evidence in the bid data. Do not generate flags from a template. In particular:
+  - Price flags are RELATIVE-ONLY. "Very low price — possible underbid" is appropriate ONLY when this bid's priceUsdc is materially lower than every other bid in the set (e.g. <60% of the next cheapest). If two bids have the same price, neither can be flagged for being low. If three bids cluster within 20% of each other, NONE of them is "very low".
+  - "Aggressive timeline" requires the timeline to be materially shorter than what the milestones imply OR than other bids of similar scope. Don't flag a 60-day project as aggressive without comparison.
+  - "Underspecified milestones" requires actual missing fields (no successCriteria on a milestone, milestones without descriptions, etc).
+  - "Scope gaps" must reference a specific RFP item the bid doesn't address.
+  When in doubt, leave riskFlags empty. Inventing flags to fill the array is worse than an empty array — it trains the buyer to distrust the comparison.
 - The recommendation's reasoning should compare the winner against the OTHER bids, not just describe the winner in isolation.
 - INDEXING IN PROSE: when you reference bids in the reasoning text (or any free-text field), use ONE-INDEXED numbering ("Bid 1", "Bid 2", "Bid 3", …) to match how the UI displays them to the buyer. So if input bidIndex is 0, write "Bid 1" in prose. If input bidIndex is 1, write "Bid 2" in prose. The structured bidIndex field stays 0-indexed; only the human-readable text uses 1-indexed. Example: when recommending the bid with bidIndex=1, the structured field is \`"bidIndex": 1\` BUT the reasoning reads "Bid 2 is the strongest because…".`;
 
