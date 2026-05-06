@@ -248,7 +248,10 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
             mode={{
               kind: 'rfp-scope',
               category: form.watch('category'),
-              budgetUsdc: form.watch('reserve_price_usdc') || undefined,
+              // Intentionally NO budgetUsdc here. The reserve_price_usdc
+              // field is sealed on chain; passing it to the AI risks the
+              // model echoing the number into the public scope summary.
+              // See lib/ai/prompts.ts CRITICAL PRIVACY RULE.
               timelineDays: form.watch('bid_window_hours')
                 ? Math.ceil(Number(form.watch('bid_window_hours')) / 24)
                 : undefined,

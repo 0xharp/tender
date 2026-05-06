@@ -45,6 +45,7 @@ import {
   draftRfpScope,
 } from '@/lib/ai';
 import type { DraftBidValue } from '@/lib/ai/index';
+import { hasMoneyMention, scrubMoneyMentions } from '@/lib/ai/scrub-money';
 
 import {
   BID_DRAFT_PHRASES,
@@ -60,16 +61,19 @@ import {
 const RFP_SCOPE_CHAR_LIMIT = 4000;
 
 export type AiDraftMode =
+  // No budget/reserve on RFP scope drafts by design. The buyer's reserve
+  // is sealed on chain; auto-feeding it to the AI risked the model
+  // echoing the number into the scope output (which is public — see
+  // prompts.ts CRITICAL PRIVACY RULE).
   | {
       kind: 'rfp-scope';
       category?: string;
-      budgetUsdc?: string;
       timelineDays?: number;
       /** Accepts the full markdown blob — caller drops it into the
        *  scope_summary field as-is. */
       onAccept: (text: string) => void;
     }
-  // No budget/reserve on bid drafts by design — see prompts.ts for why.
+  // Same reasoning on bid drafts — see prompts.ts.
   | {
       kind: 'bid';
       rfpScope: string;
@@ -93,9 +97,9 @@ const COPY: Record<
   'rfp-scope': {
     title: 'Draft scope with QVAC Private AI',
     description:
-      "Tell us what you need in plain English. We'll generate a structured RFP scope (objectives, deliverables, milestones, success criteria) you can edit before posting.",
+      "Tell us what you need in plain English. We'll generate a structured RFP scope (objectives, deliverables, milestones, success criteria) you can edit before posting. The scope is PUBLIC — bidders read it, so don't include your budget or reserve price in the description.",
     placeholder:
-      'e.g. "We need a security audit for our DEX. ~5k LOC of Anchor + TypeScript. Focus on integer overflow + reentrancy. ~3 weeks. ~$15k budget."',
+      'e.g. "We need a security audit for our DEX. ~5k LOC of Anchor + TypeScript. Focus on integer overflow + reentrancy. ~3 weeks." — skip budget; it stays sealed on chain.',
     cta: 'Generate scope',
   },
   bid: {
@@ -107,6 +111,53 @@ const COPY: Record<
     cta: 'Generate starting bid',
   },
 };
+
+/**
+ * Inline amber warning shown when the AI-drafted scope contains a
+ * monetary mention. The buyer's reserve is sealed on chain; the scope
+ * summary is public — money mentions in the scope leak the seal.
+ *
+ * Two affordances: (1) an explicit list of what was detected so the
+ * buyer can verify the scrubber isn't over-eager, (2) a one-click
+ * "Scrub it for me" that swaps every match with `[budget redacted]`.
+ * The buyer can still edit by hand before accepting; this is a guard,
+ * not a forced filter.
+ */
+function ScopeMoneyWarning({
+  draft,
+  onScrub,
+}: {
+  draft: string;
+  onScrub: (cleaned: string) => void;
+}) {
+  const result = scrubMoneyMentions(draft);
+  if (result.matches.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/[0.06] p-3 text-[11px] leading-relaxed">
+      <p className="font-medium text-amber-700 dark:text-amber-400">
+        Possible budget leak in this draft
+      </p>
+      <p className="text-foreground/80">
+        The scope summary is public — every bidder reads it. Your reserve price is
+        meant to stay sealed. The AI included these monetary phrases:
+      </p>
+      <ul className="ml-3 flex list-disc flex-col gap-0.5 text-foreground/85">
+        {result.matches.map((m) => (
+          <li key={m} className="font-mono text-[10px]">
+            {m}
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={() => onScrub(result.scrubbed)}
+        className="self-start rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+      >
+        Scrub it for me — replace with [budget redacted]
+      </button>
+    </div>
+  );
+}
 
 function DraftCharCounter({ length, max }: { length: number; max: number }) {
   const over = length > max;
@@ -163,7 +214,6 @@ export function AiDraftModal({ open, onOpenChange, mode }: AiDraftModalProps) {
         const result: AiResult<string> = await draftRfpScope({
           description,
           category: mode.category,
-          budgetUsdc: mode.budgetUsdc,
           timelineDays: mode.timelineDays,
         });
         if (!result.ok) {
@@ -258,6 +308,16 @@ export function AiDraftModal({ open, onOpenChange, mode }: AiDraftModalProps) {
               </a>
               ).
             </p>
+            {/* Heads-up if the buyer's typed prompt mentions money. Only
+                shown for rfp-scope mode — bid drafting (provider side)
+                wants the provider to mention their target price freely. */}
+            {mode.kind === 'rfp-scope' && !hasDraft && hasMoneyMention(input) && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                Heads up: your description mentions an amount. The scope summary the AI
+                produces is public — bidders read it. Better to leave the budget out and
+                set it as the (sealed) reserve price below.
+              </p>
+            )}
           </div>
 
           {busy && (
@@ -281,7 +341,20 @@ export function AiDraftModal({ open, onOpenChange, mode }: AiDraftModalProps) {
                 </p>
                 <DraftCharCounter length={scopeDraft.length} max={RFP_SCOPE_CHAR_LIMIT} />
               </div>
-              <MarkdownEditor value={scopeDraft} onChange={setScopeDraft} rows={10} />
+              <MarkdownEditor
+                value={scopeDraft}
+                onChange={setScopeDraft}
+                rows={10}
+                // AI output is the initial content — most users want to
+                // SEE the rendered scope first, then drop into Edit if
+                // they want to tweak. Same rationale on the bid-draft
+                // editor below.
+                defaultTab="preview"
+              />
+              <ScopeMoneyWarning
+                draft={scopeDraft}
+                onScrub={(cleaned) => setScopeDraft(cleaned)}
+              />
               <p className="text-[11px] text-muted-foreground">
                 Edit anything you want before applying. The text gets dropped into the
                 scope summary field as-is — markdown formatting is preserved and rendered
@@ -404,7 +477,12 @@ function BidDraftPreview({
         <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           Approach (markdown · editable)
         </p>
-        <MarkdownEditor value={draft.scope} onChange={onScopeChange} rows={6} />
+        <MarkdownEditor
+          value={draft.scope}
+          onChange={onScopeChange}
+          rows={6}
+          defaultTab="preview"
+        />
       </div>
 
       {/* Milestones — read-only here; edited in the bid form after accept. */}

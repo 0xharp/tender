@@ -66,7 +66,6 @@ function stripThinking(raw: string): string {
 export async function draftRfpScope(args: {
   description: string;
   category?: string;
-  budgetUsdc?: string;
   timelineDays?: number;
 }): Promise<AiResult<string>> {
   const client = getQvacClient();

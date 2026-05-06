@@ -49,6 +49,10 @@ export interface MarkdownEditorProps {
   id?: string;
   /** Optional aria-invalid to forward into the textarea. */
   ariaInvalid?: boolean;
+  /** Initial tab. Default 'edit' for forms where the user is typing;
+   *  pass 'preview' for AI-drafted content where the rendered view is
+   *  the more useful initial display. */
+  defaultTab?: 'edit' | 'preview';
 }
 
 const TAB_VALUES = { edit: 'edit', preview: 'preview' } as const;
@@ -63,12 +67,14 @@ export function MarkdownEditor({
   className,
   id,
   ariaInvalid,
+  defaultTab = 'edit',
 }: MarkdownEditorProps) {
-  // Default tab is Edit — preview is one click away. Switching back
-  // to Edit doesn't lose the textarea's caret position because we
-  // remount it on every tab change; that's acceptable since users
-  // almost never go Edit → Preview → Edit mid-keystroke.
-  const [tab, setTab] = useState<'edit' | 'preview'>('edit');
+  // Initial tab from prop — caller decides whether the user lands on
+  // the editor (typing flow) or the preview (AI-output review flow).
+  // Switching back to Edit doesn't lose the textarea's caret position
+  // because we remount it on every tab change; that's acceptable since
+  // users almost never go Edit → Preview → Edit mid-keystroke.
+  const [tab, setTab] = useState<'edit' | 'preview'>(defaultTab);
   const generatedId = useId();
   const textareaId = id ?? `markdown-editor-${generatedId}`;
 

@@ -451,16 +451,34 @@ function BidRow({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
         <div className="flex items-center gap-3">
+          {/* SNS rules per surface — keep the privacy invariant intact:
+              - payout: this is the bid plaintext's `payoutPreference.address`
+                which defaults to `account.address` (the connected MAIN
+                wallet) at form submit time, regardless of privacy mode.
+                The "payoutDestination" that gets set to ephemeral in
+                private mode is a SEPARATE on-chain field — not what we
+                render here. So always-resolve SNS is correct.
+              - main: only present in private mode after decrypt; this IS
+                the verified main wallet, resolve OK.
+              - signer: in public mode signer == main (resolve OK).
+                In private mode signer == ephemeral (NEVER resolve). */}
           <span>
-            payout · <HashLink hash={pt.payoutPreference.address} kind="account" visibleChars={4} />
+            payout ·{' '}
+            <HashLink hash={pt.payoutPreference.address} kind="account" visibleChars={4} withSns />
           </span>
           {bid.isPrivate && bid.mainWallet && (
             <span>
-              main · <HashLink hash={bid.mainWallet} kind="account" visibleChars={4} />
+              main · <HashLink hash={bid.mainWallet} kind="account" visibleChars={4} withSns />
             </span>
           )}
           <span>
-            signer · <HashLink hash={bid.bidSignerWallet} kind="account" visibleChars={4} />
+            signer ·{' '}
+            <HashLink
+              hash={bid.bidSignerWallet}
+              kind="account"
+              visibleChars={4}
+              withSns={!bid.isPrivate}
+            />
           </span>
         </div>
         {pt.notes && (

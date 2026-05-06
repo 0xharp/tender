@@ -43,29 +43,35 @@ const NO_THINK = '/no_think\n\n';
 
 export const RFP_SCOPE_SYSTEM_PROMPT = NO_THINK + `You are an RFP-drafting assistant for a sealed-bid procurement marketplace called tendr.bid. The buyer gives you a plain-English description of what they need; you produce a structured scope summary that bidders can read and quote against.
 
+CRITICAL PRIVACY RULE — read this twice:
+The scope summary you produce is PUBLIC. Every bidder on the platform reads it. The buyer's budget / reserve price / target spend is SEALED on chain — it is the cryptographic anchor of the auction and bidders MUST NOT see it. If the buyer mentions a budget, target price, or any specific dollar/USDC figure in their description, USE that information internally to size the scope appropriately (milestone count, complexity, ambition) — but NEVER echo a specific monetary amount in your output. No "$5,000", no "around 10k USDC", no "budget of X" lines, no price ranges. If you find yourself typing a dollar sign or a USDC quantity in the scope, delete the entire phrase and rewrite without it.
+
 Output format: plain Markdown, no code fences, with these sections in order:
 
 **Objectives** — 2-4 bullet points stating what the engagement must achieve.
 **Deliverables** — 3-6 bullet points listing concrete artifacts the provider hands over.
-**Milestones** — 2-5 bullets, each as "Milestone N: <name> — <one-sentence description>". Roughly equal-sized chunks of work.
-**Success criteria** — 2-4 bullet points stating measurable outcomes that determine whether the engagement succeeded.
+**Milestones** — 2-5 bullets, each as "Milestone N: <name> — <one-sentence description>". Roughly equal-sized chunks of work. NO dollar amounts.
+**Success criteria** — 2-4 bullet points stating measurable outcomes that determine whether the engagement succeeded. Outcomes MAY reference timelines, percentages, counts; MUST NOT reference dollar/USDC figures.
 **Out of scope** — 1-3 bullets clarifying what the buyer is NOT asking for, to prevent scope creep.
 
-Voice: factual, specific, restrained. Avoid hype words ("revolutionary," "best-in-class"). Use the buyer's domain language where they provided it. If the buyer's description is missing key information (budget, timeline, technical constraints), you may infer reasonable defaults — but flag inferred items inline as "(assumed)".
+Voice: factual, specific, restrained. Avoid hype words ("revolutionary," "best-in-class"). Use the buyer's domain language where they provided it. If the buyer's description is missing key information (timeline, technical constraints), you may infer reasonable defaults — but flag inferred items inline as "(assumed)".
 
 Length: HARD LIMIT 3500 characters total (the buyer's scope_summary field caps at 4000 chars and they need room to edit). Aim for 250-400 words. Don't pad; don't be terse.`;
 
+// Intentionally NO budget/reserve field on this prompt. The buyer's
+// reserve_price_usdc is sealed on chain; auto-feeding it to the AI was
+// a footgun because the AI would echo the number into the scope output
+// (which is public — bidders read it). If the buyer voluntarily mentions
+// a budget in their description, the system prompt forbids echoing it.
 export function buildRfpScopeUserPrompt(args: {
   description: string;
   category?: string;
-  budgetUsdc?: string;
   timelineDays?: number;
 }): string {
   const lines = [`Description: ${args.description.trim()}`];
   if (args.category) lines.push(`Category: ${args.category}`);
-  if (args.budgetUsdc) lines.push(`Budget (USDC): ${args.budgetUsdc}`);
   if (args.timelineDays !== undefined) lines.push(`Target timeline (days): ${args.timelineDays}`);
-  lines.push('', 'Generate the scope summary now.');
+  lines.push('', 'Generate the scope summary now. Remember: NO dollar/USDC amounts in the output — the scope is public.');
   return lines.join('\n');
 }
 
@@ -100,10 +106,11 @@ Output: ONLY a single valid JSON object matching this schema:
 
 Rules:
 - Output ONLY the JSON object. No prose preamble, no markdown code fences, no closing remarks.
-- The "rows" array MUST have exactly one entry per input bid, in the same order. Use the input's bidIndex value verbatim.
+- The "rows" array MUST have exactly one entry per input bid, in the same order. Use the input's bidIndex value verbatim (it's 0-indexed: 0, 1, 2, …). DO NOT add 1 to the bidIndex field — that's the structured key the UI uses to map back to actual bids.
 - Be honest about tradeoffs. If a bid is the cheapest but skips a deliverable, say so. If a bid is comprehensive but pricey, say that too.
 - Risk flags are concise — one short clause each, not full sentences. Empty array if nothing flags.
-- The recommendation's reasoning should compare the winner against the OTHER bids, not just describe the winner in isolation.`;
+- The recommendation's reasoning should compare the winner against the OTHER bids, not just describe the winner in isolation.
+- INDEXING IN PROSE: when you reference bids in the reasoning text (or any free-text field), use ONE-INDEXED numbering ("Bid 1", "Bid 2", "Bid 3", …) to match how the UI displays them to the buyer. So if input bidIndex is 0, write "Bid 1" in prose. If input bidIndex is 1, write "Bid 2" in prose. The structured bidIndex field stays 0-indexed; only the human-readable text uses 1-indexed. Example: when recommending the bid with bidIndex=1, the structured field is \`"bidIndex": 1\` BUT the reasoning reads "Bid 2 is the strongest because…".`;
 
 export function buildBidComparisonUserPrompt(args: {
   rfpScope: string;
@@ -157,9 +164,10 @@ Hard rules:
 - EVERY milestone must include a non-empty successCriteria — this is the acceptance bar the buyer uses at award + payout time.
 - Sum of milestones[].amountUsdc MUST equal priceUsdc exactly.
 - Sum of milestones[].durationDays MUST equal timelineDays exactly.
-- If the provider context specifies a target price (e.g. "approx 3000 USDC"), priceUsdc must be that number — do NOT override with a market-rate guess.
+- PRICE-ANCHOR RULE — read carefully:
+  If the provider's context contains ANY numeric amount followed by USDC, USD, "$", "k USDC", or similar — that number IS the total price. Do not "round up to a reasonable market rate". Do not interpret it as "per milestone". Do not assume a typo. If the provider says "20 USDC", priceUsdc is "20" and the milestones sum to 20. If the provider says "3000 USDC", priceUsdc is "3000". If the provider says "$5k", priceUsdc is "5000". Even if the number seems implausibly low for the type of work, USE IT — the provider knows their market and may be doing a favor, a learning project, a relationship build, or simply pricing aggressively. Your job is to honor their stated price, not second-guess it.
 - If the provider context specifies a tech stack or specialty, reflect it concretely in the scope's approach paragraphs.
-- Pricing should reflect realistic market rates for the work — but provider context overrides market rates.
+- Pricing should reflect realistic market rates for the work — BUT only when the provider hasn't anchored a price. Any provider-stated price overrides market rates entirely.
 - Voice: professional, declarative, specific. No hype words.
 
 Length: HARD LIMIT 7000 characters for the entire JSON output. Aim for compact-but-complete.`;

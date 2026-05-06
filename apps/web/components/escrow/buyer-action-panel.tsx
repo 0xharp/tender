@@ -494,6 +494,7 @@ function CloseBiddingSection({
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard
   signTransactions: any;
 }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<CloseBiddingStage | null>(null);
 
@@ -511,8 +512,13 @@ function CloseBiddingSection({
         description: <TxToastDescription hash={result.txSignature} prefix="Tx" />,
         duration: 8000,
       });
-      // Reload so the page re-renders with status=reveal → AwardSection appears.
-      window.location.reload();
+      // Soft refresh re-fetches the server-rendered page (so status flips
+      // from `open` → `reveal` and AwardSection mounts) WITHOUT remounting
+      // the wallet adapter. A hard `window.location.reload()` here was
+      // logging users out — during the reload's wallet-reconnect window,
+      // the account-change handler saw walletAccount===null while the
+      // session cookie still pointed at a wallet, mismatch fired sign-out.
+      router.refresh();
     } catch (e) {
       toast.error('Close bidding failed', { description: friendlyBidError(e), duration: 12000 });
     } finally {
@@ -589,6 +595,7 @@ function ResumeFundingSection({
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook
   signTransactions: any;
 }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<AwardStage | null>(null);
 
@@ -625,7 +632,9 @@ function ResumeFundingSection({
         description: <TxToastDescription hash={result.fundTxSignature} prefix="Tx" />,
         duration: 8000,
       });
-      window.location.reload();
+      // Soft refresh — see CloseBiddingSection for why hard reload was
+      // logging users out via the wallet-account-change handler race.
+      router.refresh();
     } catch (e) {
       toast.error('Resume funding failed', {
         description: friendlyBidError(e),

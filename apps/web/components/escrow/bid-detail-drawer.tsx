@@ -168,7 +168,16 @@ export function BidDetailDrawer({
               Payout
             </h3>
             <div className="rounded-lg border border-border/60 bg-card/40 p-3 font-mono text-[11px]">
-              <HashLink hash={plaintext.payoutPreference.address} kind="account" visibleChars={10} />
+              {/* `plaintext.payoutPreference.address` is the bid form's
+                  `payout_address` field, defaulted to the connected MAIN
+                  wallet at submit time. Always safe to resolve SNS — the
+                  ephemeral payout target is a separate on-chain field. */}
+              <HashLink
+                hash={plaintext.payoutPreference.address}
+                kind="account"
+                visibleChars={10}
+                withSns
+              />
             </div>
             {plaintext.notes && (
               <p className="rounded-lg border border-border/60 bg-card/40 p-3 text-[11px] leading-relaxed text-foreground/80">
