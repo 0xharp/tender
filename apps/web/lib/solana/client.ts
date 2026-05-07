@@ -103,9 +103,11 @@ export function stripSolanaClientHeaderMiddleware(
   next: (info: unknown, init: unknown) => void,
 ): void {
   if (init?.headers) {
-    const headers = { ...init.headers };
-    delete headers['solana-client'];
-    init = { ...init, headers };
+    // Spread without the offending key — avoids both `delete` (perf rule) and
+    // reassigning the `init` parameter (style rule).
+    const { 'solana-client': _stripped, ...headers } = init.headers;
+    next(info, { ...init, headers });
+    return;
   }
   next(info, init);
 }

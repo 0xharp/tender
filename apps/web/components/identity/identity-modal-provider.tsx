@@ -123,11 +123,7 @@ export function IdentityModalProvider({
   return (
     <IdentityModalContext.Provider value={{ openClaimModal }}>
       {children}
-      <ClaimIdentityModal
-        open={open}
-        onOpenChange={handleOpenChange}
-        onClaimed={handleClaimed}
-      />
+      <ClaimIdentityModal open={open} onOpenChange={handleOpenChange} onClaimed={handleClaimed} />
     </IdentityModalContext.Provider>
   );
 }

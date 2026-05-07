@@ -1,5 +1,11 @@
 'use client';
 
+import {
+  type TendrAccount,
+  useTendrAccount,
+  useTendrSignMessage,
+  useTendrSignTransactions,
+} from '@/lib/wallet';
 /**
  * The single canonical "your bid on this RFP" surface. Lives inline on the
  * RFP detail page (`/rfps/[id]`). Replaces the older split between
@@ -26,7 +32,6 @@
  * dashboard and provider-profile pages only LIST bids and link here.
  */
 import type { Address } from '@solana/kit';
-import { type TendrAccount, useTendrAccount, useTendrSignMessage, useTendrSignTransactions } from '@/lib/wallet';
 import { accounts } from '@tender/tender-client';
 
 import {
@@ -48,6 +53,7 @@ import { HashLink } from '@/components/primitives/hash-link';
 import { StatusPill } from '@/components/primitives/status-pill';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { InlineMarkdown } from '@/components/ui/markdown';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { friendlyBidError, humanizeStage } from '@/lib/bids/error-utils';
 import { type SealedBidPlaintext, sealedBidPlaintextSchema } from '@/lib/bids/schema';
@@ -68,7 +74,6 @@ import {
 } from '@/lib/sdks/magicblock';
 import { listBids } from '@/lib/solana/chain-reads';
 import { rpc } from '@/lib/solana/client';
-import { InlineMarkdown } from '@/components/ui/markdown';
 import { cn } from '@/lib/utils';
 
 export interface YourBidPanelProps {

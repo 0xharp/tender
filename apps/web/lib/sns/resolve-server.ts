@@ -21,9 +21,9 @@ import 'server-only';
 
 import { redirect } from 'next/navigation';
 
-import { resolveSnsToWallet } from './resolve';
-import { resolveTendrSubdomain } from './devnet/resolve';
 import { snsRpc } from '@/lib/solana/client';
+import { resolveTendrSubdomain } from './devnet/resolve';
+import { resolveSnsToWallet } from './resolve';
 
 /** Cheap heuristic — base58 pubkeys are 32-44 chars and contain no `.`. */
 function looksLikeWallet(input: string): boolean {
@@ -40,10 +40,7 @@ function looksLikeWallet(input: string): boolean {
  * If the `.sol` doesn't resolve, REDIRECTS to the fallback path (the
  * page would crash trying to use an unresolvable string as a pubkey).
  */
-export async function resolveWalletParam(
-  param: string,
-  fallback = '/',
-): Promise<string> {
+export async function resolveWalletParam(param: string, fallback = '/'): Promise<string> {
   if (looksLikeWallet(param)) return param;
   const resolved = await resolveSnsToWallet(snsRpc, param);
   if (!resolved) {

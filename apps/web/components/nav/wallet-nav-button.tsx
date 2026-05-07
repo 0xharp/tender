@@ -1,7 +1,7 @@
 'use client';
 
-import type { Address } from '@solana/kit';
 import { performSignOut, useTendrAccount } from '@/lib/wallet';
+import type { Address } from '@solana/kit';
 import {
   GavelIcon,
   ListChecksIcon,
@@ -18,7 +18,6 @@ import { useEffect, useRef, useState } from 'react';
 import { ClientOnly } from '@/components/client-only';
 import { useIdentityModal } from '@/components/identity/identity-modal-provider';
 import { HashLink } from '@/components/primitives/hash-link';
-import { useSnsName } from '@/lib/sns/hooks';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -31,6 +30,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SignInButton } from '@/components/wallet/sign-in-button';
 import { WalletPicker } from '@/components/wallet/wallet-picker';
+import { useSnsName } from '@/lib/sns/hooks';
 import { cn } from '@/lib/utils';
 
 function shortAddress(addr: string): string {

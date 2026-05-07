@@ -23,12 +23,9 @@
 
 'use client';
 
-import { useEffect, useRef } from 'react';
-import {
-  SOLANA_DEVNET_CHAIN,
-  SOLANA_MAINNET_CHAIN,
-} from '@solana/wallet-standard-chains';
+import { SOLANA_DEVNET_CHAIN, SOLANA_MAINNET_CHAIN } from '@solana/wallet-standard-chains';
 import { getWalletFeature, useWallets } from '@wallet-standard/react';
+import { useEffect, useRef } from 'react';
 
 /** wallet-standard feature key for the connect feature. Hardcoded to the
  *  spec literal so we don't pull `@wallet-standard/features` as a direct

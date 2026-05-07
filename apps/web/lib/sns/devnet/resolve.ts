@@ -98,10 +98,7 @@ async function deriveDomainAddress(name: string, parent: Address): Promise<Addre
  * include parent in the seeds. We only call this for tendr subdomains,
  * so parent is always required.
  */
-async function deriveReverseAddress(
-  domainAddress: Address,
-  parent: Address,
-): Promise<Address> {
+async function deriveReverseAddress(domainAddress: Address, parent: Address): Promise<Address> {
   // Hash the BASE58 STRING of the domain pubkey, NOT the pubkey bytes.
   // This is the convention SPL Name Service inherited from earlier versions.
   const hashed = getHashedName(domainAddress);
@@ -198,8 +195,10 @@ export async function resolveTendrSubdomainsBulk(
     .getProgramAccounts(NAME_PROGRAM, {
       encoding: 'base64',
       filters: [
-        // biome-ignore lint/suspicious/noExplicitAny: kit nominal cast
-        { memcmp: { offset: BigInt(PARENT_OFFSET), bytes: tendrParent as any, encoding: 'base58' } },
+        {
+          // biome-ignore lint/suspicious/noExplicitAny: kit nominal cast
+          memcmp: { offset: BigInt(PARENT_OFFSET), bytes: tendrParent as any, encoding: 'base58' },
+        },
       ],
     })
     .send();
@@ -240,9 +239,7 @@ async function reverseLookupTendr(
 ): Promise<string | null> {
   const tendrParent = await tendrParentAddress();
   const reverseAddr = await deriveReverseAddress(subdomainAddress, tendrParent);
-  const { value } = await rpc
-    .getAccountInfo(reverseAddr, { encoding: 'base64' })
-    .send();
+  const { value } = await rpc.getAccountInfo(reverseAddr, { encoding: 'base64' }).send();
   if (!value) return null;
   const dataField = value.data;
   const b64Str = Array.isArray(dataField) ? (dataField[0] as string) : (dataField as string);
@@ -289,10 +286,7 @@ export async function getTendrParentAddress(): Promise<Address> {
  * Public helper: check if a handle is already taken on devnet. Returns
  * true if the account exists at the derived address.
  */
-export async function isTendrHandleTaken(
-  rpc: DevnetReadRpc,
-  handle: string,
-): Promise<boolean> {
+export async function isTendrHandleTaken(rpc: DevnetReadRpc, handle: string): Promise<boolean> {
   const subAddr = await deriveTendrSubdomainAddress(handle);
   const { value } = await rpc.getAccountInfo(subAddr, { encoding: 'base64' }).send();
   return value !== null;

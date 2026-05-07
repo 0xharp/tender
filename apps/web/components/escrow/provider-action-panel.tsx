@@ -1,6 +1,5 @@
 'use client';
 
-import type { Address } from '@solana/kit';
 /**
  * Provider-side action panel rendered on the RFP detail page.
  *
@@ -9,6 +8,7 @@ import type { Address } from '@solana/kit';
  * for each milestone in flight.
  */
 import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
+import type { Address } from '@solana/kit';
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';

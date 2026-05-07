@@ -1,5 +1,6 @@
 'use client';
 
+import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
 /**
  * Permissionless "Mark RFP expired" action surface.
  *
@@ -15,7 +16,6 @@
  * provider.
  */
 import type { Address } from '@solana/kit';
-import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
 import { TimerOffIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -130,15 +130,14 @@ function Shell({
           {noBids ? (
             isBuyer ? (
               <>
-                Your RFP closed without any bids. Mark it expired to terminate
-                cleanly —{' '}
-                <span className="font-medium text-foreground">no reputation impact</span>{' '}
-                (nothing was committed to).
+                Your RFP closed without any bids. Mark it expired to terminate cleanly —{' '}
+                <span className="font-medium text-foreground">no reputation impact</span> (nothing
+                was committed to).
               </>
             ) : (
               <>
-                This RFP closed without any bids. Anyone can mark it expired to
-                clear it from active feeds.
+                This RFP closed without any bids. Anyone can mark it expired to clear it from active
+                feeds.
               </>
             )
           ) : isBuyer ? (

@@ -12,10 +12,7 @@
 'use client';
 
 import { SelectedWalletAccountContextProvider } from '@solana/react';
-import {
-  SOLANA_DEVNET_CHAIN,
-  SOLANA_MAINNET_CHAIN,
-} from '@solana/wallet-standard-chains';
+import { SOLANA_DEVNET_CHAIN, SOLANA_MAINNET_CHAIN } from '@solana/wallet-standard-chains';
 import type { UiWallet } from '@wallet-standard/react';
 import type { ReactNode } from 'react';
 
@@ -56,10 +53,7 @@ function filterWallets(wallet: UiWallet): boolean {
 export function TendrWalletProvider({ children }: { children: ReactNode }) {
   return (
     <ClientOnly fallback={children}>
-      <SelectedWalletAccountContextProvider
-        filterWallets={filterWallets}
-        stateSync={stateSync}
-      >
+      <SelectedWalletAccountContextProvider filterWallets={filterWallets} stateSync={stateSync}>
         {/* Silently re-authorizes the previously-selected wallet on mount,
             so wallets that don't auto-emit accounts on registration (e.g.
             Nightly) still hydrate `useTendrAccount()` to match the SIWS

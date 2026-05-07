@@ -4,13 +4,13 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { BufferPolyfillProvider } from '@/components/buffer-polyfill-provider';
 import { DotMatrix } from '@/components/effects/dot-matrix';
 import { IdentityModalProvider } from '@/components/identity/identity-modal-provider';
-import { getCurrentWallet } from '@/lib/auth/session';
 import { PageTransition } from '@/components/motion/page-transition';
 import { SiteFooter } from '@/components/nav/site-footer';
 import { TopNav } from '@/components/nav/top-nav';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { getCurrentWallet } from '@/lib/auth/session';
 import { TendrWalletProvider } from '@/lib/wallet';
 
 import './globals.css';
@@ -66,11 +66,7 @@ export default async function RootLayout({
       <body className="min-h-full bg-background text-foreground">
         <BufferPolyfillProvider />
         <DotMatrix />
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          disableTransitionOnChange
-        >
+        <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
           <TooltipProvider>
             <TendrWalletProvider>
               <IdentityModalProvider signedInWallet={signedInWallet}>

@@ -1,6 +1,5 @@
 'use client';
 
-import type { Address } from '@solana/kit';
 /**
  * Buyer-side action panel rendered on the RFP detail page.
  *
@@ -13,6 +12,7 @@ import type { Address } from '@solana/kit';
  * reputation impact) shown BEFORE the wallet popup.
  */
 import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
+import type { Address } from '@solana/kit';
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';

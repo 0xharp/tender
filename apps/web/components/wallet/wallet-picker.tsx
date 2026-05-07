@@ -59,12 +59,8 @@ export function WalletPicker() {
   const solanaCapableWallets = filteredWallets.length > 0 ? filteredWallets : wallets;
 
   if (selected) {
-    const wallet = wallets.find((w) =>
-      w.accounts.some((a) => a.address === selected.address),
-    );
-    return (
-      <ConnectedAccount walletName={wallet?.name ?? 'Wallet'} address={selected.address} />
-    );
+    const wallet = wallets.find((w) => w.accounts.some((a) => a.address === selected.address));
+    return <ConnectedAccount walletName={wallet?.name ?? 'Wallet'} address={selected.address} />;
   }
 
   if (solanaCapableWallets.length === 0) {
@@ -101,9 +97,7 @@ function ConnectedAccount({ walletName, address }: { walletName: string; address
         <span className="size-2 rounded-full bg-green-500" />
         <div className="flex flex-col">
           <span className="font-medium">{walletName}</span>
-          <span className="font-mono text-xs text-muted-foreground">
-            {shortAddress(address)}
-          </span>
+          <span className="font-mono text-xs text-muted-foreground">{shortAddress(address)}</span>
         </div>
       </div>
       <Button

@@ -41,7 +41,7 @@ const NO_THINK = '/no_think\n\n';
 
 // ─── 1. RFP scope drafting ────────────────────────────────────────────────────
 
-export const RFP_SCOPE_SYSTEM_PROMPT = NO_THINK + `You are an RFP-drafting assistant for a sealed-bid procurement marketplace called tendr.bid. The buyer gives you a plain-English description of what they need; you produce a structured scope summary that bidders can read and quote against.
+export const RFP_SCOPE_SYSTEM_PROMPT = `${NO_THINK}You are an RFP-drafting assistant for a sealed-bid procurement marketplace called tendr.bid. The buyer gives you a plain-English description of what they need; you produce a structured scope summary that bidders can read and quote against.
 
 CRITICAL PRIVACY RULE — read this twice:
 The scope summary you produce is PUBLIC. Every bidder on the platform reads it. The buyer's budget / reserve price / target spend is SEALED on chain — it is the cryptographic anchor of the auction and bidders MUST NOT see it. If the buyer mentions a budget, target price, or any specific dollar/USDC figure in their description, USE that information internally to size the scope appropriately (milestone count, complexity, ambition) — but NEVER echo a specific monetary amount in your output. No "$5,000", no "around 10k USDC", no "budget of X" lines, no price ranges. If you find yourself typing a dollar sign or a USDC quantity in the scope, delete the entire phrase and rewrite without it.
@@ -71,13 +71,16 @@ export function buildRfpScopeUserPrompt(args: {
   const lines = [`Description: ${args.description.trim()}`];
   if (args.category) lines.push(`Category: ${args.category}`);
   if (args.timelineDays !== undefined) lines.push(`Target timeline (days): ${args.timelineDays}`);
-  lines.push('', 'Generate the scope summary now. Remember: NO dollar/USDC amounts in the output — the scope is public.');
+  lines.push(
+    '',
+    'Generate the scope summary now. Remember: NO dollar/USDC amounts in the output — the scope is public.',
+  );
   return lines.join('\n');
 }
 
 // ─── 2. Bid comparison + recommendation ───────────────────────────────────────
 
-export const BID_COMPARISON_SYSTEM_PROMPT = NO_THINK + `You are a procurement evaluator for a sealed-bid marketplace called tendr.bid. The buyer has just decrypted N sealed bids and wants a side-by-side comparison + a recommended winner.
+export const BID_COMPARISON_SYSTEM_PROMPT = `${NO_THINK}You are a procurement evaluator for a sealed-bid marketplace called tendr.bid. The buyer has just decrypted N sealed bids and wants a side-by-side comparison + a recommended winner.
 
 You will receive:
 - The RFP scope (markdown)
@@ -142,7 +145,7 @@ export function buildBidComparisonUserPrompt(args: {
 
 // ─── 3. Provider bid drafting ────────────────────────────────────────────────
 
-export const BID_DRAFT_SYSTEM_PROMPT = NO_THINK + `You are a bid-drafting assistant for providers on a sealed-bid procurement marketplace called tendr.bid. The provider gives you the RFP scope (and optionally their own context: tech stack, target price, preferred timeline, specialty); you produce a complete starting-point bid that drops directly into the provider's bid form — every field filled in.
+export const BID_DRAFT_SYSTEM_PROMPT = `${NO_THINK}You are a bid-drafting assistant for providers on a sealed-bid procurement marketplace called tendr.bid. The provider gives you the RFP scope (and optionally their own context: tech stack, target price, preferred timeline, specialty); you produce a complete starting-point bid that drops directly into the provider's bid form — every field filled in.
 
 Output: ONLY a single valid JSON object matching this schema. No prose preamble, no markdown code fences, no closing remarks.
 

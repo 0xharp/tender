@@ -37,9 +37,7 @@ export type SignMessageFn = (input: { message: Uint8Array }) => Promise<{
  * any non-transaction signing.
  */
 export function useTendrSignMessage(account: UiWalletAccount): SignMessageFn {
-  // biome-ignore lint/suspicious/noExplicitAny: @solana/react's hook narrows
-  // its return type via overloads that don't compose well with our wrapper
-  // shape; re-narrowing here is structurally fine.
+  // biome-ignore lint/suspicious/noExplicitAny: @solana/react's hook narrows via overloads that don't compose with our wrapper; re-narrowing here is structurally fine
   const upstream = useSignMessage(account) as any;
   return async ({ message }) => {
     const result = await upstream({ message });

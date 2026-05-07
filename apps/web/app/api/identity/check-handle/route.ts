@@ -15,8 +15,8 @@
  */
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { isTendrHandleTaken } from '@/lib/sns/devnet/resolve';
 import { validateHandle } from '@/lib/sns/devnet/handle-validation';
+import { isTendrHandleTaken } from '@/lib/sns/devnet/resolve';
 import { snsRpc } from '@/lib/solana/client';
 
 export async function GET(req: NextRequest) {

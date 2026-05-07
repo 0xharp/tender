@@ -17,9 +17,9 @@
  * keypair signs the mint server-side. The user just clicks Claim.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { CheckIcon, LoaderIcon, SparklesIcon, XIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -51,11 +51,7 @@ export interface ClaimIdentityModalProps {
   onClaimed?: (fullName: string) => void;
 }
 
-export function ClaimIdentityModal({
-  open,
-  onOpenChange,
-  onClaimed,
-}: ClaimIdentityModalProps) {
+export function ClaimIdentityModal({ open, onOpenChange, onClaimed }: ClaimIdentityModalProps) {
   const router = useRouter();
   const [handle, setHandle] = useState('');
   const [availability, setAvailability] = useState<AvailabilityState>({ kind: 'idle' });
@@ -103,9 +99,7 @@ export function ClaimIdentityModal({
         }
         const body = (await res.json()) as { available: boolean; normalized: string };
         setAvailability(
-          body.available
-            ? { kind: 'available', normalized: body.normalized }
-            : { kind: 'taken' },
+          body.available ? { kind: 'available', normalized: body.normalized } : { kind: 'taken' },
         );
       } catch (e) {
         if (seq !== checkSeqRef.current) return;
@@ -174,11 +168,10 @@ export function ClaimIdentityModal({
         <DialogHeader>
           <DialogTitle>Pick your tendr identity</DialogTitle>
           <DialogDescription>
-            Your handle becomes a `.tendr.sol` SNS name owned by your
-            wallet. It's your shareable buyer + provider identity on
-            tendr.bid — reputation accrues to this name on chain and
-            travels with you across every Solana app that resolves SNS.
-            We cover the rent; you don't sign anything.
+            Your handle becomes a `.tendr.sol` SNS name owned by your wallet. It's your shareable
+            buyer + provider identity on tendr.bid — reputation accrues to this name on chain and
+            travels with you across every Solana app that resolves SNS. We cover the rent; you don't
+            sign anything.
           </DialogDescription>
         </DialogHeader>
 
@@ -246,9 +239,7 @@ export function ClaimIdentityModal({
           </Button>
         </div>
 
-        {submitError && (
-          <p className="text-xs text-destructive">{submitError}</p>
-        )}
+        {submitError && <p className="text-xs text-destructive">{submitError}</p>}
       </DialogContent>
     </Dialog>
   );
@@ -263,16 +254,13 @@ function AvailabilityLine({ state }: { state: AvailabilityState }) {
     );
   }
   const Icon =
-    state.kind === 'checking'
-      ? LoaderIcon
-      : state.kind === 'available'
-        ? CheckIcon
-        : XIcon;
-  const tone = state.kind === 'available'
-    ? 'text-emerald-600 dark:text-emerald-400'
-    : state.kind === 'checking'
-      ? 'text-muted-foreground'
-      : 'text-destructive';
+    state.kind === 'checking' ? LoaderIcon : state.kind === 'available' ? CheckIcon : XIcon;
+  const tone =
+    state.kind === 'available'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : state.kind === 'checking'
+        ? 'text-muted-foreground'
+        : 'text-destructive';
   const text =
     state.kind === 'checking'
       ? 'Checking availability…'

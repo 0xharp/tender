@@ -38,19 +38,18 @@
 'use client';
 
 import {
-  createSignInMessage,
   type SolanaSignInInputWithRequiredFields,
+  createSignInMessage,
 } from '@solana/wallet-standard-util';
 import type { UiWalletAccount } from '@wallet-standard/react';
 
 import { TENDR_CHAIN } from './chain';
-import { type SignMessageFn } from './sign';
+import type { SignMessageFn } from './sign';
 
 // Phantom is strict about SIWS message rendering: keep the statement plain
 // ASCII (no em-dash, no fancy punctuation) and short. See:
 // https://docs.phantom.app/solana/sign-in-with-solana
-const STATEMENT =
-  'Sign in to tendr.bid. This authorizes a 24-hour session. No funds will move.';
+const STATEMENT = 'Sign in to tendr.bid. This authorizes a 24-hour session. No funds will move.';
 
 /** API contract with /api/auth/siws POST. Server reconstructs the SIWS
  *  message text from `input` and verifies it matches `output.signedMessage`,

@@ -19,9 +19,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { getCurrentWallet } from '@/lib/auth/session';
+import { validateHandle } from '@/lib/sns/devnet/handle-validation';
 import { mintTendrSubdomain } from '@/lib/sns/devnet/mint';
 import { isTendrHandleTaken, resolveTendrSubdomain } from '@/lib/sns/devnet/resolve';
-import { validateHandle } from '@/lib/sns/devnet/handle-validation';
 import { snsRpc } from '@/lib/solana/client';
 
 interface ClaimBody {

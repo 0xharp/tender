@@ -51,7 +51,7 @@ import {
 
 const SOL_SUFFIX = '.sol';
 const TENDR_PARENT = 'tendr';
-const TENDR_SUFFIX = `.${TENDR_PARENT}${SOL_SUFFIX}`;
+const _TENDR_SUFFIX = `.${TENDR_PARENT}${SOL_SUFFIX}`;
 
 /** Strip leading `@` and trailing `.sol` so we can normalize whatever
  *  the user types in. Lowercase-coerced. */

@@ -1,12 +1,17 @@
 'use client';
 
+import {
+  type TendrAccount,
+  useTendrAccount,
+  useTendrSignMessage,
+  useTendrSignTransactions,
+} from '@/lib/wallet';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { type TendrAccount, useTendrAccount, useTendrSignMessage, useTendrSignTransactions } from '@/lib/wallet';
 
+import { isAiAvailable } from '@/lib/ai';
 import { SparklesIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { isAiAvailable } from '@/lib/ai';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -16,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import {
   Select,
   SelectContent,
@@ -23,8 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { MarkdownEditor } from '@/components/ui/markdown-editor';
-import { Textarea } from '@/components/ui/textarea';
 import { friendlyBidError } from '@/lib/bids/error-utils';
 import { type SubmitStage, submitRfpCreate } from '@/lib/rfps/create-flow';
 import { RFP_CATEGORIES, type RfpFormValues, rfpFormSchema } from '@/lib/rfps/schema';

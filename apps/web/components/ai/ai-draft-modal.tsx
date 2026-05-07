@@ -35,23 +35,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { InlineMarkdown } from '@/components/ui/markdown';
 import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  type AiResult,
-  type BidDraft,
-  draftBid,
-  draftRfpScope,
-} from '@/lib/ai';
+import { type AiResult, type BidDraft, draftBid, draftRfpScope } from '@/lib/ai';
 import type { DraftBidValue } from '@/lib/ai/index';
 import { hasMoneyMention, scrubMoneyMentions } from '@/lib/ai/scrub-money';
 
-import {
-  BID_DRAFT_PHRASES,
-  RFP_SCOPE_PHRASES,
-  ThinkingIndicator,
-} from './thinking-indicator';
+import { BID_DRAFT_PHRASES, RFP_SCOPE_PHRASES, ThinkingIndicator } from './thinking-indicator';
 
 /** Char cap for the rfp-scope markdown blob. Bid mode has no equivalent
  *  cap because each structured field has its own zod-validated bound
@@ -138,8 +128,8 @@ function ScopeMoneyWarning({
         Possible budget leak in this draft
       </p>
       <p className="text-foreground/80">
-        The scope summary is public — every bidder reads it. Your reserve price is
-        meant to stay sealed. The AI included these monetary phrases:
+        The scope summary is public — every bidder reads it. Your reserve price is meant to stay
+        sealed. The AI included these monetary phrases:
       </p>
       <ul className="ml-3 flex list-disc flex-col gap-0.5 text-foreground/85">
         {result.matches.map((m) => (
@@ -273,8 +263,7 @@ export function AiDraftModal({ open, onOpenChange, mode }: AiDraftModalProps) {
       ? !!scopeDraft && scopeDraft.length <= RFP_SCOPE_CHAR_LIMIT
       : bidDraft?.kind === 'parsed';
 
-  const hasDraft =
-    mode.kind === 'rfp-scope' ? !!scopeDraft : !!bidDraft;
+  const hasDraft = mode.kind === 'rfp-scope' ? !!scopeDraft : !!bidDraft;
 
   return (
     <Dialog open={open} onOpenChange={handleClose} disablePointerDismissal>
@@ -313,9 +302,9 @@ export function AiDraftModal({ open, onOpenChange, mode }: AiDraftModalProps) {
                 wants the provider to mention their target price freely. */}
             {mode.kind === 'rfp-scope' && !hasDraft && hasMoneyMention(input) && (
               <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                Heads up: your description mentions an amount. The scope summary the AI
-                produces is public — bidders read it. Better to leave the budget out and
-                set it as the (sealed) reserve price below.
+                Heads up: your description mentions an amount. The scope summary the AI produces is
+                public — bidders read it. Better to leave the budget out and set it as the (sealed)
+                reserve price below.
               </p>
             )}
           </div>
@@ -326,8 +315,8 @@ export function AiDraftModal({ open, onOpenChange, mode }: AiDraftModalProps) {
                 phrases={mode.kind === 'rfp-scope' ? RFP_SCOPE_PHRASES : BID_DRAFT_PHRASES}
               />
               <p className="pl-5 text-[10px] text-muted-foreground">
-                First response on a cold sidecar can take up to a minute. Subsequent
-                drafts in the same session are usually under 10 seconds.
+                First response on a cold sidecar can take up to a minute. Subsequent drafts in the
+                same session are usually under 10 seconds.
               </p>
             </div>
           )}
@@ -351,41 +340,59 @@ export function AiDraftModal({ open, onOpenChange, mode }: AiDraftModalProps) {
                 // editor below.
                 defaultTab="preview"
               />
-              <ScopeMoneyWarning
-                draft={scopeDraft}
-                onScrub={(cleaned) => setScopeDraft(cleaned)}
-              />
+              <ScopeMoneyWarning draft={scopeDraft} onScrub={(cleaned) => setScopeDraft(cleaned)} />
               <p className="text-[11px] text-muted-foreground">
-                Edit anything you want before applying. The text gets dropped into the
-                scope summary field as-is — markdown formatting is preserved and rendered
-                everywhere the field is shown.
+                Edit anything you want before applying. The text gets dropped into the scope summary
+                field as-is — markdown formatting is preserved and rendered everywhere the field is
+                shown.
               </p>
             </div>
           )}
 
           {mode.kind === 'bid' && bidDraft && (
-            <BidDraftPreview value={bidDraft} onScopeChange={(scope) => {
-              if (bidDraft.kind === 'parsed') {
-                setBidDraft({ kind: 'parsed', draft: { ...bidDraft.draft, scope } });
-              }
-            }} />
+            <BidDraftPreview
+              value={bidDraft}
+              onScopeChange={(scope) => {
+                if (bidDraft.kind === 'parsed') {
+                  setBidDraft({ kind: 'parsed', draft: { ...bidDraft.draft, scope } });
+                }
+              }}
+            />
           )}
 
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border/40 p-4">
-          <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => handleClose(false)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => handleClose(false)}
+          >
             {hasDraft ? 'Discard' : 'Cancel'}
           </Button>
           {!hasDraft ? (
-            <Button type="button" size="sm" className="gap-1.5" disabled={busy} onClick={handleGenerate}>
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5"
+              disabled={busy}
+              onClick={handleGenerate}
+            >
               {busy && <LoaderIcon className="size-3.5 animate-spin" />}
               {busy ? 'Working…' : copy.cta}
             </Button>
           ) : (
             <>
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={handleGenerate}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={handleGenerate}
+              >
                 Regenerate
               </Button>
               <Button
@@ -433,8 +440,8 @@ function BidDraftPreview({
     return (
       <div className="flex flex-col gap-2">
         <p className="text-[11px] text-amber-600 dark:text-amber-400">
-          AI returned an unstructured response — couldn't parse it into bid fields.
-          Copy whatever you need from the raw output below, or hit Regenerate.
+          AI returned an unstructured response — couldn't parse it into bid fields. Copy whatever
+          you need from the raw output below, or hit Regenerate.
         </p>
         <pre className="max-h-[40vh] overflow-auto rounded-lg border border-border/60 bg-card/40 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
           {value.text}
@@ -503,9 +510,7 @@ function BidDraftPreview({
             >
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-xs font-medium">
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {i + 1}.
-                  </span>{' '}
+                  <span className="font-mono text-[10px] text-muted-foreground">{i + 1}.</span>{' '}
                   {m.name}
                 </span>
                 <div className="flex items-baseline gap-3 font-mono text-[11px] tabular-nums">
@@ -513,9 +518,7 @@ function BidDraftPreview({
                   <span className="text-muted-foreground">{m.durationDays}d</span>
                 </div>
               </div>
-              <p className="text-[11px] leading-relaxed text-foreground/80">
-                {m.description}
-              </p>
+              <p className="text-[11px] leading-relaxed text-foreground/80">{m.description}</p>
               {m.successCriteria && (
                 <p className="text-[11px] italic leading-relaxed text-muted-foreground">
                   Acceptance: {m.successCriteria}
@@ -527,10 +530,16 @@ function BidDraftPreview({
         {(!priceMatches || !timelineMatches) && (
           <p className="text-[10px] text-amber-600 dark:text-amber-400">
             {!priceMatches && (
-              <>Milestone amounts don't quite sum to the headline price — Σ ${milestoneSum.toLocaleString()} vs ${Number(draft.priceUsdc).toLocaleString()}. </>
+              <>
+                Milestone amounts don't quite sum to the headline price — Σ $
+                {milestoneSum.toLocaleString()} vs ${Number(draft.priceUsdc).toLocaleString()}.{' '}
+              </>
             )}
             {!timelineMatches && (
-              <>Milestone durations don't sum to the headline timeline — Σ {durationSum}d vs {draft.timelineDays}d. </>
+              <>
+                Milestone durations don't sum to the headline timeline — Σ {durationSum}d vs{' '}
+                {draft.timelineDays}d.{' '}
+              </>
             )}
             You can fix this in the bid form after applying, or regenerate.
           </p>
@@ -545,6 +554,7 @@ function BidDraftPreview({
           </p>
           <ul className="flex flex-col gap-1">
             {draft.riskFlags.map((flag, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: AI output flags rendered once + never reorder
               <li key={`risk-${i}`} className="text-[11px] leading-relaxed text-foreground/85">
                 · {flag}
               </li>
@@ -554,11 +564,11 @@ function BidDraftPreview({
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        On accept, every field above gets dropped into your bid form — price, timeline,
-        approach (scope), all milestones with their acceptance criteria. Risk flags are
-        appended to the end of your scope as a <strong>Caveats / clarifications</strong>
-        section so the buyer sees them in the rendered bid. Edit anything in the form
-        before submitting.
+        On accept, every field above gets dropped into your bid form — price, timeline, approach
+        (scope), all milestones with their acceptance criteria. Risk flags are appended to the end
+        of your scope as a <strong>Caveats / clarifications</strong>
+        section so the buyer sees them in the rendered bid. Edit anything in the form before
+        submitting.
       </p>
     </div>
   );

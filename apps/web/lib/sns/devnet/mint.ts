@@ -27,7 +27,7 @@ import {
   Keypair,
   PublicKey,
   Transaction,
-  TransactionInstruction,
+  type TransactionInstruction,
 } from '@solana/web3.js';
 
 import { TENDR_PARENT_NAME } from './constants';
@@ -83,7 +83,9 @@ function loadParentOwnerKeypair(): Keypair {
       }
       secretKey = Uint8Array.from(arr);
     } catch (e) {
-      throw new Error(`TENDR_PARENT_OWNER_PRIVATE_KEY is not valid JSON-array format: ${(e as Error).message}`);
+      throw new Error(
+        `TENDR_PARENT_OWNER_PRIVATE_KEY is not valid JSON-array format: ${(e as Error).message}`,
+      );
     }
   } else {
     // Base58. Use bs58 lazy-loaded since it's a transitive dep we may or may not have.

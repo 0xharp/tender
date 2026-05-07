@@ -1,5 +1,5 @@
-import { ImageResponse } from 'next/og';
 import type { Address } from '@solana/kit';
+import { ImageResponse } from 'next/og';
 
 import { ProfileOgCard } from '@/lib/og/profile-card';
 import { preferredProfileSlug, tryResolveWalletParam } from '@/lib/sns/resolve-server';
@@ -53,8 +53,5 @@ export default async function Image({
     // swallow - render the default empty-state card.
   }
 
-  return new ImageResponse(
-    <ProfileOgCard role="buyer" display={display} stats={stats} />,
-    size,
-  );
+  return new ImageResponse(<ProfileOgCard kind="buyer" display={display} stats={stats} />, size);
 }

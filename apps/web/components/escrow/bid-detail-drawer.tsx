@@ -21,6 +21,7 @@ import { CalendarRangeIcon, CheckCircle2Icon, CoinsIcon } from 'lucide-react';
 import { HashLink } from '@/components/primitives/hash-link';
 import { PrivacyTag } from '@/components/primitives/privacy-tag';
 import { Button } from '@/components/ui/button';
+import { InlineMarkdown } from '@/components/ui/markdown';
 import {
   Sheet,
   SheetContent,
@@ -29,7 +30,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { InlineMarkdown } from '@/components/ui/markdown';
 import type { SealedBidPlaintext } from '@/lib/bids/schema';
 
 export interface BidDetailDrawerProps {
@@ -59,17 +59,11 @@ export function BidDetailDrawer({
     (acc, m) => acc + Number(m.amountUsdc),
     0,
   );
-  const totalDuration = plaintext.milestones.reduce(
-    (acc, m) => acc + m.durationDays,
-    0,
-  );
+  const totalDuration = plaintext.milestones.reduce((acc, m) => acc + m.durationDays, 0);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col gap-0 p-0 sm:max-w-md"
-      >
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <SheetHeader className="shrink-0 border-b border-border/40">
           <SheetTitle className="flex items-center gap-2 text-base">
             Bid detail
@@ -112,10 +106,7 @@ export function BidDetailDrawer({
               Scope
             </h3>
             <div className="rounded-lg border border-border/60 bg-card/40 p-3">
-              <InlineMarkdown
-                source={plaintext.scope}
-                className="flex flex-col gap-2 text-xs"
-              />
+              <InlineMarkdown source={plaintext.scope} className="flex flex-col gap-2 text-xs" />
             </div>
           </section>
 
@@ -132,14 +123,13 @@ export function BidDetailDrawer({
             <ul className="flex flex-col gap-2">
               {plaintext.milestones.map((m, i) => (
                 <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: milestones list is immutable post-decrypt
                   key={`${bidPda}-m-${i}`}
                   className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-card/40 p-3"
                 >
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-xs font-medium">
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {i + 1}.
-                      </span>{' '}
+                      <span className="font-mono text-[10px] text-muted-foreground">{i + 1}.</span>{' '}
                       {m.name}
                     </span>
                     <div className="flex items-baseline gap-3 font-mono text-[11px] tabular-nums">

@@ -14,8 +14,9 @@
 import type { ReactElement } from 'react';
 
 export interface ProfileOgCardProps {
-  /** Drives the role chip text + tints. */
-  role: 'provider' | 'buyer';
+  /** Drives the role chip text + tints. (Named `kind` not `role` to avoid
+   *  Biome's a11y/useValidAriaRole rule misfiring on a non-ARIA prop.) */
+  kind: 'provider' | 'buyer';
   /** Hero label - `.tendr.sol` name when claimed, else truncated pubkey. */
   display: string;
   /** Three reputation cards along the bottom rail. */
@@ -34,11 +35,7 @@ const COLORS = {
   primaryRing: 'rgba(169, 120, 235, 0.40)',
 } as const;
 
-export function ProfileOgCard({
-  role,
-  display,
-  stats,
-}: ProfileOgCardProps): ReactElement {
+export function ProfileOgCard({ kind, display, stats }: ProfileOgCardProps): ReactElement {
   // Pick a font size that lets the longest expected `.sol` name + role
   // word still fit in one line at 1200x630 with 64px padding.
   const heroSize = display.length > 22 ? 80 : display.length > 14 ? 110 : 140;
@@ -69,6 +66,7 @@ export function ProfileOgCard({
               the seal background is the page color so the mark reads as
               etched, matching the apple-icon treatment. */}
           <svg width={56} height={56} viewBox="0 0 32 32" fill="none">
+            <title>tendr.bid logo</title>
             <rect
               x={2.5}
               y={2.5}
@@ -107,7 +105,7 @@ export function ProfileOgCard({
             textTransform: 'uppercase',
           }}
         >
-          {role}
+          {kind}
         </div>
       </div>
 

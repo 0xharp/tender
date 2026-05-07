@@ -33,14 +33,14 @@ export function PoweredByLogos() {
   return (
     <div className="grid w-full grid-cols-1 gap-10 text-muted-foreground/80 sm:grid-cols-2 sm:gap-6 lg:grid-cols-5">
       <PartnerColumn
-        role="Private Ephemeral Rollup"
+        headline="Private Ephemeral Rollup"
         tagline="Bid contents stay sealed even from the buyer until the reveal window opens."
         partnerName="MagicBlock"
         href="https://www.magicblock.gg/"
         mark={<MagicBlockMark />}
       />
       <PartnerColumn
-        role="Shielded UTXO Pool"
+        headline="Shielded UTXO Pool"
         // Trimmed from "...to their main wallet on chain" to fit 3 lines
         // of tagline (was 4) at the column width set by lg:grid-cols-5.
         tagline="Per-RFP ephemeral wallet keeps bidders unlinkable from their main wallet."
@@ -51,21 +51,21 @@ export function PoweredByLogos() {
       <PartnerColumn
         // "Identity Layer" alone wraps to 1 line (other titles wrap to 2).
         // "On-Chain Identity" naturally wraps to 2 with the same tracking.
-        role="On-Chain Identity"
+        headline="On-Chain Identity"
         tagline="Free <handle>.tendr.sol per user - recognizable identity reputation accrues to."
         partnerName="Solana Name Service"
         href="https://www.sns.id/"
         mark={<SnsMark />}
       />
       <PartnerColumn
-        role="Private AI Inference"
+        headline="Private AI Inference"
         tagline="Bid drafting + comparison run on QVAC, never on closed AI providers."
         partnerName="QVAC"
         href="https://qvac.tether.io/"
         mark={<QvacMark />}
       />
       <PartnerColumn
-        role="RPC Infrastructure"
+        headline="RPC Infrastructure"
         tagline="Low-latency Solana RPC powers every on-chain read, write, and reveal."
         partnerName="RPC Fast"
         href="https://rpcfast.com/"
@@ -82,13 +82,16 @@ export function PoweredByLogos() {
  * to the partner's site.
  */
 function PartnerColumn({
-  role,
+  headline,
   tagline,
   partnerName,
   href,
   mark,
 }: {
-  role: string;
+  // Named `headline` (not `role`) to avoid Biome's a11y/useValidAriaRole rule
+  // misfiring on a non-ARIA prop. The text rendered uppercase at the top of
+  // each column.
+  headline: string;
   tagline: string;
   partnerName: string;
   href: string;
@@ -99,7 +102,7 @@ function PartnerColumn({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={`${role} — by ${partnerName}`}
+      aria-label={`${headline} — by ${partnerName}`}
       className="group flex flex-col items-center gap-3 px-2 text-center transition-colors hover:text-foreground"
     >
       {/* `tracking-[0.1em]` (down from 0.16em) gives titles ~40% more
@@ -110,7 +113,7 @@ function PartnerColumn({
           bottom-aligns within the reserved space so any rounding error
           parks the empty pixel above the text, closer to the by-line. */}
       <span className="flex min-h-[3rem] items-end justify-center font-display text-sm font-semibold uppercase leading-snug tracking-[0.1em] text-foreground">
-        {role}
+        {headline}
       </span>
       {/* Reserve vertical space for the logo block too — logos vary in
           height (SNS leaf is ~1.5rem tall, MagicBlock wordmark is ~1.75rem,
@@ -124,11 +127,12 @@ function PartnerColumn({
       {/* Reserve 3 lines of tagline space so the next column / next section
           starts at the same y-coordinate regardless of which tagline wraps
           longest. `text-xs leading-relaxed` ≈ 1.25rem per line × 3 = 3.75rem. */}
-      <p className="min-h-[3.75rem] max-w-[28ch] text-xs leading-relaxed text-muted-foreground">{tagline}</p>
+      <p className="min-h-[3.75rem] max-w-[28ch] text-xs leading-relaxed text-muted-foreground">
+        {tagline}
+      </p>
     </Link>
   );
 }
-
 
 /** PNG-backed mark - see file header on why mask-image. */
 function MagicBlockMark() {

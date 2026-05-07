@@ -59,10 +59,7 @@ export function ThinkingIndicator({
       <LoaderIcon className="size-3.5 animate-spin shrink-0" />
       {/* key={i} forces React to remount the span so the fade-in animation
           re-triggers on every phrase swap. */}
-      <span
-        key={i}
-        className="animate-in fade-in duration-500"
-      >
+      <span key={i} className="animate-in fade-in duration-500">
         {phrases[i]}
       </span>
     </div>

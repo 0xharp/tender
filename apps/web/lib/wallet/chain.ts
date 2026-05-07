@@ -11,10 +11,7 @@
  * mistypes ("solona:devnet") fail at compile time, not at wallet popup.
  */
 
-import {
-  type SOLANA_DEVNET_CHAIN,
-  type SOLANA_MAINNET_CHAIN,
-} from '@solana/wallet-standard-chains';
+import type { SOLANA_DEVNET_CHAIN, SOLANA_MAINNET_CHAIN } from '@solana/wallet-standard-chains';
 
 /** The wallet-standard chain string Tendr uses. Devnet today; will flip when
  *  we go to mainnet. Type-narrowed to the union of the two values we ever

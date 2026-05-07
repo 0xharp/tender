@@ -1,7 +1,6 @@
 packages:
   - "apps/*"
   - "packages/*"
-  - "tests/litesvm"
 
 ignoredBuiltDependencies:
   - '@biomejs/biome'

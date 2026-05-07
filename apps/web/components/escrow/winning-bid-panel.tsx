@@ -1,5 +1,6 @@
 'use client';
 
+import { useTendrAccount, useTendrSignMessage } from '@/lib/wallet';
 /**
  * "Show winning bid" panel — replaces the prior decrypt-only banners.
  *
@@ -26,12 +27,12 @@
  * disk.
  */
 import type { Address } from '@solana/kit';
-import { type TendrAccount, useTendrAccount, useTendrSignMessage } from '@/lib/wallet';
 import { ChevronDownIcon, ChevronUpIcon, KeyRoundIcon, ShieldCheckIcon } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { InlineMarkdown } from '@/components/ui/markdown';
 import {
   type DecryptStage,
   decryptWinnerBidAsBuyer,
@@ -41,7 +42,6 @@ import { friendlyBidError, humanizeStage } from '@/lib/bids/error-utils';
 import type { SealedBidPlaintext } from '@/lib/bids/schema';
 import { fetchBidCommit } from '@/lib/solana/chain-reads';
 import { rpc } from '@/lib/solana/client';
-import { InlineMarkdown } from '@/components/ui/markdown';
 import { cn } from '@/lib/utils';
 
 /* -------------------------------------------------------------------------- */

@@ -7,7 +7,6 @@ import { HashLink } from '@/components/primitives/hash-link';
 import { PrivacyTag } from '@/components/primitives/privacy-tag';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { stripMarkdown } from '@/lib/markdown/strip';
 import {
   type BuyerRevealStage,
   type DecryptedBid,
@@ -15,8 +14,8 @@ import {
 } from '@/lib/bids/buyer-reveal-flow';
 import { friendlyBidError } from '@/lib/bids/error-utils';
 import type { DerivedRfpKeypair } from '@/lib/crypto/derive-rfp-keypair';
+import { stripMarkdown } from '@/lib/markdown/strip';
 import { cn } from '@/lib/utils';
-import type { Address } from '@solana/kit';
 /**
  * Buyer-side bid comparison + selection panel. Lives inside `AwardSection`.
  *
@@ -29,7 +28,13 @@ import type { Address } from '@solana/kit';
  * "Pick this bid" calls back to the AwardSection with everything it needs to
  * fire `select_bid + fund_project` - no manual paste required.
  */
-import { type TendrAccount, useTendrAccount, useTendrSignMessage, useTendrSignTransactions } from '@/lib/wallet';
+import {
+  type TendrAccount,
+  useTendrAccount,
+  useTendrSignMessage,
+  useTendrSignTransactions,
+} from '@/lib/wallet';
+import type { Address } from '@solana/kit';
 
 import {
   ArrowDownIcon,
@@ -293,7 +298,10 @@ function Connected({
           <AiBidComparisonPanel
             rfpScope={rfpScope}
             bids={sortedBids
-              .filter((b): b is DecryptedBid & { plaintext: NonNullable<DecryptedBid['plaintext']> } => !!b.plaintext)
+              .filter(
+                (b): b is DecryptedBid & { plaintext: NonNullable<DecryptedBid['plaintext']> } =>
+                  !!b.plaintext,
+              )
               .map((b, idx) => ({
                 bidIndex: idx,
                 bidPda: b.bidPda,

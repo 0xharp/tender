@@ -17,8 +17,8 @@ import { SweepEphemeralPanel } from '@/components/rfp/sweep-ephemeral-panel';
 import { YourBidPanel } from '@/components/rfp/your-bid-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { InlineMarkdown } from '@/components/ui/markdown';
-import { stripMarkdown } from '@/lib/markdown/strip';
 import { getCurrentWallet } from '@/lib/auth/session';
+import { stripMarkdown } from '@/lib/markdown/strip';
 import { listMilestoneNotes } from '@/lib/milestones/notes-server';
 import {
   bidderVisibilityToString,

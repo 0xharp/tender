@@ -118,6 +118,7 @@ export function AwardConfirmDialog({
             </span>
             <ul className="flex flex-col gap-1 rounded-lg border border-dashed border-border/60 bg-card/40 p-2.5 text-xs">
               {pending.milestones.map((m, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: milestones list is locked at award time, never reorders
                 <li key={i} className="flex items-baseline justify-between gap-3">
                   <span>
                     <span className="font-mono text-[10px] text-muted-foreground">{i + 1}</span>{' '}

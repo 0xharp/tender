@@ -17,11 +17,8 @@ import {
   useWallets as useWalletsUpstream,
 } from '@wallet-standard/react';
 
+import { SOLANA_DEVNET_CHAIN, SOLANA_MAINNET_CHAIN } from '@solana/wallet-standard-chains';
 import { TENDR_CHAIN } from './chain';
-import {
-  SOLANA_DEVNET_CHAIN,
-  SOLANA_MAINNET_CHAIN,
-} from '@solana/wallet-standard-chains';
 
 /** A wallet entry the picker can render. Mirrors the upstream shape so
  *  consumers can treat it as a Tendr type while we keep the library

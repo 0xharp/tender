@@ -15,11 +15,7 @@
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import {
-  type TendrAccount,
-  performSiwsSignIn,
-  useTendrSignMessage,
-} from '@/lib/wallet';
+import { type TendrAccount, performSiwsSignIn, useTendrSignMessage } from '@/lib/wallet';
 
 export function SignInButton({
   account,

@@ -1,12 +1,12 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
 import {
   type TendrAccount,
   useTendrAccount,
   useTendrSignMessage,
   useTendrSignTransactions,
 } from '@/lib/wallet';
+import { zodResolver } from '@hookform/resolvers/zod';
 import type { Keypair } from '@solana/web3.js';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -18,7 +18,6 @@ import { SparklesIcon } from 'lucide-react';
 import { AiDraftModal } from '@/components/ai/ai-draft-modal';
 import { DataField } from '@/components/primitives/data-field';
 import { HashLink } from '@/components/primitives/hash-link';
-import { isAiAvailable } from '@/lib/ai';
 import { StatusPill } from '@/components/primitives/status-pill';
 import { TxToastDescription } from '@/components/primitives/tx-toast';
 import { Button } from '@/components/ui/button';
@@ -27,6 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import { Textarea } from '@/components/ui/textarea';
+import { isAiAvailable } from '@/lib/ai';
 import { friendlyBidError, humanizeStage } from '@/lib/bids/error-utils';
 import type { BidderVisibility } from '@/lib/bids/schema';
 import { type BidFormValues, bidFormSchema } from '@/lib/bids/schema';
@@ -50,10 +50,7 @@ const DEVNET_MOCK_USDC_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU' as 
  *  while we're awaiting wallet popups for seed + binding sigs (which can
  *  hang in some wallets) and during the dynamic imports / RPC balance check
  *  inside submitBid's privacy-mode preamble. */
-type ComposerLocalStage =
-  | 'awaiting_seed_sig'
-  | 'awaiting_binding_sig'
-  | 'checking_funds';
+type ComposerLocalStage = 'awaiting_seed_sig' | 'awaiting_binding_sig' | 'checking_funds';
 type ComposerStage = BidSubmitStage | ComposerLocalStage;
 
 const STAGE_LABEL: Record<ComposerStage, string> = {
@@ -297,7 +294,9 @@ function ConnectedComposer({
           if (typeof window === 'undefined') return;
           try {
             const existing = sessionStorage.getItem(sigCacheKey);
-            const prev = existing ? (JSON.parse(existing) as { seedSigB64?: string; bindingSigB64?: string }) : {};
+            const prev = existing
+              ? (JSON.parse(existing) as { seedSigB64?: string; bindingSigB64?: string })
+              : {};
             const next = {
               seedSigB64: seedSigBytes ? bytesToB64(seedSigBytes) : prev.seedSigB64,
               bindingSigB64: bindingSigBytes ? bytesToB64(bindingSigBytes) : prev.bindingSigB64,
@@ -347,8 +346,8 @@ function ConnectedComposer({
           // Race the wallet popup against a hard timeout. If 60s pass
           // without a response, throw a clear error so the user can retry
           // (cached seed sig means the retry skips straight to this step).
-          // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
           const bindingSig = (await Promise.race([
+            // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
             (signMessage as any)({ message: bindingMsg }),
             new Promise((_, reject) =>
               setTimeout(
@@ -596,7 +595,12 @@ function ConnectedComposer({
               }
               ariaInvalid={!!form.formState.errors.scope}
             />
-            <BidCharCounter value={form.watch('scope') ?? ''} min={20} max={8000} hint="markdown source" />
+            <BidCharCounter
+              value={form.watch('scope') ?? ''}
+              min={20}
+              max={8000}
+              hint="markdown source"
+            />
             {form.formState.errors.scope && (
               <p className="text-xs text-destructive">{form.formState.errors.scope.message}</p>
             )}
@@ -868,7 +872,6 @@ export function EphemeralFundingPanel({
   const [funding, setFunding] = useState(false);
   const [fundProgress, setFundProgress] = useState<string | null>(null);
   const account = useTendrAccount();
-  // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook
   const signTransactions = useTendrSignTransactions(account!);
   const signMessageHook = useTendrSignMessage(account!);
   // Wrap the @solana/react hook into Cloak's expected (Uint8Array) → Promise<Uint8Array>.

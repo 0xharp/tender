@@ -142,10 +142,7 @@ function notifySnsCacheChange(wallet: Address): void {
 
 /** Subscribe to cache changes for a specific wallet. Returns an unsubscribe
  *  fn. No-op on the server. */
-export function subscribeSnsCacheChange(
-  wallet: Address,
-  handler: () => void,
-): () => void {
+export function subscribeSnsCacheChange(wallet: Address, handler: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
   const listener = (e: Event) => {
     const detail = (e as CustomEvent<SnsCacheChangeDetail>).detail;

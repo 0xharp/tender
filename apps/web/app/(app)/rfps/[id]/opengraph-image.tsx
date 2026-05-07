@@ -1,13 +1,9 @@
-import { ImageResponse } from 'next/og';
 import type { Address } from '@solana/kit';
+import { ImageResponse } from 'next/og';
 
 import { RfpOgCard, type RfpOgPrivacyMode, type RfpOgStatus } from '@/lib/og/rfp-card';
 import { preferredProfileSlug } from '@/lib/sns/resolve-server';
-import {
-  bidderVisibilityToString,
-  fetchRfp,
-  rfpStatusToString,
-} from '@/lib/solana/chain-reads';
+import { bidderVisibilityToString, fetchRfp, rfpStatusToString } from '@/lib/solana/chain-reads';
 import { serverSupabase } from '@/lib/supabase/server';
 
 export const alt = 'RFP on tendr.bid';
@@ -30,8 +26,7 @@ const truncate = (wallet: string, head = 4, tail = 4): string =>
 // matches the in-app `displayStatus` smoothing, so the OG label and the
 // page banner agree on what state the RFP is in.
 function mapStatus(onChain: string, bidCloseAtIso: string | null): RfpOgStatus {
-  const bidsClosed =
-    bidCloseAtIso !== null && new Date(bidCloseAtIso).getTime() <= Date.now();
+  const bidsClosed = bidCloseAtIso !== null && new Date(bidCloseAtIso).getTime() <= Date.now();
   if (onChain === 'open') return bidsClosed ? 'sealed' : 'open';
   if (onChain === 'bidsclosed') return 'sealed';
   if (onChain === 'reveal') return 'reveal';
@@ -64,11 +59,7 @@ export default async function Image({
     const supabase = await serverSupabase();
     const [chainRfp, metaResult] = await Promise.all([
       fetchRfp(id as Address),
-      supabase
-        .from('rfps')
-        .select('title')
-        .eq('on_chain_pda', id)
-        .maybeSingle(),
+      supabase.from('rfps').select('title').eq('on_chain_pda', id).maybeSingle(),
     ]);
 
     if (chainRfp) {

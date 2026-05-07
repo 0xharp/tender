@@ -34,17 +34,10 @@ import {
   TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from '@solana/spl-token';
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  Transaction,
-} from '@solana/web3.js';
+import { Connection, Keypair, Transaction } from '@solana/web3.js';
 
 const RPC = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
-const KP =
-  process.env.KEYPAIR_PATH ??
-  path.join(process.env.HOME ?? '', '.config/solana/id.json');
+const KP = process.env.KEYPAIR_PATH ?? path.join(process.env.HOME ?? '', '.config/solana/id.json');
 
 const TENDR_NAME = 'tendr';
 // Account data size for `tendr.sol`. The header (96 bytes) is mandatory;
@@ -96,9 +89,7 @@ async function main() {
   const ataInfo = await connection.getAccountInfo(buyerUsdcAta);
   if (!ataInfo) {
     console.error('\n✗ Buyer has no devnet USDC token account.');
-    console.error(
-      `  Get devnet USDC at https://spl-token-faucet.com or https://faucet.circle.com`,
-    );
+    console.error('  Get devnet USDC at https://spl-token-faucet.com or https://faucet.circle.com');
     console.error(`  USDC mint: ${usdcMint.toBase58()}`);
     process.exit(1);
   }
@@ -165,16 +156,12 @@ async function main() {
 }
 
 function printEnvHelp(buyer) {
-  console.log('\n' + '─'.repeat(72));
+  console.log(`\n${'─'.repeat(72)}`);
   console.log('Next step: set TENDR_PARENT_OWNER_PRIVATE_KEY in apps/web/.env.local');
   console.log('─'.repeat(72));
-  console.log(
-    `\nCopy the following line into apps/web/.env.local (it's the contents of your`,
-  );
-  console.log(
-    `keypair file at ${KP}, JSON-array form). The Next.js API route uses this`,
-  );
-  console.log(`to sign every subdomain mint:\n`);
+  console.log(`\nCopy the following line into apps/web/.env.local (it's the contents of your`);
+  console.log(`keypair file at ${KP}, JSON-array form). The Next.js API route uses this`);
+  console.log('to sign every subdomain mint:\n');
   // Print the JSON array. This is sensitive — redirect operator's eyes
   // to the env file rather than relying on terminal scrollback.
   const secretJson = fs.readFileSync(KP, 'utf8').trim();

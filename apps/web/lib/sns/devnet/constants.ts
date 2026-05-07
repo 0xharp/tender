@@ -16,14 +16,10 @@
 import { PublicKey } from '@solana/web3.js';
 
 /** SPL Name Service program — same program ID on every Solana cluster. */
-export const NAME_PROGRAM_ID = new PublicKey(
-  'namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX',
-);
+export const NAME_PROGRAM_ID = new PublicKey('namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX');
 
 /** The devnet `.sol` TLD account. Parent of every devnet `.sol` domain. */
-export const DEVNET_SOL_TLD = new PublicKey(
-  '5eoDkP6vCQBXqDV9YN2NdUs3nmML3dMRNmEYpiyVNBm2',
-);
+export const DEVNET_SOL_TLD = new PublicKey('5eoDkP6vCQBXqDV9YN2NdUs3nmML3dMRNmEYpiyVNBm2');
 
 /** Devnet domain registration program (paid registration via USDC). */
 export const DEVNET_REGISTER_PROGRAM_ID = new PublicKey(
@@ -37,9 +33,7 @@ export const DEVNET_REVERSE_LOOKUP_CLASS = new PublicKey(
 
 /** Devnet USDC mint — what the SNS registrar accepts as payment for
  *  `tendr.sol`. Devnet USDC is freely faucet-able. */
-export const DEVNET_USDC_MINT = new PublicKey(
-  '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
-);
+export const DEVNET_USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
 
 /**
  * The Tender parent domain we mint subdomains under. Resolves at runtime

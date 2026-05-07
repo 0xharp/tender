@@ -30,16 +30,9 @@ import {
   buildBidDraftUserPrompt,
   buildRfpScopeUserPrompt,
 } from './prompts';
-import {
-  type BidComparison,
-  type BidDraft,
-  parseBidComparison,
-  parseBidDraft,
-} from './types';
+import { type BidComparison, type BidDraft, parseBidComparison, parseBidDraft } from './types';
 
-export type AiResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; reason: string };
+export type AiResult<T> = { ok: true; value: T } | { ok: false; reason: string };
 
 const NOT_CONFIGURED_REASON =
   'AI is not configured for this app. Set NEXT_PUBLIC_QVAC_BASE_URL to enable AI features.';
@@ -136,9 +129,7 @@ export async function compareBids(args: {
  *  modal uses to populate every bid form field on accept). When it
  *  drifts off-format we hand back the raw text so the user at least
  *  has something to copy. */
-export type DraftBidValue =
-  | { kind: 'parsed'; draft: BidDraft }
-  | { kind: 'raw'; text: string };
+export type DraftBidValue = { kind: 'parsed'; draft: BidDraft } | { kind: 'raw'; text: string };
 
 export async function draftBid(args: {
   rfpScope: string;

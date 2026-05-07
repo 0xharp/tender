@@ -139,6 +139,7 @@ export function RfpOgCard({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <svg width={56} height={56} viewBox="0 0 32 32" fill="none">
+            <title>tendr.bid logo</title>
             <rect
               x={2.5}
               y={2.5}
