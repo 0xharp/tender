@@ -12,6 +12,7 @@
       "persistent": true
     },
     "typecheck": {
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "test": {
