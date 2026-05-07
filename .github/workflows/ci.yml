@@ -40,7 +40,29 @@ jobs:
       - name: typecheck
         run: pnpm typecheck
 
+      # `next build` runs page-data collection, which actually evaluates
+      # module-level code in `apps/web/lib/solana/client.ts`,
+      # `lib/supabase/env.ts`, etc. Those files throw at module load if
+      # required env vars are missing — by design, so production deploys
+      # fail loudly on misconfig. CI has no real env config, so we feed
+      # placeholders here that satisfy the presence checks. Real values
+      # are set in the Vercel dashboard for the actual deploy.
+      #
+      # Two values are NOT placeholders and instead match production:
+      #   - NEXT_PUBLIC_TENDER_PROGRAM_ID: this is a public on-chain ID
+      #     (`address()` from @solana/kit validates the format), so it
+      #     must be a well-formed base58 pubkey.
+      #   - NEXT_PUBLIC_SOLANA_CLUSTER: trivially "devnet" everywhere.
       - name: build
+        env:
+          NEXT_PUBLIC_SOLANA_CLUSTER: devnet
+          NEXT_PUBLIC_SOLANA_RPC_URL: https://api.devnet.solana.com
+          NEXT_PUBLIC_SOLANA_WSS_URL: wss://api.devnet.solana.com
+          NEXT_PUBLIC_TENDER_PROGRAM_ID: 4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key
+          SUPABASE_JWT_SECRET: ci-placeholder-jwt-secret
         run: pnpm build
 
   anchor:
