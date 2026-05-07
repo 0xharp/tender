@@ -20,9 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Don't pass `version:` here — root package.json has
+      # `"packageManager": "pnpm@10.33.0"` and recent minor releases of
+      # pnpm/action-setup@v4 error if BOTH the input AND the field are
+      # set. Letting the action read packageManager keeps version in
+      # one place (the lockfile's source of truth).
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -49,13 +52,27 @@ jobs:
       - name: install rust
         uses: dtolnay/rust-toolchain@stable
 
+      # Solana CLI's hardware-wallet support pulls in the `hidapi` crate,
+      # which has a build-time link dep on libudev (Ubuntu's ships it
+      # in `libudev-dev`). Without this, `cargo install anchor-cli`
+      # fails with "could not find system library 'libudev' required
+      # by the 'hidapi' crate" partway through compiling deps.
+      # pkg-config is what the build script uses to locate libudev.
+      - name: install build deps for solana/anchor
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config build-essential
+
       - name: install solana cli
         run: |
           sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
 
+      # Drop --locked so we tolerate yanked transitive deps in the
+      # crates.io index (e.g., `solana-program-entrypoint v3.0.0` was
+      # yanked, which combined with --locked turns a warning into a
+      # hard fail on some cargo versions). Anchor 0.32.1 itself is
+      # still pinned by --tag.
       - name: install anchor
-        run: cargo install --git https://github.com/coral-xyz/anchor --tag v0.32.1 anchor-cli --locked
+        run: cargo install --git https://github.com/coral-xyz/anchor --tag v0.32.1 anchor-cli
 
       - name: anchor build
         run: anchor build
