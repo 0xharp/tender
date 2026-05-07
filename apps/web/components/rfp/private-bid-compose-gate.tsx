@@ -9,7 +9,7 @@
  * For public RFPs the equivalent check happens server-side on the /bid page
  * and triggers `redirect()` directly - no client gate needed there.
  */
-import { useSelectedWalletAccount } from '@solana/react';
+import { useTendrAccount } from '@/lib/wallet';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -29,7 +29,7 @@ export interface PrivateBidComposeGateProps {
 }
 
 export function PrivateBidComposeGate(props: PrivateBidComposeGateProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   const router = useRouter();
   const [redirecting, setRedirecting] = useState(false);
 

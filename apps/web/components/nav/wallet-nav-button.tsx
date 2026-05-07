@@ -1,7 +1,7 @@
 'use client';
 
 import type { Address } from '@solana/kit';
-import { useSelectedWalletAccount } from '@solana/react';
+import { performSignOut, useTendrAccount } from '@/lib/wallet';
 import {
   GavelIcon,
   ListChecksIcon,
@@ -62,10 +62,17 @@ export function WalletNavButton({ signedInWallet }: WalletNavButtonProps) {
  * reads/writes silently fail because the JWT sub no longer matches the wallet
  * doing the action - confusing both for the user and for our analytics.
  *
+ * Only fires on a CONCRETE different address (real wallet swap). Does NOT
+ * fire on `connected === null`, because that state is ambiguous: it can mean
+ * "wallet adapter hasn't reconnected yet on tab open / page mount" (transient,
+ * resolves in a few hundred ms) OR "user explicitly clicked Disconnect"
+ * (handled separately in the picker / sign-out button). Treating null as a
+ * mismatch caused multi-tab and post-action sign-outs.
+ *
  * Renders nothing; pure side effect.
  */
 function WalletSessionSync({ signedInWallet }: { signedInWallet: string | null }) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   const router = useRouter();
   // Throttle: don't fire DELETE on every render - only on actual mismatch transitions.
   const lastSyncedFor = useRef<string | null>(null);
@@ -73,18 +80,17 @@ function WalletSessionSync({ signedInWallet }: { signedInWallet: string | null }
   useEffect(() => {
     if (!signedInWallet) return; // not signed in → nothing to sync
     const connected = account?.address ?? null;
-    // Match: nothing to do.
+    if (connected === null) return; // wallet not yet reconnected — wait, don't nuke the session
     if (connected === signedInWallet) {
       lastSyncedFor.current = null;
       return;
     }
     // Already synced this exact mismatch - don't re-fire.
-    const mismatchKey = `${signedInWallet}::${connected ?? 'disconnected'}`;
+    const mismatchKey = `${signedInWallet}::${connected}`;
     if (lastSyncedFor.current === mismatchKey) return;
     lastSyncedFor.current = mismatchKey;
 
-    // Wallet swapped (or disconnected) without signing out - nuke the session.
-    void fetch('/api/auth/siws', { method: 'DELETE' }).then(() => router.refresh());
+    void performSignOut().then(() => router.refresh());
   }, [account, signedInWallet, router]);
 
   return null;
@@ -330,7 +336,7 @@ function SignOutItem({ onAfter }: { onAfter: () => void }) {
       onClick={async () => {
         setBusy(true);
         try {
-          await fetch('/api/auth/siws', { method: 'DELETE' });
+          await performSignOut();
         } finally {
           onAfter();
           setBusy(false);
@@ -350,7 +356,7 @@ function SignOutItem({ onAfter }: { onAfter: () => void }) {
 
 function ConnectWalletModal() {
   const [open, setOpen] = useState(false);
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   const router = useRouter();
 
   // Three states for the trigger button:
@@ -402,7 +408,7 @@ function ConnectWalletModal() {
 }
 
 function ConnectFlow({ onSignedIn }: { onSignedIn: () => void }) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
 
   return (
     <>

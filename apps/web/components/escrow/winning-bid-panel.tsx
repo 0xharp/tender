@@ -26,7 +26,7 @@
  * disk.
  */
 import type { Address } from '@solana/kit';
-import { useSelectedWalletAccount, useSignMessage } from '@solana/react';
+import { type TendrAccount, useTendrAccount, useTendrSignMessage } from '@/lib/wallet';
 import { ChevronDownIcon, ChevronUpIcon, KeyRoundIcon, ShieldCheckIcon } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -87,7 +87,7 @@ export interface BuyerWinningBidPanelProps {
 }
 
 export function BuyerWinningBidPanel(props: BuyerWinningBidPanelProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   if (!account) return null;
   return <BuyerInner viewerWallet={account.address} {...props} />;
 }
@@ -100,9 +100,9 @@ function BuyerInner({
   plaintext,
   onDecrypted,
 }: BuyerWinningBidPanelProps & { viewerWallet: string }) {
-  const [accountObj] = useSelectedWalletAccount();
+  const accountObj = useTendrAccount();
   // biome-ignore lint/suspicious/noExplicitAny: signMessage hook narrowing
-  const signMessage = useSignMessage(accountObj as any);
+  const signMessage = useTendrSignMessage(accountObj as any);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<DecryptStage | null>(null);
   const [expanded, setExpanded] = useState(true);
@@ -174,7 +174,7 @@ export interface ProviderWinningBidPanelProps {
 }
 
 export function ProviderWinningBidPanel(props: ProviderWinningBidPanelProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   if (!account) return null;
   return <ProviderInner mainWallet={account.address as Address} {...props} />;
 }
@@ -186,9 +186,9 @@ function ProviderInner({
   plaintext,
   onDecrypted,
 }: ProviderWinningBidPanelProps & { mainWallet: Address }) {
-  const [accountObj] = useSelectedWalletAccount();
+  const accountObj = useTendrAccount();
   // biome-ignore lint/suspicious/noExplicitAny: signMessage hook narrowing
-  const signMessage = useSignMessage(accountObj as any);
+  const signMessage = useTendrSignMessage(accountObj as any);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<DecryptStage | null>(null);
   const [expanded, setExpanded] = useState(true);

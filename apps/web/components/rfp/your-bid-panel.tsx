@@ -26,9 +26,9 @@
  * dashboard and provider-profile pages only LIST bids and link here.
  */
 import type { Address } from '@solana/kit';
-import { useSelectedWalletAccount, useSignMessage, useSignTransactions } from '@solana/react';
+import { type TendrAccount, useTendrAccount, useTendrSignMessage, useTendrSignTransactions } from '@/lib/wallet';
 import { accounts } from '@tender/tender-client';
-import type { UiWalletAccount } from '@wallet-standard/react';
+
 import {
   ArrowUpRightIcon,
   InfoIcon,
@@ -96,7 +96,7 @@ type Resolved =
   | { kind: 'loading' };
 
 export function YourBidPanel(props: YourBidPanelProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
 
   if (props.isBuyer) return null;
 
@@ -126,9 +126,9 @@ function Connected({
   bidderVisibility,
   isOpenForBids,
   existingBid,
-}: { account: UiWalletAccount } & YourBidPanelProps) {
-  const signMessage = useSignMessage(account);
-  const signTransactions = useSignTransactions(account, 'solana:devnet');
+}: { account: TendrAccount } & YourBidPanelProps) {
+  const signMessage = useTendrSignMessage(account);
+  const signTransactions = useTendrSignTransactions(account);
   const router = useRouter();
 
   // Initial resolution - public mode is server-driven; private mode reads

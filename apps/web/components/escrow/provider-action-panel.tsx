@@ -8,8 +8,8 @@ import type { Address } from '@solana/kit';
  * `rfp.winner_provider`). Surfaces start/submit/auto-release/dispute-propose
  * for each milestone in flight.
  */
-import { useSelectedWalletAccount, useSignTransactions } from '@solana/react';
-import type { UiWalletAccount } from '@wallet-standard/react';
+import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
+
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -57,7 +57,7 @@ export interface ProviderActionPanelProps {
 }
 
 export function ProviderActionPanel(props: ProviderActionPanelProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   if (!account) return null;
   if (!props.winnerProvider) return null;
   // Render only when the connected wallet IS the winner_provider.
@@ -81,8 +81,8 @@ function ConnectedProviderPanel({
   milestones,
   activeMilestoneIndex,
   notesByMilestoneIndex,
-}: ProviderActionPanelProps & { account: UiWalletAccount }) {
-  const signTransactions = useSignTransactions(account, 'solana:devnet');
+}: ProviderActionPanelProps & { account: TendrAccount }) {
+  const signTransactions = useTendrSignTransactions(account);
   const wallet = account.address as Address;
 
   if (rfpStatus !== 'funded' && rfpStatus !== 'inprogress' && rfpStatus !== 'disputed') {

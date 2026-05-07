@@ -73,10 +73,6 @@ Intel TDX (the TEE running MagicBlock's validator) seals memory from the host. A
 
 Same as compromising any wallet — the attacker can sign as you and read everything you can read. Per-wallet key derivation (each wallet derives its own decryption key) keeps blast radius small: a compromised provider wallet only reveals that provider's own bids.
 
-### Are payments private?
-
-On devnet today, escrow + milestone releases are public USDC transfers. On mainnet, milestone payouts can route through MagicBlock's Private Payments API (Cloak) so observers see "buyer → shielded pool" and "shielded pool → someone" but can't link the two. That's settlement-amount privacy on top of bid privacy, and it's on the mainnet roadmap.
-
 ---
 
 ## AI (drafting + comparison)

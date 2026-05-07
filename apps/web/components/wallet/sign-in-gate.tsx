@@ -1,6 +1,5 @@
 'use client';
 
-import { useSelectedWalletAccount } from '@solana/react';
 import { LockKeyholeIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -9,6 +8,7 @@ import { SectionHeader } from '@/components/primitives/section-header';
 import { SignInButton } from '@/components/wallet/sign-in-button';
 import { WalletPicker } from '@/components/wallet/wallet-picker';
 import { cn } from '@/lib/utils';
+import { useTendrAccount } from '@/lib/wallet';
 
 export function SignInGate() {
   return (
@@ -46,7 +46,7 @@ export function SignInGate() {
 }
 
 function GateInner() {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   const router = useRouter();
 
   return (

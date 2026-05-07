@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 
 import { snsRpc } from '@/lib/solana/client';
 
-import { readSnsCache, writeSnsCache } from './cache';
+import { readSnsCache, subscribeSnsCacheChange, writeSnsCache } from './cache';
 import { resolveWalletToSns } from './resolve';
 
 /**
@@ -50,21 +50,33 @@ export function useSnsName(wallet: Address | null | undefined): string | null | 
       setName(undefined);
       return;
     }
-    // If we have a fresh cached value, no work needed - just paint it.
-    const c = readSnsCache(wallet);
-    if (c !== undefined) {
-      setName(c);
-      return;
-    }
-    // Cold path: fire the resolve, write the cache on completion.
+
     let cancelled = false;
-    setName(undefined);
-    void resolveWalletToSns(snsRpc, wallet).then((resolved) => {
-      writeSnsCache(wallet, resolved);
-      if (!cancelled) setName(resolved);
-    });
+
+    function loadFromCacheOrResolve() {
+      if (!wallet || cancelled) return;
+      const c = readSnsCache(wallet);
+      if (c !== undefined) {
+        setName(c);
+        return;
+      }
+      void resolveWalletToSns(snsRpc, wallet).then((resolved) => {
+        if (cancelled) return;
+        writeSnsCache(wallet, resolved); // also fires the change event
+        setName(resolved);
+      });
+    }
+
+    loadFromCacheOrResolve();
+
+    // Re-read whenever this wallet's cache entry changes (e.g., post-claim
+    // optimistic write, or another surface's resolve landing). Without this,
+    // the navbar keeps showing the truncated address until the next mount.
+    const unsubscribe = subscribeSnsCacheChange(wallet, loadFromCacheOrResolve);
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [wallet]);
 

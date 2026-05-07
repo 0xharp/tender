@@ -15,7 +15,7 @@
  * provider.
  */
 import type { Address } from '@solana/kit';
-import { useSelectedWalletAccount, useSignTransactions } from '@solana/react';
+import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
 import { TimerOffIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -36,23 +36,32 @@ export interface ExpireRfpPanelProps {
   /** Wallet that created the RFP. Used only for tone (we soften the message
    *  if the viewer IS the buyer). The action itself is permissionless. */
   buyerWallet: string;
+  /** On-chain `rfp.bid_count`. Drives a clearer "no bids received" state
+   *  before the reveal window has closed — surfaces what's coming so the
+   *  buyer isn't staring at a "nothing to do" page. */
+  bidCount: number;
 }
 
 export function ExpireRfpPanel(props: ExpireRfpPanelProps) {
-  // Only render when the RFP is in the deadlock window.
+  // Only render in the bidsclosed/reveal window.
   if (props.rfpStatus !== 'bidsclosed' && props.rfpStatus !== 'reveal') return null;
-  if (new Date(props.revealCloseAtIso).getTime() > Date.now()) return null;
-  return <Body {...props} />;
+  const revealClosed = new Date(props.revealCloseAtIso).getTime() <= Date.now();
+  // Render the action panel when EITHER trigger is satisfied (matches the
+  // on-chain expire_rfp guard: `bid_count == 0 || now > reveal_close_at`):
+  //   - Reveal window has closed (original deadlock-recovery path), OR
+  //   - Zero bids (early-expire — nothing to wait for).
+  if (revealClosed || props.bidCount === 0) return <Body {...props} />;
+  return null;
 }
 
 function Body(props: ExpireRfpPanelProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   // Render the explanatory card for any visitor; gate only the action button
   // on a connected wallet (the on-chain ix needs a signer regardless).
   return account ? (
     <Connected account={account} {...props} />
   ) : (
-    <Shell isBuyer={false}>
+    <Shell isBuyer={false} bidCount={props.bidCount}>
       <Button type="button" size="sm" disabled className="bg-amber-600 text-amber-50">
         Connect a wallet to expire
       </Button>
@@ -60,10 +69,9 @@ function Body(props: ExpireRfpPanelProps) {
   );
 }
 
-function Connected({ account, ...props }: ExpireRfpPanelProps & { account: { address: string } }) {
+function Connected({ account, ...props }: ExpireRfpPanelProps & { account: TendrAccount }) {
   const router = useRouter();
-  // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook narrowing
-  const signTransactions = useSignTransactions(account as any, 'solana:devnet');
+  const signTransactions = useTendrSignTransactions(account);
   const [busy, setBusy] = useState(false);
   const isBuyer = account.address === props.buyerWallet;
 
@@ -89,7 +97,7 @@ function Connected({ account, ...props }: ExpireRfpPanelProps & { account: { add
   }
 
   return (
-    <Shell isBuyer={isBuyer}>
+    <Shell isBuyer={isBuyer} bidCount={props.bidCount}>
       <Button
         type="button"
         size="sm"
@@ -103,24 +111,45 @@ function Connected({ account, ...props }: ExpireRfpPanelProps & { account: { add
   );
 }
 
-function Shell({ isBuyer, children }: { isBuyer: boolean; children: React.ReactNode }) {
+function Shell({
+  isBuyer,
+  bidCount,
+  children,
+}: { isBuyer: boolean; bidCount: number; children: React.ReactNode }) {
+  const noBids = bidCount === 0;
   return (
     <Card className="border-amber-500/40 bg-amber-500/5">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <TimerOffIcon className="size-4 text-amber-700 dark:text-amber-400" />
-          Reveal window expired without an award
+          {noBids ? 'No bids received — ready to expire' : 'Reveal window expired without an award'}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
         <p className="text-muted-foreground">
-          {isBuyer
-            ? "You didn't pick a winner before the reveal window closed. The RFP is stuck — select_bid will revert."
-            : 'The buyer never picked a winner before the reveal window closed. The RFP is stuck — no one can be awarded now.'}{' '}
+          {noBids ? (
+            isBuyer ? (
+              <>
+                Your RFP closed without any bids. Mark it expired to terminate
+                cleanly —{' '}
+                <span className="font-medium text-foreground">no reputation impact</span>{' '}
+                (nothing was committed to).
+              </>
+            ) : (
+              <>
+                This RFP closed without any bids. Anyone can mark it expired to
+                clear it from active feeds.
+              </>
+            )
+          ) : isBuyer ? (
+            "You didn't pick a winner before the reveal window closed. The RFP is stuck — select_bid will revert."
+          ) : (
+            'The buyer never picked a winner before the reveal window closed. The RFP is stuck — no one can be awarded now.'
+          )}{' '}
           Run <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">expire_rfp</code>{' '}
-          to terminate it cleanly. Permissionless — any signed-in wallet can fire it. No funds or
-          rent move; the RFP just flips to a terminal{' '}
+          to flip it to a terminal{' '}
           <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">Expired</code> state.
+          Permissionless — any signed-in wallet can fire it. No funds or rent move.
         </p>
         <div className="flex justify-end">{children}</div>
       </CardContent>

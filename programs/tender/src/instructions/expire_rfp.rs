@@ -3,15 +3,27 @@ use anchor_lang::prelude::*;
 use crate::errors::TenderError;
 use crate::state::{Rfp, RfpExpired, RfpStatus};
 
-/// Permissionless after `rfp.reveal_close_at` expires while status is still
-/// `BidsClosed` or `Reveal` (i.e., the buyer never called `select_bid`).
-/// Flips the RFP to `RfpStatus::Expired` so the UI can stop surfacing
-/// dead "Award the winner" actions and so future tooling can recognize
-/// the terminal state.
+/// Permissionless flip of the RFP to `RfpStatus::Expired`. Two trigger
+/// conditions, both with status still `BidsClosed` or `Reveal`:
+///
+///   1. **Reveal window elapsed** (`now > reveal_close_at`) — the original
+///      deadlock-recovery path: buyer never called `select_bid`, so the
+///      RFP is stuck. Anyone can clear it.
+///
+///   2. **Zero bids** (`bid_count == 0`) — added 2026-05-07. When no
+///      provider committed a bid before `bid_close_at`, there's literally
+///      nothing to wait on. Forcing the buyer to sit through the reveal
+///      window for a no-op is hostile UX. Allowed any time after bidding
+///      closes.
+///
+/// Either way, flips status so the UI can stop surfacing dead "Award the
+/// winner" actions and so future tooling can recognize the terminal state.
 ///
 /// Rent on the Rfp account does NOT move - the account stays alive as
 /// historical record (mirrors `mark_buyer_ghosted`'s pattern). The buyer
 /// keeps the rent they originally paid; the caller pays only the tx fee.
+/// No reputation impact for the buyer in either branch — both are
+/// "nothing happened, terminate cleanly" cases.
 #[derive(Accounts)]
 pub struct ExpireRfp<'info> {
     /// Permissionless caller - typically the buyer (in their /me/projects
@@ -33,8 +45,12 @@ pub fn handler(ctx: Context<ExpireRfp>) -> Result<()> {
         TenderError::InvalidRfpStatus
     );
 
+    // Two valid triggers — see fn-level docs for rationale.
     let now = Clock::get()?.unix_timestamp;
-    require!(now > rfp.reveal_close_at, TenderError::RevealWindowOpen);
+    require!(
+        rfp.bid_count == 0 || now > rfp.reveal_close_at,
+        TenderError::RevealWindowOpen
+    );
 
     rfp.status = RfpStatus::Expired;
 

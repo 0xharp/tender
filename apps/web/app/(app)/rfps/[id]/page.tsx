@@ -372,11 +372,16 @@ export default async function Page({ params }: PageProps) {
       )}
 
       {/* ---- Reveal-window-expired escape hatch (permissionless) ------------ */}
+      {/* Also surfaces a "no bids received — wait for reveal close" info card
+          BEFORE the reveal window closes when bidCount === 0, so the buyer
+          isn't staring at a "Decrypt bids / Award the winner" prompt with
+          nothing to act on. */}
       <ExpireRfpPanel
         rfpPda={id}
         rfpStatus={status}
         revealCloseAtIso={revealCloseAtIso}
         buyerWallet={buyerWallet}
+        bidCount={Number(bidCount)}
       />
 
       {/* ---- Provider-side ephemeral sweep - surfaces only when there's a

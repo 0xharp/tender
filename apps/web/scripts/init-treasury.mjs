@@ -29,12 +29,19 @@ import {
 } from '@solana/web3.js';
 
 const TENDER_PROGRAM_ID = new PublicKey('4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ');
-// Circle's devnet USDC mint — same one MagicBlock Private Payments defaults to.
+// Circle's devnet USDC mint.
 const DEVNET_USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
 
-const RPC =
-  process.env.SOLANA_RPC_URL ??
-  'https://devnet.helius-rpc.com/?api-key=76d43e92-9e70-4cae-b442-0f17b9ad4dba';
+// RPC must come from the environment. Never hardcode an API key here — this
+// file is committed to git, so any literal lands in public history.
+const RPC = process.env.SOLANA_RPC_URL ?? process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
+if (!RPC) {
+  console.error(
+    'init-treasury: SOLANA_RPC_URL (or NEXT_PUBLIC_SOLANA_RPC_URL) must be set.\n' +
+      '  Run via: SOLANA_RPC_URL=$(grep NEXT_PUBLIC_SOLANA_RPC_URL apps/web/.env.local | cut -d= -f2-) node apps/web/scripts/init-treasury.mjs',
+  );
+  process.exit(1);
+}
 const KP = process.env.KEYPAIR_PATH ?? path.join(process.env.HOME, '.config/solana/id.json');
 
 function loadKeypair(p) {

@@ -12,8 +12,8 @@ import type { Address } from '@solana/kit';
  * UX bar: every action has its consequence (amount, recipient, irreversibility,
  * reputation impact) shown BEFORE the wallet popup.
  */
-import { useSelectedWalletAccount, useSignTransactions } from '@solana/react';
-import type { UiWalletAccount } from '@wallet-standard/react';
+import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
+
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -124,7 +124,7 @@ export interface BuyerActionPanelProps {
 }
 
 export function BuyerActionPanel(props: BuyerActionPanelProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   if (!account) return null;
   return <ConnectedBuyerPanel account={account} {...props} />;
 }
@@ -152,8 +152,8 @@ function ConnectedBuyerPanel({
   // title. Keeping the prop in the interface so callers can pass both
   // without churn if we ever want to surface the title.
   rfpTitle: _rfpTitle,
-}: BuyerActionPanelProps & { account: UiWalletAccount }) {
-  const signTransactions = useSignTransactions(account, 'solana:devnet');
+}: BuyerActionPanelProps & { account: TendrAccount }) {
+  const signTransactions = useTendrSignTransactions(account);
   const wallet = account.address as Address;
 
   /* ----- CLOSE BIDDING (Open + past bid_close_at) ------------------------ */

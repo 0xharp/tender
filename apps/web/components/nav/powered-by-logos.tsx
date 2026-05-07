@@ -1,22 +1,24 @@
 /**
  * Partner-credit block on the homepage trust strip.
  *
- * Three columns, each presenting a partner as `<role>` (headline) + logo
- * (by-line) + one-line plain-English tagline. Reads as "we composed three
- * orthogonal primitives" rather than a sponsor logo wall — each column
- * communicates WHAT that partner does for tendr.bid, not just THAT they
- * exist. Mobile stacks vertically.
+ * Each column presents a partner as `<role>` (headline) + logo (by-line)
+ * + one-line plain-English tagline. Reads as "we composed orthogonal
+ * primitives" rather than a sponsor logo wall — each column communicates
+ * WHAT that partner does for tendr.bid, not just THAT they exist. Mobile
+ * stacks vertically.
  *
  * Logo rendering choices:
  *
- *   - Cloak + SNS ship as SVGs. We inline them (instead of `<img>`) so each
- *     `<path>` can be filled with `currentColor` - that's the only way to
- *     retint a vector to whatever the parent text color resolves to.
+ *   - Cloak + SNS + QVAC ship as SVGs we control. We inline them (instead
+ *     of `<img>`) so each `<path>` can be filled with `currentColor` —
+ *     that's the only way to retint a vector to whatever the parent text
+ *     color resolves to.
  *
- *   - MagicBlock ships as a black-on-transparent PNG. SVG `<path>` recolor
- *     doesn't apply, so we use CSS `mask-image` with the PNG as the alpha
- *     source: the resulting box is fully painted with `currentColor`,
- *     visible only where the PNG had pixels. Same monochrome retint result.
+ *   - MagicBlock + RPC Fast ship as multi-color images we don't control
+ *     (PNG and complex SVG with explicit fills). Inline `<path>` recolor
+ *     doesn't apply, so we use CSS `mask-image` with the source as the
+ *     alpha mask: the resulting box is fully painted with `currentColor`,
+ *     visible only where the source had pixels. Same monochrome retint.
  *
  * The whole row uses `text-muted-foreground/80` so logos + role labels read
  * as a single restrained tone; the role headline is the loudest element to
@@ -29,7 +31,7 @@ export function PoweredByLogos() {
   // carries the partner-credit framing on its own, and an extra header
   // above just repeats the same idea twice.
   return (
-    <div className="grid w-full grid-cols-1 gap-10 text-muted-foreground/80 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
+    <div className="grid w-full grid-cols-1 gap-10 text-muted-foreground/80 sm:grid-cols-2 sm:gap-6 lg:grid-cols-5">
       <PartnerColumn
         role="Private Ephemeral Rollup"
         tagline="Bid contents stay sealed even from the buyer until the reveal window opens."
@@ -39,13 +41,17 @@ export function PoweredByLogos() {
       />
       <PartnerColumn
         role="Shielded UTXO Pool"
-        tagline="Per-RFP ephemeral wallet keeps bidders unlinkable to their main wallet on chain."
+        // Trimmed from "...to their main wallet on chain" to fit 3 lines
+        // of tagline (was 4) at the column width set by lg:grid-cols-5.
+        tagline="Per-RFP ephemeral wallet keeps bidders unlinkable from their main wallet."
         partnerName="Cloak"
         href="https://cloak.ag/"
         mark={<CloakMark />}
       />
       <PartnerColumn
-        role="Identity Layer"
+        // "Identity Layer" alone wraps to 1 line (other titles wrap to 2).
+        // "On-Chain Identity" naturally wraps to 2 with the same tracking.
+        role="On-Chain Identity"
         tagline="Free <handle>.tendr.sol per user - recognizable identity reputation accrues to."
         partnerName="Solana Name Service"
         href="https://www.sns.id/"
@@ -57,6 +63,13 @@ export function PoweredByLogos() {
         partnerName="QVAC"
         href="https://qvac.tether.io/"
         mark={<QvacMark />}
+      />
+      <PartnerColumn
+        role="RPC Infrastructure"
+        tagline="Low-latency Solana RPC powers every on-chain read, write, and reveal."
+        partnerName="RPC Fast"
+        href="https://rpcfast.com/"
+        mark={<RpcFastMark />}
       />
     </div>
   );
@@ -89,14 +102,29 @@ function PartnerColumn({
       aria-label={`${role} — by ${partnerName}`}
       className="group flex flex-col items-center gap-3 px-2 text-center transition-colors hover:text-foreground"
     >
-      <span className="font-display text-sm font-semibold uppercase tracking-[0.16em] text-foreground">
+      {/* `tracking-[0.1em]` (down from 0.16em) gives titles ~40% more
+          characters per line. Combined with `min-h-[3rem]` that reserves
+          exactly 2 lines, every title now renders as exactly 2 lines —
+          no half-empty whitespace block above 1-line titles, no overflow
+          for 3-word titles like "Private Ephemeral Rollup". `items-end`
+          bottom-aligns within the reserved space so any rounding error
+          parks the empty pixel above the text, closer to the by-line. */}
+      <span className="flex min-h-[3rem] items-end justify-center font-display text-sm font-semibold uppercase leading-snug tracking-[0.1em] text-foreground">
         {role}
       </span>
-      <div className="flex items-center gap-2 opacity-90 transition-opacity group-hover:opacity-100">
+      {/* Reserve vertical space for the logo block too — logos vary in
+          height (SNS leaf is ~1.5rem tall, MagicBlock wordmark is ~1.75rem,
+          RPC Fast is ~2rem) and without a min-height the by-line can shift
+          a few pixels per column. Center within the block so all logos
+          share a vertical midline. */}
+      <div className="flex min-h-[2.5rem] items-center gap-2 opacity-90 transition-opacity group-hover:opacity-100">
         <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">by</span>
         {mark}
       </div>
-      <p className="max-w-[28ch] text-xs leading-relaxed text-muted-foreground">{tagline}</p>
+      {/* Reserve 3 lines of tagline space so the next column / next section
+          starts at the same y-coordinate regardless of which tagline wraps
+          longest. `text-xs leading-relaxed` ≈ 1.25rem per line × 3 = 3.75rem. */}
+      <p className="min-h-[3.75rem] max-w-[28ch] text-xs leading-relaxed text-muted-foreground">{tagline}</p>
     </Link>
   );
 }
@@ -118,6 +146,32 @@ function MagicBlockMark() {
         WebkitMaskPosition: 'center',
         maskPosition: 'center',
       }}
+    />
+  );
+}
+
+/**
+ * RPC Fast can't use the mask-image trick like MagicBlock — its SVG has
+ * white "FAST" letters sitting ON TOP of a dark hexagonal pill. Mask-image
+ * flattens the alpha channel to a single `currentColor`, so the white text
+ * and dark pill collapse into the same color → "FAST" disappears into
+ * the pill, leaving just "RPC ▭".
+ *
+ * Solution: render with `<img>` so the original 4-color brand palette
+ * (dark pill + white FAST + lavender + peach accents) is preserved, then
+ * apply `grayscale(1)` to drop saturation while keeping luminance contrast
+ * — that keeps the white-on-dark FAST text legible. `dark:invert` flips
+ * the luminance in dark mode so the pill stays the right contrast against
+ * the dark background. End result reads as the same muted-monochrome tone
+ * as the other partner marks, but without the "FAST" disappearing.
+ */
+function RpcFastMark() {
+  return (
+    <img
+      src="/logos/rpc-fast-logo.svg"
+      alt=""
+      aria-hidden
+      className="block h-6 w-auto opacity-80 grayscale dark:invert"
     />
   );
 }

@@ -18,7 +18,7 @@
  *   3. There's a cached ephemeral pubkey for this (wallet, rfp)
  *   4. That ephemeral wallet holds > 0.005 SOL on chain
  */
-import { useSelectedWalletAccount, useSignMessage } from '@solana/react';
+import { type TendrAccount, useTendrAccount, useTendrSignMessage } from '@/lib/wallet';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -30,6 +30,7 @@ import {
   deriveEphemeralBidKeypair,
   deriveEphemeralBidWalletMessage,
 } from '@/lib/crypto/derive-ephemeral-bid-wallet';
+import { stripSolanaClientHeaderMiddleware } from '@/lib/solana/client';
 
 export interface SweepEphemeralPanelProps {
   rfpPda: string;
@@ -37,7 +38,7 @@ export interface SweepEphemeralPanelProps {
 }
 
 export function SweepEphemeralPanel(props: SweepEphemeralPanelProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   if (!account) return null;
   if (props.bidderVisibility !== 'buyer_only') return null;
   return <Connected account={account} {...props} />;
@@ -47,9 +48,9 @@ function Connected({
   account,
   rfpPda,
 }: {
-  account: NonNullable<ReturnType<typeof useSelectedWalletAccount>[0]>;
+  account: TendrAccount;
 } & SweepEphemeralPanelProps) {
-  const signMessage = useSignMessage(account);
+  const signMessage = useTendrSignMessage(account);
   const [ephemeralPubkey, setEphemeralPubkey] = useState<string | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [sweeping, setSweeping] = useState(false);
@@ -84,8 +85,12 @@ function Connected({
       try {
         const { Connection, PublicKey } = await import('@solana/web3.js');
         const conn = new Connection(
-          process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? 'https://api.devnet.solana.com',
-          'confirmed',
+          process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com',
+          {
+            commitment: 'confirmed',
+            // biome-ignore lint/suspicious/noExplicitAny: web3.js FetchMiddleware type
+            fetchMiddleware: stripSolanaClientHeaderMiddleware as any,
+          },
         );
         const lamports = await conn.getBalance(new PublicKey(ephemeralPubkey!));
         if (!cancelled) setBalance(lamports / 1e9);
@@ -114,8 +119,12 @@ function Connected({
       }
       const { Connection, PublicKey } = await import('@solana/web3.js');
       const conn = new Connection(
-        process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? 'https://api.devnet.solana.com',
-        'confirmed',
+        process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com',
+        {
+          commitment: 'confirmed',
+          // biome-ignore lint/suspicious/noExplicitAny: web3.js FetchMiddleware type
+          fetchMiddleware: stripSolanaClientHeaderMiddleware as any,
+        },
       );
       const lamports = await conn.getBalance(new PublicKey(ephemeralPubkey));
       // The ephemeral signs Cloak's deposit tx, so it needs to fund:

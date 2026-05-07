@@ -35,7 +35,7 @@ import {
 } from 'react';
 
 import { ClaimIdentityModal } from '@/components/identity/claim-identity-modal';
-import { invalidateSnsCache } from '@/lib/sns/cache';
+import { writeSnsCache } from '@/lib/sns/cache';
 import { useSnsName } from '@/lib/sns/hooks';
 
 const SESSION_DISMISSED_KEY = 'tender:identity:dismissed';
@@ -107,15 +107,16 @@ export function IdentityModalProvider({
     }
   }
 
-  // Bust the wallet's cached SNS entry the moment a claim lands.
-  // Without this, `useSnsName(signedInWallet)` keeps serving the stale
-  // negative cache (TTL = 10 min) the hook wrote during the empty-state
-  // resolve before the user clicked Claim, so the new name wouldn't
-  // appear in the UI until either TTL expiry or a tab reload.
-  function handleClaimed(_fullName: string) {
+  // Optimistically write the freshly-claimed name into the cache. This
+  // both supersedes any stale negative cache (from the pre-claim resolve)
+  // AND saves an RPC round-trip — the API has already confirmed the mint,
+  // so we know the canonical name without re-reading SNS. writeSnsCache
+  // fires a change event that all `useSnsName` subscribers (navbar, hash
+  // links, leaderboard rows for this wallet) react to immediately.
+  function handleClaimed(fullName: string) {
     if (signedInWallet) {
       // biome-ignore lint/suspicious/noExplicitAny: kit Address branding nominal cast
-      invalidateSnsCache(signedInWallet as any);
+      writeSnsCache(signedInWallet as any, fullName);
     }
   }
 

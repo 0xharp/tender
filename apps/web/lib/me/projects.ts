@@ -129,6 +129,7 @@ export async function listProjectsForWallet(wallet: Address): Promise<ProjectRow
       fundingDeadlineMs:
         rfp.data.fundingDeadline > 0n ? Number(rfp.data.fundingDeadline) * 1000 : null,
       nowMs: now,
+      bidCount: rfp.data.bidCount,
     });
     const focus = pickFocusMilestone({
       activeMilestoneIndex: rfp.data.activeMilestoneIndex,
@@ -178,6 +179,10 @@ function computeNextAction(args: {
   revealCloseAtMs: number;
   fundingDeadlineMs: number | null;
   nowMs: number;
+  /** On-chain `rfp.bid_count`. When 0 in the bidsclosed/reveal phase,
+   *  there's nothing to award — surface a clearer "no bids" state instead
+   *  of the misleading "Award the winner" prompt. */
+  bidCount: number;
 }): NextAction {
   const {
     role,
@@ -188,6 +193,7 @@ function computeNextAction(args: {
     revealCloseAtMs,
     fundingDeadlineMs,
     nowMs,
+    bidCount,
   } = args;
 
   // Terminal states - same for both roles.
@@ -236,7 +242,21 @@ function computeNextAction(args: {
         return {
           urgency: 'now',
           label: 'Mark RFP expired',
-          hint: 'Reveal window closed without an award. Run expire_rfp to terminate the RFP cleanly.',
+          hint:
+            bidCount === 0
+              ? 'No bids were received. Mark expired to terminate cleanly — no reputation impact.'
+              : 'Reveal window closed without an award. Run expire_rfp to terminate the RFP cleanly.',
+        };
+      }
+      // Zero bids: on-chain expire_rfp short-circuits the reveal-window
+      // check (`bid_count == 0 || now > reveal_close_at`), so the buyer
+      // can early-expire immediately — no point making them wait for a
+      // timer when there's literally nothing to award.
+      if (bidCount === 0) {
+        return {
+          urgency: 'now',
+          label: 'Mark RFP expired',
+          hint: 'No bids were received. Mark expired to terminate cleanly — no reputation impact since nothing was committed to.',
         };
       }
       return {

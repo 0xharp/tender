@@ -50,16 +50,10 @@ export function isAiAvailable(): boolean {
  * unavailable). The model alias `tendr-llm` matches the `serve.models`
  * key in `apps/ai-sidecar/qvac.config.json`.
  *
- * Custom `fetch` wrapper: the OpenAI SDK auto-injects telemetry headers
- * (x-stainless-os, x-stainless-arch, x-stainless-package-version, …)
- * on every request. QVAC's `serve --cors` enables CORS but its
- * Access-Control-Allow-Headers allowlist doesn't include the stainless
- * prefix — the browser preflight rejects the request before it even
- * leaves. We strip every `x-stainless-*` header in a wrapped fetch so
- * the preflight only sees Content-Type + Authorization, which QVAC
- * does allow. Same outcome as if the SDK never injected them in the
- * first place; the stripped headers were observability metadata that
- * QVAC doesn't read anyway.
+ * The custom `fetch` wrapper turns every outgoing call into a CORS
+ * "simple request" — see {@link makeRequestSimple} for the why. Without
+ * this, mobile webviews (Phantom in-app browser observed) silently drop
+ * cross-origin POSTs to the Nosana endpoint at preflight time.
  */
 export function getQvacClient(): OpenAI | null {
   const baseURL = getQvacBaseUrl();
@@ -67,28 +61,59 @@ export function getQvacClient(): OpenAI | null {
   return new OpenAI({
     baseURL,
     // QVAC's serve doesn't require auth in the default config we ship.
-    // The OpenAI SDK still wants a non-empty string here.
+    // The OpenAI SDK still wants a non-empty string here, but we strip
+    // the resulting Authorization header in the fetch wrapper below
+    // (Authorization triggers a CORS preflight; we want simple requests).
     apiKey: process.env.NEXT_PUBLIC_QVAC_API_KEY ?? 'qvac-no-auth',
     dangerouslyAllowBrowser: true,
-    fetch: stripStainlessHeadersFetch,
+    fetch: makeRequestSimple,
   });
 }
 
 /**
- * Wrapped global fetch: deletes any `x-stainless-*` request header
- * before sending. Required so the browser's CORS preflight stays
- * within QVAC's Access-Control-Allow-Headers allowlist (which only
- * permits Content-Type + Authorization).
+ * Wrapped global fetch that turns the OpenAI SDK's POST into a CORS
+ * "simple request" so it bypasses the preflight entirely.
+ *
+ * CORS spec: a request is "simple" (no preflight OPTIONS) if it has no
+ * custom headers and a `Content-Type` of `application/x-www-form-urlencoded`,
+ * `multipart/form-data`, or `text/plain`. Anything outside that list —
+ * `application/json`, `Authorization: Bearer …`, `x-stainless-*` — forces
+ * a preflight, which mobile webviews reject more aggressively than
+ * desktop Chrome (Phantom in-app browser observed: preflight passes on
+ * desktop Chrome but is silently dropped on mobile, even though QVAC's
+ * server returns proper CORS headers).
+ *
+ * To make every request "simple":
+ *
+ *   1. Swap `Content-Type: application/json` → `text/plain;charset=UTF-8`.
+ *      QVAC's OpenAI-compatible server parses the body as JSON regardless
+ *      of Content-Type — it just tries `JSON.parse(body)`, which works
+ *      because the SDK has already serialized the body to a JSON string.
+ *
+ *   2. Strip `Authorization`. QVAC's `serve openai --cors` config (see
+ *      `apps/ai-sidecar/qvac.config.json`) has no auth requirement, so
+ *      the `Bearer qvac-no-auth` value the SDK injects is decorative.
+ *      Removing it eliminates the second preflight trigger.
+ *
+ *   3. Strip `x-stainless-*` (telemetry the SDK injects unconditionally).
+ *
+ * Net result: the browser ships the POST as-is, no OPTIONS roundtrip,
+ * no allowlist check. Works identically on desktop Chrome and mobile
+ * webview. Same end-to-end privacy story (browser → Nosana, no Tendr
+ * server in the path).
  */
-const stripStainlessHeadersFetch: typeof fetch = (input, init) => {
-  if (init?.headers) {
-    const cleaned = new Headers(init.headers);
-    for (const key of Array.from(cleaned.keys())) {
-      if (key.toLowerCase().startsWith('x-stainless-')) cleaned.delete(key);
-    }
-    init = { ...init, headers: cleaned };
+const makeRequestSimple: typeof fetch = (input, init) => {
+  if (!init?.headers) return fetch(input as RequestInfo, init);
+  const headers = new Headers(init.headers);
+  // Strip everything that would trigger a preflight.
+  for (const key of Array.from(headers.keys())) {
+    if (key.toLowerCase().startsWith('x-stainless-')) headers.delete(key);
   }
-  return fetch(input as RequestInfo, init);
+  headers.delete('authorization');
+  // Force Content-Type into the CORS-simple allowlist. Body is already
+  // a JSON string from the SDK; QVAC parses it regardless of label.
+  headers.set('Content-Type', 'text/plain;charset=UTF-8');
+  return fetch(input as RequestInfo, { ...init, headers });
 };
 
 /** Model alias declared in qvac.config.json. Single source of truth so

@@ -1,9 +1,13 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useSelectedWalletAccount, useSignMessage, useSignTransactions } from '@solana/react';
+import {
+  type TendrAccount,
+  useTendrAccount,
+  useTendrSignMessage,
+  useTendrSignTransactions,
+} from '@/lib/wallet';
 import type { Keypair } from '@solana/web3.js';
-import type { UiWalletAccount } from '@wallet-standard/react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
@@ -34,14 +38,28 @@ import {
 } from '@/lib/bids/submit-flow';
 import { prefetchCloak } from '@/lib/sdks/cloak';
 import { useSnsName } from '@/lib/sns/hooks';
-import { rpc } from '@/lib/solana/client';
+import { rpc, stripSolanaClientHeaderMiddleware } from '@/lib/solana/client';
 import type { Address } from '@solana/kit';
 
-/** Circle's devnet USDC mint - same SPL token used by MagicBlock Private Payments
- *  defaults. One-line swap to Circle mainnet (`EPjFWdd5…`) for V2. */
+/** Circle's devnet USDC mint. One-line swap to Circle mainnet
+ *  (`EPjFWdd5…`) for V2. */
 const DEVNET_MOCK_USDC_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU' as const;
 
-const STAGE_LABEL: Record<BidSubmitStage, string> = {
+/** Local-only stage values the bid-composer surfaces BEFORE submitBid takes
+ *  over its own onProgress reporting. Lets the spinner stay informative
+ *  while we're awaiting wallet popups for seed + binding sigs (which can
+ *  hang in some wallets) and during the dynamic imports / RPC balance check
+ *  inside submitBid's privacy-mode preamble. */
+type ComposerLocalStage =
+  | 'awaiting_seed_sig'
+  | 'awaiting_binding_sig'
+  | 'checking_funds';
+type ComposerStage = BidSubmitStage | ComposerLocalStage;
+
+const STAGE_LABEL: Record<ComposerStage, string> = {
+  awaiting_seed_sig: 'Approve the ephemeral-wallet seed signature…',
+  awaiting_binding_sig: 'Approve the bid-binding signature…',
+  checking_funds: 'Checking privacy-wallet balance on devnet…',
   deriving_provider_key: 'Approve the derive-key signature in your wallet…',
   deriving_bid_seed: 'Approve the private bid seed signature…',
   funding_ephemeral_wallet: 'Funding privacy wallet via Cloak shielded pool…',
@@ -86,8 +104,21 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
+function bytesToB64(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+
+function b64ToBytes(b64: string): Uint8Array {
+  const s = atob(b64);
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+}
+
 export function BidComposer(props: BidComposerProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
 
   if (!account) {
     return (
@@ -148,7 +179,7 @@ function ConnectedComposer({
   feeBps,
   rfpTitle,
   rfpScope,
-}: { account: UiWalletAccount } & BidComposerProps) {
+}: { account: TendrAccount } & BidComposerProps) {
   const feePct = (feeBps / 100).toFixed(feeBps % 100 === 0 ? 1 : 2);
   const netRatio = (10_000 - feeBps) / 10_000;
   const formatNet = (gross: string): string => {
@@ -156,9 +187,9 @@ function ConnectedComposer({
     if (!Number.isFinite(n) || n <= 0) return '0';
     return (n * netRatio).toFixed(2);
   };
-  const signTransactions = useSignTransactions(account, 'solana:devnet');
-  const signMessage = useSignMessage(account);
-  const [stage, setStage] = useState<BidSubmitStage | null>(null);
+  const signTransactions = useTendrSignTransactions(account);
+  const signMessage = useTendrSignMessage(account);
+  const [stage, setStage] = useState<ComposerStage | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<SubmitBidResult | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
@@ -172,6 +203,46 @@ function ConnectedComposer({
   // on any device. Generated lazily at submit time (not on mount) so we don't
   // pop a wallet popup just for opening the page.
   const [ephemeralKeypair, setEphemeralKeypair] = useState<Keypair | null>(null);
+  // Cache the binding signature across submit retries AND page reloads. Why
+  // the cache exists: every fresh signMessage call without it pops the wallet
+  // TWICE (seed + binding). On a retry after a failed first submit + a Cloak
+  // funding flow (2-3 more popups), some wallets (Nightly observed) hang
+  // their signMessage queue and the next popup never surfaces — leaving the
+  // submit button stuck on "Submitting…" with no UI. Why sessionStorage:
+  // component state alone dies on reload, so a user who reloads mid-flow has
+  // to redo both popups; sessionStorage scoped to (rfpPda, wallet) survives
+  // reloads but doesn't persist past tab close (no long-term local secrets).
+  // The seed sig is persisted as the bidPdaSeed bytes (= ephemeral pubkey)
+  // — the keypair itself is re-derivable deterministically from the seed
+  // sig, but we cache the SIG too so we can rebuild without any wallet popup.
+  const [cachedBindingSig, setCachedBindingSig] = useState<Uint8Array | null>(null);
+  // Hydrate cached sigs from sessionStorage on mount. Scoped per (rfp, wallet)
+  // so different RFPs / different main wallets don't collide. Seed sig is
+  // base64-encoded raw signature bytes; binding sig same.
+  const sigCacheKey = `tender:bid-sigs:${rfpPda}:${account.address}`;
+  useEffect(() => {
+    if (!isPrivateMode) return;
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = sessionStorage.getItem(sigCacheKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { seedSigB64?: string; bindingSigB64?: string };
+      if (parsed.bindingSigB64) {
+        setCachedBindingSig(b64ToBytes(parsed.bindingSigB64));
+      }
+      if (parsed.seedSigB64) {
+        // Re-derive ephemeral keypair from cached seed sig — same code path as
+        // the live derive, just without the wallet popup.
+        void import('@/lib/crypto/derive-ephemeral-bid-wallet').then(
+          ({ deriveEphemeralBidKeypair }) =>
+            deriveEphemeralBidKeypair(b64ToBytes(parsed.seedSigB64!)).then(setEphemeralKeypair),
+        );
+      }
+    } catch {
+      /* corrupt cache — ignore, user will re-sign */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sigCacheKey, isPrivateMode]);
   void prefetchCloak; // kept for future Cloak-shielded funding integration
 
   // Empty defaults - every field is the provider's intentional input. The
@@ -212,36 +283,101 @@ function ConnectedComposer({
         payoutMode = { kind: 'main' };
       } else {
         // Private mode prep: derive ephemeral keypair + sign binding message.
-        // 1. Derive ephemeral keypair deterministically from main wallet sig.
+        // Both are cached across submit retries (see cachedBindingSig comment
+        // above) so a retry after funding doesn't re-pop the wallet.
         const {
           deriveEphemeralBidWalletMessage,
           deriveEphemeralBidKeypair,
           buildBidBindingMessage,
         } = await import('@/lib/crypto/derive-ephemeral-bid-wallet');
-        const seedMsg = deriveEphemeralBidWalletMessage(rfpPda);
-        // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
-        const seedSig = await (signMessage as any)({ message: seedMsg });
-        const eph = await deriveEphemeralBidKeypair(seedSig.signature);
-        setEphemeralKeypair(eph);
 
-        // 2. Compute the bid PDA from the ephemeral pubkey (same way program does).
-        const { findBidPda: findBidPdaFn } = await import('@tender/tender-client');
-        const [bidPdaForBinding] = await findBidPdaFn({
-          // biome-ignore lint/suspicious/noExplicitAny: kit Address brand
-          rfp: rfpPda as any,
-          bidPdaSeed: eph.publicKey.toBytes(),
-        });
+        // Helper: persist seed + binding sigs so a reload mid-flow doesn't
+        // force the user back through wallet popups.
+        function persistSigs(seedSigBytes: Uint8Array | null, bindingSigBytes: Uint8Array | null) {
+          if (typeof window === 'undefined') return;
+          try {
+            const existing = sessionStorage.getItem(sigCacheKey);
+            const prev = existing ? (JSON.parse(existing) as { seedSigB64?: string; bindingSigB64?: string }) : {};
+            const next = {
+              seedSigB64: seedSigBytes ? bytesToB64(seedSigBytes) : prev.seedSigB64,
+              bindingSigB64: bindingSigBytes ? bytesToB64(bindingSigBytes) : prev.bindingSigB64,
+            };
+            sessionStorage.setItem(sigCacheKey, JSON.stringify(next));
+          } catch {
+            /* quota / storage disabled — non-fatal */
+          }
+        }
 
-        // 3. Sign the binding message with the MAIN wallet - proves main owns this bid.
-        const bindingMsg = buildBidBindingMessage(rfpPda, bidPdaForBinding, account.address);
-        // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
-        const bindingSig = await (signMessage as any)({ message: bindingMsg });
+        // 1. Derive ephemeral keypair (cached after first success).
+        let eph: Keypair;
+        if (ephemeralKeypair) {
+          eph = ephemeralKeypair;
+        } else {
+          setStage('awaiting_seed_sig');
+          const seedMsg = deriveEphemeralBidWalletMessage(rfpPda);
+          // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
+          const seedSig = await (signMessage as any)({ message: seedMsg });
+          eph = await deriveEphemeralBidKeypair(seedSig.signature);
+          setEphemeralKeypair(eph);
+          persistSigs(seedSig.signature, null);
+        }
+
+        // 2. Sign the binding message (cached after first success). Bound to
+        //    (rfpPda, bidPda, mainWallet) — none of which depend on form
+        //    values, so caching across form edits is safe.
+        let bindingSignature: Uint8Array;
+        if (cachedBindingSig) {
+          bindingSignature = cachedBindingSig;
+        } else {
+          setStage('awaiting_binding_sig');
+          const { findBidPda: findBidPdaFn } = await import('@tender/tender-client');
+          const [bidPdaForBinding] = await findBidPdaFn({
+            // biome-ignore lint/suspicious/noExplicitAny: kit Address brand
+            rfp: rfpPda as any,
+            bidPdaSeed: eph.publicKey.toBytes(),
+          });
+          const bindingMsg = buildBidBindingMessage(rfpPda, bidPdaForBinding, account.address);
+          // Workaround: Nightly (and possibly other wallets) drop the second
+          // signMessage request when it fires too soon after the first. The
+          // request lands but the popup never surfaces — leaves the user
+          // stuck with no UI. A short pause lets the wallet's request queue
+          // settle. 750ms is empirical: long enough that Nightly recovers,
+          // short enough not to feel like a stutter.
+          await new Promise((r) => setTimeout(r, 750));
+          // Race the wallet popup against a hard timeout. If 60s pass
+          // without a response, throw a clear error so the user can retry
+          // (cached seed sig means the retry skips straight to this step).
+          // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
+          const bindingSig = (await Promise.race([
+            (signMessage as any)({ message: bindingMsg }),
+            new Promise((_, reject) =>
+              setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      'Wallet did not surface the binding-signature popup within 60s. This is a known issue with some wallets after consecutive signMessage requests. Click Submit again to retry — the previous signature is cached so this only re-fires the binding step.',
+                    ),
+                  ),
+                60_000,
+              ),
+            ),
+          ])) as { signature: Uint8Array };
+          bindingSignature = bindingSig.signature;
+          setCachedBindingSig(bindingSignature);
+          persistSigs(null, bindingSignature);
+        }
+
+        // Both sigs in hand — submitBid will now do the on-chain balance
+        // check (an RPC call that can take several seconds on cold devnet),
+        // load the noble crypto module, and start its own onProgress reporting.
+        // Surface a stage so the spinner isn't context-free during that gap.
+        setStage('checking_funds');
 
         payoutMode = {
           kind: 'ephemeral',
           ephemeralKeypair: eph,
           mainWallet: account.address as Address,
-          bindingSignature: bindingSig.signature,
+          bindingSignature,
         };
       }
 
@@ -281,6 +417,14 @@ function ConnectedComposer({
           );
         } catch {
           /* localStorage quota - non-fatal */
+        }
+        // Bid landed — sigs no longer needed. Clear the in-flight cache so a
+        // subsequent re-bid (different RFP, same wallet) doesn't accidentally
+        // reuse a stale binding sig.
+        try {
+          sessionStorage.removeItem(sigCacheKey);
+        } catch {
+          /* ignore */
         }
       }
       toast.success('Sealed bid committed', {
@@ -723,10 +867,10 @@ export function EphemeralFundingPanel({
   const [balance, setBalance] = useState<number | null>(null);
   const [funding, setFunding] = useState(false);
   const [fundProgress, setFundProgress] = useState<string | null>(null);
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook
-  const signTransactions = useSignTransactions(account!, 'solana:devnet') as any;
-  const signMessageHook = useSignMessage(account!);
+  const signTransactions = useTendrSignTransactions(account!);
+  const signMessageHook = useTendrSignMessage(account!);
   // Wrap the @solana/react hook into Cloak's expected (Uint8Array) → Promise<Uint8Array>.
   const signMessageProp = async (msg: Uint8Array): Promise<Uint8Array> => {
     const { signature } = await signMessageHook({ message: msg });
@@ -759,13 +903,13 @@ export function EphemeralFundingPanel({
       // Cloak shielded funding via wallet-adapter (no private key export).
       // 1 Phantom popup for the deposit; relay-paid withdraw to ephemeral
       // happens silently after. Cryptographic unlinkability via the UTXO pool.
-      const [{ fundEphemeralWallet }, { Connection, PublicKey }, signMessageHook] =
-        await Promise.all([
-          import('@/lib/sdks/cloak'),
-          import('@solana/web3.js'),
-          import('@solana/react').then((m) => m.useSignMessage),
-        ]);
-      void signMessageHook; // hooks must be called at top level - see signMessageFn below
+      // signMessage / signTransactions are top-level hooks (mounted via
+      // @/lib/wallet — see top of this component); we just close over them
+      // here.
+      const [{ fundEphemeralWallet }, { Connection, PublicKey }] = await Promise.all([
+        import('@/lib/sdks/cloak'),
+        import('@solana/web3.js'),
+      ]);
 
       // Bridge Phantom's signTransactions hook (signs raw bytes) → Cloak's
       // signTransaction (takes a Transaction object). Cloak passes either
@@ -802,8 +946,14 @@ export function EphemeralFundingPanel({
         ephemeralPubkey: new PublicKey(ephemeralPubkey),
         depositLamports: 60_000_000n, // 0.06 SOL - covers Cloak fee + ephemeral rent + bid PDA rent (envelope-size dependent) + tx fees with comfortable headroom
         connection: new Connection(
-          process.env.NEXT_PUBLIC_HELIUS_RPC_URL ?? 'https://api.devnet.solana.com',
-          'confirmed',
+          process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com',
+          {
+            commitment: 'confirmed',
+            // Strip web3.js's auto-injected `solana-client` header so RPC
+            // providers (RPC Fast) don't reject the CORS preflight.
+            // biome-ignore lint/suspicious/noExplicitAny: web3.js FetchMiddleware type
+            fetchMiddleware: stripSolanaClientHeaderMiddleware as any,
+          },
         ),
         onProgress: (p) => setFundProgress(p.stage),
       });

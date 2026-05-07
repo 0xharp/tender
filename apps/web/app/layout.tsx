@@ -11,7 +11,7 @@ import { TopNav } from '@/components/nav/top-nav';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { WalletProviders } from '@/components/wallet/wallet-providers';
+import { TendrWalletProvider } from '@/lib/wallet';
 
 import './globals.css';
 
@@ -72,7 +72,7 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <TooltipProvider>
-            <WalletProviders>
+            <TendrWalletProvider>
               <IdentityModalProvider signedInWallet={signedInWallet}>
                 <div className="flex min-h-screen flex-col">
                   <TopNav />
@@ -81,7 +81,7 @@ export default async function RootLayout({
                 </div>
                 <Toaster />
               </IdentityModalProvider>
-            </WalletProviders>
+            </TendrWalletProvider>
           </TooltipProvider>
         </ThemeProvider>
       </body>

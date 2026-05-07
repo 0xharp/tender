@@ -1,7 +1,7 @@
 'use client';
 
-import { useSelectedWalletAccount, useSignMessage } from '@solana/react';
-import type { UiWalletAccount } from '@wallet-standard/react';
+import { type TendrAccount, useTendrAccount, useTendrSignMessage } from '@/lib/wallet';
+
 import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,7 @@ const SAMPLE_PLAINTEXT = JSON.stringify(
 );
 
 export function CryptoTestApp() {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-12">
@@ -86,10 +86,10 @@ function DisconnectedPlaceholder() {
 
 /**
  * Inner component mounted only when an account is selected. This is what makes
- * `useSignMessage(account)` safe - the hook never sees an undefined account.
+ * `useTendrSignMessage(account)` safe - the hook never sees an undefined account.
  */
-function ConnectedFlow({ account }: { account: UiWalletAccount }) {
-  const signMessage = useSignMessage(account);
+function ConnectedFlow({ account }: { account: TendrAccount }) {
+  const signMessage = useTendrSignMessage(account);
 
   const [nonceHex, setNonceHex] = useState('00112233aabbccdd');
   const [bidPlaintext, setBidPlaintext] = useState(SAMPLE_PLAINTEXT);

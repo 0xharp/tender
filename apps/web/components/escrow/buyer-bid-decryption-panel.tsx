@@ -29,8 +29,8 @@ import type { Address } from '@solana/kit';
  * "Pick this bid" calls back to the AwardSection with everything it needs to
  * fire `select_bid + fund_project` - no manual paste required.
  */
-import { useSelectedWalletAccount, useSignMessage, useSignTransactions } from '@solana/react';
-import type { UiWalletAccount } from '@wallet-standard/react';
+import { type TendrAccount, useTendrAccount, useTendrSignMessage, useTendrSignTransactions } from '@/lib/wallet';
+
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -99,7 +99,7 @@ function decryptStageLabel(stage: BuyerRevealStage | null, fallback: string): st
 }
 
 export function BuyerBidDecryptionPanel(props: BuyerBidDecryptionPanelProps) {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
   if (!account) return null;
   return <Connected account={account} {...props} />;
 }
@@ -114,9 +114,9 @@ function Connected({
   awarding,
   awardingBidPda,
   rfpScope,
-}: { account: UiWalletAccount } & BuyerBidDecryptionPanelProps) {
-  const signMessage = useSignMessage(account);
-  const signTransactions = useSignTransactions(account, 'solana:devnet');
+}: { account: TendrAccount } & BuyerBidDecryptionPanelProps) {
+  const signMessage = useTendrSignMessage(account);
+  const signTransactions = useTendrSignTransactions(account);
   const [decrypting, setDecrypting] = useState(false);
   const [stage, setStage] = useState<BuyerRevealStage | null>(null);
   const [bids, setBids] = useState<DecryptedBid[]>([]);

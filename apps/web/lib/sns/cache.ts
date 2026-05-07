@@ -88,6 +88,7 @@ export function writeSnsCache(wallet: Address, name: string | null): void {
   const entry: CacheEntry = { name, cachedAt: Date.now() };
   memoryCache.set(wallet, entry);
   writeSessionStorage(wallet, entry);
+  notifySnsCacheChange(wallet);
 }
 
 /** Bulk-prime the cache after a batch resolve. Used by the leaderboard
@@ -110,6 +111,48 @@ export function invalidateSnsCache(wallet: Address): void {
       // ignore - in-memory delete is enough; next session resets sessionStorage
     }
   }
+  notifySnsCacheChange(wallet);
+}
+
+/**
+ * Window event broadcast when a wallet's cache entry changes. `useSnsName`
+ * subscribes so that surfaces displaying the wallet (navbar, hash links,
+ * leaderboard rows) re-render with the new name without needing a remount
+ * or `router.refresh()`. Filtered by wallet on the consumer side.
+ */
+const SNS_CACHE_CHANGE_EVENT = 'tendr:sns-cache-changed';
+
+export interface SnsCacheChangeDetail {
+  wallet: Address;
+}
+
+function notifySnsCacheChange(wallet: Address): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent<SnsCacheChangeDetail>(SNS_CACHE_CHANGE_EVENT, {
+        detail: { wallet },
+      }),
+    );
+  } catch {
+    // CustomEvent unavailable (very old runtimes) — silent fallback; the
+    // cache write still landed, callers will see it on the next render.
+  }
+}
+
+/** Subscribe to cache changes for a specific wallet. Returns an unsubscribe
+ *  fn. No-op on the server. */
+export function subscribeSnsCacheChange(
+  wallet: Address,
+  handler: () => void,
+): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const listener = (e: Event) => {
+    const detail = (e as CustomEvent<SnsCacheChangeDetail>).detail;
+    if (detail?.wallet === wallet) handler();
+  };
+  window.addEventListener(SNS_CACHE_CHANGE_EVENT, listener);
+  return () => window.removeEventListener(SNS_CACHE_CHANGE_EVENT, listener);
 }
 
 /** Test-only escape hatch. Don't call from product code. */

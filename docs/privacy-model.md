@@ -150,7 +150,6 @@ What this design does NOT promise, and why:
 - **Fully blind bidding** (buyer can't see bidders even at reveal). Conflicts with vetting and reputation-aware evaluation. A future toggle.
 - **Provider verification beyond pseudonymous.** No KYC, no oracles, no proof-of-prior-work. Reputation is built natively through the on-chain registry — see [reputation-model](/docs/reputation-model).
 - **Encryption-key rotation.** Keys are deterministic per (wallet, rfp_nonce). If a buyer suspects key compromise, they cancel the RFP. Rotation epoch is a future addition.
-- **Settlement-amount privacy on devnet today.** Cloak shielded settlement is a mainnet capability — devnet payouts are public USDC transfers. On the mainnet roadmap, not a privacy gap in the design.
 
 ---
 
@@ -175,7 +174,6 @@ Net effect: SNS makes already-public wallets human-readable. It expands zero new
 - `programs/tender/src/instructions/select_bid.rs` — winner record + Ed25519 binding-signature verification
 - `apps/web/lib/sdks/magicblock.ts` — dual-connection + permission lifecycle
 - `apps/web/lib/sdks/cloak.ts` — Cloak shielded ephemeral wallet funding
-- `apps/web/lib/sdks/magicblock-payments.ts` — milestone release routing through Private Payments API
 - `apps/web/lib/crypto/` — ECIES + key derivation
 - See [lifecycle](/docs/lifecycle) for the full RFP state machine, and [reputation-model](/docs/reputation-model) for what each settlement-path instruction writes to the on-chain reputation accounts.
 - MagicBlock PER docs: <https://docs.magicblock.gg/pages/private-ephemeral-rollups-pers/how-to-guide/quickstart>

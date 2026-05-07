@@ -96,9 +96,11 @@ pub enum RfpStatus {
     Cancelled,
     GhostedByBuyer, // buyer selected but never funded within window
     Disputed,
-    /// Reveal window closed without an award. Permissionlessly set by
-    /// `expire_rfp` after `reveal_close_at` passes while status is still
-    /// Reveal or BidsClosed. Terminal state - no further actions on this RFP.
+    /// Permissionlessly set by `expire_rfp` when status is still Reveal or
+    /// BidsClosed AND either (a) `reveal_close_at` has elapsed without an
+    /// award (deadlock recovery), or (b) `bid_count == 0` (early-expire
+    /// when there's nothing to wait for). Terminal state — no further
+    /// actions on this RFP. No reputation impact in either case.
     Expired,
 }
 

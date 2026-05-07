@@ -24,6 +24,7 @@
     "@solana-program/system": "^0.12.0",
     "@solana/kit": "^6.8.0",
     "@solana/react": "^6.8.0",
+    "@solana/rpc-transport-http": "6.8.0",
     "@solana/spl-token": "^0.4.14",
     "@solana/wallet-standard-chains": "^1.1.1",
     "@solana/wallet-standard-features": "^1.3.0",

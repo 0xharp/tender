@@ -15,6 +15,3 @@ export const MIN_MILESTONE_COUNT = 1;
 export const MAX_MILESTONE_COUNT = 8;
 
 export const USDC_DECIMALS = 6;
-
-export const AI_SIDECAR_DEFAULT_PORT = 7777;
-export const AI_SIDECAR_DEFAULT_URL = `http://localhost:${AI_SIDECAR_DEFAULT_PORT}`;

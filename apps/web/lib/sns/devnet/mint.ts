@@ -37,17 +37,17 @@ import { TENDR_PARENT_NAME } from './constants';
 // trade-offs for a code path that submits real txs and reads accounts
 // the SDK requires to be visible. Falls back through three options:
 //   1. SOLANA_RPC_URL (explicit override for ops/CI)
-//   2. NEXT_PUBLIC_HELIUS_RPC_URL (the standard devnet endpoint the app uses)
+//   2. NEXT_PUBLIC_SOLANA_RPC_URL (the standard devnet endpoint the app uses)
 //   3. Public devnet (last-resort default; logs a warning at boot)
 const DEVNET_RPC = (() => {
   if (process.env.SOLANA_RPC_URL && process.env.SOLANA_RPC_URL.length > 0) {
     return process.env.SOLANA_RPC_URL;
   }
-  if (process.env.NEXT_PUBLIC_HELIUS_RPC_URL && process.env.NEXT_PUBLIC_HELIUS_RPC_URL.length > 0) {
-    return process.env.NEXT_PUBLIC_HELIUS_RPC_URL;
+  if (process.env.NEXT_PUBLIC_SOLANA_RPC_URL && process.env.NEXT_PUBLIC_SOLANA_RPC_URL.length > 0) {
+    return process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
   }
   console.warn(
-    '[sns/devnet/mint] No SOLANA_RPC_URL or NEXT_PUBLIC_HELIUS_RPC_URL set; ' +
+    '[sns/devnet/mint] No SOLANA_RPC_URL or NEXT_PUBLIC_SOLANA_RPC_URL set; ' +
       'falling back to public devnet (rate-limited).',
   );
   return 'https://api.devnet.solana.com';

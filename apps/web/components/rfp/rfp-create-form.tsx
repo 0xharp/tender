@@ -1,8 +1,8 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useSelectedWalletAccount, useSignMessage, useSignTransactions } from '@solana/react';
-import type { UiWalletAccount } from '@wallet-standard/react';
+import { type TendrAccount, useTendrAccount, useTendrSignMessage, useTendrSignTransactions } from '@/lib/wallet';
+
 import { SparklesIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -63,7 +63,7 @@ const STAGE_LABEL: Record<SubmitStage, string> = {
 };
 
 export function RfpCreateForm() {
-  const [account] = useSelectedWalletAccount();
+  const account = useTendrAccount();
 
   if (!account) {
     return (
@@ -84,9 +84,9 @@ export function RfpCreateForm() {
   return <ConnectedForm account={account} />;
 }
 
-function ConnectedForm({ account }: { account: UiWalletAccount }) {
-  const signMessage = useSignMessage(account);
-  const signTransactions = useSignTransactions(account, 'solana:devnet');
+function ConnectedForm({ account }: { account: TendrAccount }) {
+  const signMessage = useTendrSignMessage(account);
+  const signTransactions = useTendrSignTransactions(account);
   const router = useRouter();
   const [stage, setStage] = useState<SubmitStage | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -120,7 +120,7 @@ function ConnectedForm({ account }: { account: UiWalletAccount }) {
     setStage(null);
     try {
       const result = await submitRfpCreate({
-        // wallet-standard's UiWalletAccount.address is plain string;
+        // wallet-standard's TendrAccount.address is plain string;
         // kit's findRfpPda expects an Address-branded string.
         // biome-ignore lint/suspicious/noExplicitAny: brand-only conversion
         wallet: account.address as any,
