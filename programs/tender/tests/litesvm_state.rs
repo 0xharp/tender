@@ -486,3 +486,170 @@ fn reveal_reserve_rejects_wrong_amount() {
     // And the on-chain reserve_price_revealed must stay 0 - no partial state.
     assert_eq!(read_rfp(&svm, rfp).reserve_price_revealed, 0);
 }
+
+// -----------------------------------------------------------------------------
+// expire_rfp: dual-trigger guard — bid_count == 0 (early-exit) OR
+// now > reveal_close_at (deadlock recovery)
+// -----------------------------------------------------------------------------
+//
+// The on-chain require! is `bid_count == 0 || now > reveal_close_at`. These
+// tests pin both branches independently + the negative "neither holds" case,
+// so a future tightening of the guard fails CI rather than silently breaking
+// the no-bid early-expire UX (the feature shipped in commit cb00cf1).
+
+fn expire_rfp(svm: &mut LiteSVM, rfp: Pubkey, signer: &Keypair) -> bool {
+    let ix = Instruction {
+        program_id: tender::ID,
+        accounts: tender::accounts::ExpireRfp {
+            caller: signer.pubkey(),
+            rfp,
+        }
+        .to_account_metas(None),
+        data: tender::instruction::ExpireRfp {}.data(),
+    };
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&signer.pubkey()),
+        &[signer],
+        svm.latest_blockhash(),
+    );
+    svm.send_transaction(tx).is_ok()
+}
+
+#[test]
+fn expire_rfp_early_exit_when_bid_count_is_zero() {
+    // Branch A: zero bids → expire allowed immediately after close_bidding,
+    // no need to wait for reveal_close_at. This is the no-bid early-expire
+    // path shipped in commit cb00cf1 — the feature this whole test exists
+    // to defend.
+    let (mut svm, buyer) = fresh_svm();
+    let rfp = create_rfp(&mut svm, &buyer, [50u8; 8]);
+
+    // Move past bid_close_at + close bidding. Status: Open → Reveal.
+    set_clock(&mut svm, T0 + 86_400 + 1);
+    assert!(close_bidding(&mut svm, rfp, &buyer));
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Reveal);
+    assert_eq!(read_rfp(&svm, rfp).bid_count, 0, "no bids submitted");
+
+    // Crucially: clock is BEFORE reveal_close_at. The old guard
+    // (`now > reveal_close_at` only) would reject this. New guard
+    // (`bid_count == 0 || now > reveal_close_at`) allows it.
+    let now_before_reveal_close = T0 + 86_400 + 100;
+    assert!(now_before_reveal_close < T0 + 86_400 * 3);
+    set_clock(&mut svm, now_before_reveal_close);
+
+    assert!(
+        expire_rfp(&mut svm, rfp, &buyer),
+        "expire_rfp must succeed with bid_count=0 even before reveal_close_at"
+    );
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Expired);
+}
+
+#[test]
+fn expire_rfp_post_reveal_close_with_bids() {
+    // Branch B: bids exist BUT reveal window closed without an award
+    // → expire allowed (the original deadlock-recovery path, unchanged
+    // by commit cb00cf1).
+    let (mut svm, buyer) = fresh_svm();
+    let rfp = create_rfp(&mut svm, &buyer, [51u8; 8]);
+
+    // Submit a bid so bid_count > 0.
+    let provider = fund(&mut svm);
+    commit_bid_init(
+        &mut svm,
+        rfp,
+        &provider,
+        provider.pubkey().to_bytes(),
+        100,
+        100,
+        [11u8; 32],
+    )
+    .expect("init should succeed");
+    assert_eq!(read_rfp(&svm, rfp).bid_count, 1);
+
+    // Close bidding + fast-forward past reveal_close_at without an award.
+    set_clock(&mut svm, T0 + 86_400 + 1);
+    assert!(close_bidding(&mut svm, rfp, &buyer));
+    set_clock(&mut svm, T0 + 86_400 * 3 + 1);
+
+    assert!(
+        expire_rfp(&mut svm, rfp, &buyer),
+        "expire_rfp must succeed once now > reveal_close_at, regardless of bid_count"
+    );
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Expired);
+}
+
+#[test]
+fn expire_rfp_rejected_when_bids_exist_and_reveal_window_open() {
+    // Negative: bid_count > 0 AND now <= reveal_close_at → reject.
+    // This is the boundary case that ensures we DIDN'T loosen security:
+    // a buyer can't dodge their reveal-window obligation by calling
+    // expire_rfp early just because they regret having bids to pick from.
+    // Maps to TenderError::RevealWindowOpen.
+    let (mut svm, buyer) = fresh_svm();
+    let rfp = create_rfp(&mut svm, &buyer, [52u8; 8]);
+
+    let provider = fund(&mut svm);
+    commit_bid_init(
+        &mut svm,
+        rfp,
+        &provider,
+        provider.pubkey().to_bytes(),
+        100,
+        100,
+        [12u8; 32],
+    )
+    .expect("init should succeed");
+
+    set_clock(&mut svm, T0 + 86_400 + 1);
+    assert!(close_bidding(&mut svm, rfp, &buyer));
+    // Clock stays inside the reveal window.
+    set_clock(&mut svm, T0 + 86_400 + 1000);
+
+    assert!(
+        !expire_rfp(&mut svm, rfp, &buyer),
+        "expire_rfp must reject when bid_count > 0 AND reveal window still open"
+    );
+    // Status must NOT have flipped — partial-state-on-failure check.
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Reveal);
+}
+
+#[test]
+fn expire_rfp_rejects_status_open() {
+    // Negative: status must be BidsClosed or Reveal. If bidding hasn't
+    // been closed yet (still Open), expire_rfp must reject EVEN with
+    // bid_count == 0 — otherwise a buyer could short-circuit a live RFP
+    // before the bid window closes. Maps to TenderError::InvalidRfpStatus.
+    let (mut svm, buyer) = fresh_svm();
+    let rfp = create_rfp(&mut svm, &buyer, [53u8; 8]);
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Open);
+    assert_eq!(read_rfp(&svm, rfp).bid_count, 0);
+
+    assert!(
+        !expire_rfp(&mut svm, rfp, &buyer),
+        "expire_rfp must reject when status is Open, even with bid_count=0"
+    );
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Open);
+}
+
+#[test]
+fn expire_rfp_is_permissionless() {
+    // Any signer can call expire_rfp — typically the buyer (in their
+    // /me/projects "Action required" surface) but a stuck provider
+    // self-rescuing must work too. Pinning this so a future tightening
+    // (e.g., `has_one = buyer`) gets caught.
+    let (mut svm, buyer) = fresh_svm();
+    let rfp = create_rfp(&mut svm, &buyer, [54u8; 8]);
+
+    // Zero-bid path so we don't need to fast-forward through a long
+    // reveal window — keeps the test focused on the signer check.
+    set_clock(&mut svm, T0 + 86_400 + 1);
+    assert!(close_bidding(&mut svm, rfp, &buyer));
+
+    let stranger = fund(&mut svm);
+    assert!(
+        expire_rfp(&mut svm, rfp, &stranger),
+        "non-buyer signer must be allowed to expire (permissionless)"
+    );
+    assert_eq!(read_rfp(&svm, rfp).status, RfpStatus::Expired);
+}
