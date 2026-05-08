@@ -6,10 +6,11 @@ import { DataField } from '@/components/primitives/data-field';
 import { HashLink } from '@/components/primitives/hash-link';
 import { SectionHeader } from '@/components/primitives/section-header';
 import { StatusPill, type StatusTone } from '@/components/primitives/status-pill';
-import { ProfileShareButton } from '@/components/profile/profile-share-button';
+import { ShareCard } from '@/components/profile/share-card';
 import { YourBidsList } from '@/components/rfp/your-bids-list';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getCurrentWallet } from '@/lib/auth/session';
+import { ProfileOgCard } from '@/lib/og/profile-card';
 import { preferredProfileSlug, resolveWalletParam } from '@/lib/sns/resolve-server';
 import {
   fetchProviderReputation,
@@ -22,6 +23,19 @@ import { serverSupabase } from '@/lib/supabase/server';
 import { TENDER_PROGRAM_ID } from '@tender/shared';
 
 export const dynamic = 'force-dynamic';
+
+// Mirror the formatting in `opengraph-image.tsx` so the in-page preview
+// renders the exact stats X / Slack / Discord will see for this URL.
+const fmtUsdShort = (microUsdc: bigint): string => {
+  const usdc = Number(microUsdc) / 1_000_000;
+  if (usdc >= 1_000_000) return `$${(usdc / 1_000_000).toFixed(1)}M`;
+  if (usdc >= 1_000) return `$${(usdc / 1_000).toFixed(1)}k`;
+  if (usdc >= 1) return `$${usdc.toFixed(0)}`;
+  return '$0';
+};
+
+const truncateForHero = (wallet: string): string =>
+  wallet.length <= 9 ? wallet : `${wallet.slice(0, 4)}…${wallet.slice(-4)}`;
 
 interface PageProps {
   params: Promise<{ wallet: string }>;
@@ -148,17 +162,36 @@ export default async function Page({ params }: PageProps) {
           </span>
         }
         size="md"
-        actions={
-          <ProfileShareButton
-            href={`/providers/${shareSlug}`}
-            shareText={
-              profile?.display_name
-                ? `${profile.display_name} on @tendrdotbid - sealed-bid procurement on Solana. {url}`
-                : 'Provider profile on @tendrdotbid - sealed-bid procurement on Solana. {url}'
-            }
-          />
-        }
       />
+
+      <ShareCard
+        shareHref={`/providers/${shareSlug}`}
+        shareText={
+          profile?.display_name
+            ? `${profile.display_name} on @tendrdotbid - sealed-bid procurement on Solana. {url}`
+            : 'Provider profile on @tendrdotbid - sealed-bid procurement on Solana. {url}'
+        }
+        ogImageUrl={`/api/og/provider/${wallet}`}
+        downloadFilename={`${shareSlug.endsWith('.sol') ? shareSlug : wallet}-provider-tendr.bid.png`}
+      >
+        <ProfileOgCard
+          kind="provider"
+          display={shareSlug.endsWith('.sol') ? shareSlug : truncateForHero(wallet)}
+          stats={
+            providerRep
+              ? [
+                  { value: providerRep.totalWins.toString(), label: 'wins' },
+                  { value: providerRep.completedProjects.toString(), label: 'completed' },
+                  { value: fmtUsdShort(providerRep.totalEarnedUsdc), label: 'earned' },
+                ]
+              : [
+                  { value: '0', label: 'wins' },
+                  { value: '0', label: 'completed' },
+                  { value: '$0', label: 'earned' },
+                ]
+          }
+        />
+      </ShareCard>
 
       <Card>
         <CardHeader className="flex flex-row items-baseline justify-between gap-3">

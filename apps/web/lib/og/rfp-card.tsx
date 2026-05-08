@@ -138,8 +138,17 @@ export function RfpOgCard({
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <svg width={56} height={56} viewBox="0 0 32 32" fill="none">
-            <title>tendr.bid logo</title>
+          <svg
+            width={56}
+            height={56}
+            viewBox="0 0 32 32"
+            fill="none"
+            role="img"
+            aria-label="tendr.bid logo"
+          >
+            {/* No <title> — Satori paints it as visible text on the PNG;
+                aria-label gives screen readers the same affordance for
+                the in-page preview without leaking onto the rendered image. */}
             <rect
               x={2.5}
               y={2.5}

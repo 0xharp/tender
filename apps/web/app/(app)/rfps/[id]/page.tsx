@@ -12,6 +12,7 @@ import { PrivacyTag } from '@/components/primitives/privacy-tag';
 import { ReserveTag } from '@/components/primitives/reserve-tag';
 import { SectionHeader } from '@/components/primitives/section-header';
 import { StatusPill, type StatusTone } from '@/components/primitives/status-pill';
+import { ShareCard } from '@/components/profile/share-card';
 import { RfpLifecycleBar } from '@/components/rfp/rfp-lifecycle-bar';
 import { SweepEphemeralPanel } from '@/components/rfp/sweep-ephemeral-panel';
 import { YourBidPanel } from '@/components/rfp/your-bid-panel';
@@ -20,6 +21,9 @@ import { InlineMarkdown } from '@/components/ui/markdown';
 import { getCurrentWallet } from '@/lib/auth/session';
 import { stripMarkdown } from '@/lib/markdown/strip';
 import { listMilestoneNotes } from '@/lib/milestones/notes-server';
+import { RfpOgCard } from '@/lib/og/rfp-card';
+import { buildRfpOgProps } from '@/lib/og/rfp-props';
+import { preferredProfileSlug } from '@/lib/sns/resolve-server';
 import {
   bidderVisibilityToString,
   bytesToHex as bytesToHexNoble,
@@ -137,7 +141,13 @@ export default async function Page({ params }: PageProps) {
   // card. If the rep account doesn't exist yet (buyer's first RFP, no awards
   // ever) the badge silently hides - cleaner than rendering "0 funded · 0
   // completed" which would imply the buyer had failed history.
-  const buyerRep = await fetchBuyerReputation(buyerWallet as Address);
+  // buyerSlug is needed twice now: by the inline trust badge (via the
+  // share-preview block below) and by the OG-card preview's buyerHandle.
+  // Promise.all keeps the extra SNS read off the critical path.
+  const [buyerRep, buyerSlug] = await Promise.all([
+    fetchBuyerReputation(buyerWallet as Address),
+    preferredProfileSlug(buyerWallet as Address),
+  ]);
   const bidOpenAtIso = unixSecondsToIso(chainRfp.bidOpenAt);
   const bidCloseAtIso = unixSecondsToIso(chainRfp.bidCloseAt);
   const revealCloseAtIso = unixSecondsToIso(chainRfp.revealCloseAt);
@@ -245,6 +255,27 @@ export default async function Page({ params }: PageProps) {
           </div>
         }
       />
+
+      <ShareCard
+        shareHref={`/rfps/${id}`}
+        shareText={`${meta.title} — sealed-bid RFP on @tendrdotbid. {url}`}
+        ogImageUrl={`/api/og/rfp/${id}`}
+        downloadFilename={`rfp-${id.slice(0, 8)}-tendr.bid.png`}
+      >
+        <RfpOgCard
+          {...buildRfpOgProps({
+            title: meta.title,
+            buyerSlug,
+            buyerWallet,
+            contractValueMicroUsdc: chainRfp.contractValue,
+            milestoneCount: chainRfp.milestoneCount,
+            bidCount: chainRfp.bidCount,
+            bidCloseAtIso,
+            onChainStatus: status,
+            privacyMode: visibility,
+          })}
+        />
+      </ShareCard>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
         <Card className="overflow-hidden">

@@ -65,8 +65,17 @@ export function ProfileOgCard({ kind, display, stats }: ProfileOgCardProps): Rea
               (no fs read, no data-URL plumbing). Stroke is brand violet;
               the seal background is the page color so the mark reads as
               etched, matching the apple-icon treatment. */}
-          <svg width={56} height={56} viewBox="0 0 32 32" fill="none">
-            <title>tendr.bid logo</title>
+          <svg
+            width={56}
+            height={56}
+            viewBox="0 0 32 32"
+            fill="none"
+            role="img"
+            aria-label="tendr.bid logo"
+          >
+            {/* No <title> — Satori paints it as visible text on the PNG;
+                aria-label gives screen readers the same affordance for
+                the in-page preview without leaking onto the rendered image. */}
             <rect
               x={2.5}
               y={2.5}
