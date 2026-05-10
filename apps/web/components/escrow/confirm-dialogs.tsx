@@ -206,8 +206,12 @@ export function AwardConfirmDialog({
           <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-card/40 p-3 text-xs">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-muted-foreground">Payout to</span>
-              {/* payoutWallet is the verified main wallet (winner_provider
-                  post-binding-sig) - safe for SNS. */}
+              {/* payoutWallet === winner_provider on chain. In public bidder
+                  mode this is the provider's main wallet (SNS resolves
+                  cleanly). In private bidder mode it's the per-RFP bidder
+                  eph — withSns simply returns null for that lookup so the
+                  raw truncated hash renders, which matches the privacy
+                  posture (no wallet identity to advertise pre-claim). */}
               <HashLink hash={pending.payoutWallet} kind="account" visibleChars={6} withSns />
             </div>
             {pending.isPrivate && (

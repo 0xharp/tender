@@ -79,11 +79,21 @@ export async function fetchRfp(pda: Address): Promise<RfpChain | null> {
 
 export interface ListRfpsFilter {
   buyer?: Address;
-  /** Filter to RFPs whose `winner_provider` is set to this main wallet. Both
-   *  public AND private (post-award) winners surface here - the on-chain
-   *  Ed25519SigVerify bind at select_bid time means winner_provider is
-   *  always the verified main wallet, regardless of bid mode. Use this to
-   *  enumerate "RFPs I won" for a given wallet. */
+  /** Filter to RFPs whose `winner_provider` matches this pubkey.
+   *
+   *  v2 semantics: `winner_provider` IS NOT always a main wallet. It mirrors
+   *  `bid.provider` of the winning bid:
+   *    - public bidder mode → main wallet (bid signed by main directly)
+   *    - private bidder mode → per-RFP bidder ephemeral (bid signed by eph;
+   *      select_bid sets `winner_provider = bid.provider` = eph)
+   *
+   *  Practical implications:
+   *    - Passing a main wallet enumerates ONLY public-mode wins. Private-mode
+   *      wins of the same provider are NOT returned (their winner_provider
+   *      is the eph). Provider can later run `attest_win` to merge eph
+   *      reputation counters into the main wallet's rep PDA, but
+   *      `rfp.winner_provider` is never rewritten.
+   *    - Passing an eph pubkey returns the one private-bidder RFP it won. */
   winnerProvider?: Address;
 }
 

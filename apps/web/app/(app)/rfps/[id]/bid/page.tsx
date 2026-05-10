@@ -8,6 +8,7 @@ import { StatusPill } from '@/components/primitives/status-pill';
 import { BidComposer } from '@/components/rfp/bid-composer';
 import { PrivateBidComposeGate } from '@/components/rfp/private-bid-compose-gate';
 import { buttonVariants } from '@/components/ui/button';
+import { SignInGate } from '@/components/wallet/sign-in-gate';
 import { getCurrentWallet } from '@/lib/auth/session';
 import {
   bidderVisibilityToString,
@@ -40,6 +41,11 @@ interface PageProps {
 export default async function Page({ params }: PageProps) {
   const { id } = await params;
   const wallet = await getCurrentWallet();
+  // Per-page gate. The route group's (app)/layout.tsx no longer enforces
+  // a global SignInGate (so the public RFP detail page is reachable
+  // without connecting), but submitting a bid genuinely requires a
+  // signed-in wallet — short-circuit before any further work.
+  if (!wallet) return <SignInGate />;
   const supabase = await serverSupabase();
 
   const [chainRfp, metaResult] = await Promise.all([

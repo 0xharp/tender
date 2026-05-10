@@ -271,6 +271,12 @@ function ConnectedComposer({
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<SubmitBidResult | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  // Resolve `.tendr.sol` for the connected main wallet so the
+  // post-success "Your provider profile" link reads as the human handle
+  // when one is claimed (the /providers/[wallet] route accepts both
+  // pubkey and `.sol` slug — `resolveWalletParam` normalizes either).
+  // Falls back to raw address when no SNS handle is set.
+  const profileSlug = useSnsName(account.address as Address) ?? account.address;
   // Privacy mode is determined by the RFP's bidder_visibility setting (set by
   // the buyer at create time). Provider doesn't choose it - they get the mode
   // the buyer picked.
@@ -545,7 +551,7 @@ function ConnectedComposer({
               ← Back to RFP
             </Link>
             <Link
-              href={`/providers/${account.address}`}
+              href={`/providers/${profileSlug}`}
               className="inline-flex h-9 items-center justify-center rounded-full border border-border bg-card/60 px-4 text-sm font-medium transition-colors hover:bg-card"
             >
               Your provider profile
@@ -914,10 +920,14 @@ function AboutYourBid({ isPrivate, mainWallet }: { isPrivate: boolean; mainWalle
         {isPrivate ? (
           <>
             Bidder identity is hidden too: your bid is signed by a fresh ephemeral wallet derived
-            from your HD keychain — your main wallet doesn't appear on chain during bidding. You'll
-            sign one binding message with your main wallet at submit; if you win, the buyer decrypts
-            that binding and the program verifies it on-chain via Ed25519 before payment +
-            reputation flow back to your main wallet. Losers' main wallets stay forever private.
+            from your HD keychain — your main wallet doesn't appear on chain during bidding, at
+            award, or across any post-award action (start / submit milestone, disputes, refunds).
+            Payout lands on the same ephemeral, and reputation counters accumulate on that
+            ephemeral's on-chain rep account. Your main wallet stays unlinked unless you{' '}
+            <strong>claim</strong> the win post-completion from Dashboard — at which point the
+            counters merge into your public provider profile via an explicit on-chain attest tx.
+            Until you claim (or if you choose never to), the win remains anonymous on chain. Losers
+            stay anonymous forever.
           </>
         ) : (
           <>

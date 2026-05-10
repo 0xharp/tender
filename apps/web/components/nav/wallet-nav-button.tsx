@@ -450,20 +450,78 @@ function useHdActionCount(connectedWallet: string): number {
 }
 
 function SignOutItem({ onAfter }: { onAfter: () => void }) {
-  const [busy, setBusy] = useState(false);
   const account = useTendrAccount();
   const wallets = useTendrWallets();
-  const { setAccount } = useTendrSelectedAccount();
-  // useTendrDisconnect requires a wallet handle. Find the wallet that
-  // owns the currently-selected account so we can fully disconnect on
-  // sign-out (not just clear the SIWS cookie). Without this, the
-  // wallet adapter stays connected, and SignInGate immediately shows
-  // the SignInButton ready-to-go — which feels like a half-sign-out.
+  // useTendrDisconnect validates the wallet handle eagerly and THROWS
+  // ("No underlying Wallet Standard wallet could be found for this
+  // handle") when no matching registered wallet exists — which happens
+  // mid-session if the user uninstalled / disabled their wallet
+  // extension, or if state is stale during a hot reload. Previously we
+  // worked around the type checker by passing `{} as TendrWallet`; that
+  // satisfied TS but hit the runtime check on every mount.
+  //
+  // Split fix: this outer component never calls the hook. It resolves
+  // the wallet handle and renders a different child depending on
+  // whether a real handle exists — the hook only runs in the
+  // with-handle branch where the call is safe.
   const wallet = account
     ? wallets.find((w) => w.accounts.some((a) => a.address === account.address))
     : undefined;
-  const [, disconnect] = useTendrDisconnect(wallet ?? ({} as TendrWallet));
 
+  if (wallet) {
+    return <SignOutItemWithDisconnect wallet={wallet} onAfter={onAfter} />;
+  }
+  return <SignOutItemFallback onAfter={onAfter} />;
+}
+
+function SignOutItemWithDisconnect({
+  wallet,
+  onAfter,
+}: { wallet: TendrWallet; onAfter: () => void }) {
+  const { setAccount } = useTendrSelectedAccount();
+  const [, disconnect] = useTendrDisconnect(wallet);
+  return (
+    <SignOutButton
+      onAfter={onAfter}
+      preLocalCleanup={async () => {
+        // Disconnect the wallet adapter first so the post-signout
+        // page renders the "Connect wallet" trigger (not the
+        // already-connected "Sign in" trigger). Best-effort — if the
+        // wallet errors mid-disconnect, the sign-out still proceeds.
+        try {
+          await disconnect();
+        } catch {
+          /* ignore — extension uninstalled / already disconnected */
+        }
+        setAccount(undefined);
+      }}
+    />
+  );
+}
+
+function SignOutItemFallback({ onAfter }: { onAfter: () => void }) {
+  const { setAccount } = useTendrSelectedAccount();
+  return (
+    <SignOutButton
+      onAfter={onAfter}
+      preLocalCleanup={async () => {
+        // No wallet handle available — skip the disconnect step.
+        // setAccount still clears the selected-account state so the
+        // post-signout UI renders the connect trigger correctly.
+        setAccount(undefined);
+      }}
+    />
+  );
+}
+
+function SignOutButton({
+  onAfter,
+  preLocalCleanup,
+}: {
+  onAfter: () => void;
+  preLocalCleanup: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
   return (
     <button
       type="button"
@@ -471,18 +529,7 @@ function SignOutItem({ onAfter }: { onAfter: () => void }) {
       onClick={async () => {
         setBusy(true);
         try {
-          // Disconnect the wallet adapter first so the post-signout
-          // page renders the "Connect wallet" trigger (not the
-          // already-connected "Sign in" trigger). Best-effort — if the
-          // wallet errors mid-disconnect, the sign-out still proceeds.
-          if (wallet) {
-            try {
-              await disconnect();
-            } catch {
-              /* ignore — extension uninstalled / already disconnected */
-            }
-          }
-          setAccount(undefined);
+          await preLocalCleanup();
           await performSignOut();
           // Mark "just signed out" so SignInGate's auto-trigger
           // doesn't immediately fire SIWS again — and clear the
