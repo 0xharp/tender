@@ -164,6 +164,34 @@ export async function fetchBidCommit(pda: Address): Promise<BidCommitChain | nul
   return accounts.getBidCommitDecoder().decode(bytes);
 }
 
+/**
+ * Batched read for many BidCommit PDAs in a single `getMultipleAccounts`
+ * call. Returns a Map keyed on the address string for O(1) lookup. Missing
+ * accounts (deleted, never created, wrong PDA) are simply absent from the
+ * map — caller treats `.get(pda)` returning undefined as "not found".
+ *
+ * Use this when you have a list of bid PDAs known up-front (e.g. winning
+ * bids of a set of RFPs you've already enumerated) — avoids N separate
+ * `fetchBidCommit` round-trips. Solana RPC accepts up to 100 accounts per
+ * batch, and a typical leaderboard's "private RFPs with a winner" list
+ * sits well under that.
+ */
+export async function fetchBidCommitsBatched(
+  pdas: Address[],
+): Promise<Map<string, BidCommitChain>> {
+  const out = new Map<string, BidCommitChain>();
+  if (pdas.length === 0) return out;
+  const { value } = await rpc.getMultipleAccounts(pdas, { encoding: 'base64' }).send();
+  value.forEach((info, i) => {
+    if (!info) return;
+    const dataField = info.data;
+    const b64 = Array.isArray(dataField) ? (dataField[0] as string) : (dataField as string);
+    const bytes = new Uint8Array(b64ToBytes.encode(b64));
+    out.set(String(pdas[i]), accounts.getBidCommitDecoder().decode(bytes));
+  });
+  return out;
+}
+
 export interface ListBidsFilter {
   /** Filter to bids on a specific RFP. */
   rfpPda?: Address;

@@ -8,7 +8,9 @@ import { resolveWalletsToSns } from '@/lib/sns/resolve';
 import {
   type BuyerReputationWithAddress,
   type ProviderReputationWithAddress,
+  bidderVisibilityToString,
   buyerVisibilityToString,
+  fetchBidCommitsBatched,
   listBuyerReputations,
   listProviderReputations,
   listRfps,
@@ -40,11 +42,11 @@ export default async function LeaderboardPage() {
   const [buyerReps, providerReps, allRfps] = await Promise.all([
     listBuyerReputations(),
     listProviderReputations(),
-    // Pulled so we can identify which BuyerReputation accounts are
-    // stranded ephemeral reps (per-RFP buyer-eph keypairs that haven't
-    // been merged into a main wallet via attest_buyer_history yet).
-    // Those rows are filtered out of the buyer leaderboard below — they
-    // have no continuity to evaluate (one-shot keypair per RFP).
+    // Pulled so we can identify which BuyerReputation + ProviderReputation
+    // accounts are stranded ephemeral reps (per-RFP eph keypairs that
+    // haven't been merged into a main wallet via attest_* yet). Those
+    // rows are filtered out of the leaderboard below — they have no
+    // continuity to evaluate (one-shot keypair per RFP).
     listRfps(),
   ]);
 
@@ -62,8 +64,61 @@ export default async function LeaderboardPage() {
     }
   }
 
+  // Provider-side eph identification — needs the WINNING BID for each
+  // private-bidder RFP, because `rfp.winner_provider` alone can't tell
+  // v2-eph wins from pre-v2-main-wallet wins:
+  //
+  //   | mode                     | bid.provider | winner_provider | equal? |
+  //   |--------------------------|--------------|-----------------|--------|
+  //   | public bidder            | main         | main            | yes    |
+  //   | private bidder, v2       | eph          | eph             | yes    |
+  //   | private bidder, pre-v2   | eph          | main wallet     | NO     |
+  //
+  // Pre-v2 select_bid wrote `winner_provider = main_wallet` for private
+  // bids (verified via Ed25519 binding sig). v2 select_bid skips the
+  // binding sig in private mode and writes `winner_provider =
+  // bid.provider` (eph). Both are still observable on devnet because
+  // we don't have a migration story.
+  //
+  // The precise filter: flag wallet as eph IFF `bid.provider ==
+  // winner_provider` on a private-bidder RFP. Pre-v2 main wallets fall
+  // through (bid.provider != winner_provider) and stay visible on the
+  // leaderboard; v2 ephs get filtered as intended.
+  //
+  // Losing bidder ephs aren't in this set because ProviderReputation
+  // PDAs are only created at select_bid time (winners only), so they
+  // never appear in `providerReps` regardless.
+  const privateRfpsWithWinner = allRfps.filter(
+    (r) =>
+      bidderVisibilityToString(r.data.bidderVisibility) === 'buyer_only' &&
+      r.data.winner?.__option === 'Some' &&
+      r.data.winnerProvider?.__option === 'Some',
+  );
+  const winningBidPdas = privateRfpsWithWinner.map((r) => {
+    // Narrowed by the filter above — winner is always Some here.
+    const winner = r.data.winner;
+    if (winner?.__option !== 'Some') throw new Error('unreachable');
+    return winner.value as Address;
+  });
+  const winningBids = await fetchBidCommitsBatched(winningBidPdas);
+  const ephemeralProviders = new Set<string>();
+  for (const r of privateRfpsWithWinner) {
+    const winner = r.data.winner;
+    const winnerProvider = r.data.winnerProvider;
+    if (winner?.__option !== 'Some' || winnerProvider?.__option !== 'Some') continue;
+    const bid = winningBids.get(String(winner.value));
+    if (!bid) continue;
+    if (String(bid.provider) === String(winnerProvider.value)) {
+      ephemeralProviders.add(String(winnerProvider.value));
+    }
+  }
+
   const providerRows = providerReps
     .filter((r: ProviderReputationWithAddress) => String(r.data.provider) !== ZERO_PUBKEY)
+    // Drop per-RFP bidder ephemerals — same rationale as the buyer
+    // filter below. After attest_win the counters land on the main
+    // wallet's rep PDA, which surfaces here naturally.
+    .filter((r: ProviderReputationWithAddress) => !ephemeralProviders.has(String(r.data.provider)))
     .map((r) => ({
       pda: String(r.address),
       wallet: String(r.data.provider),
