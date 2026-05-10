@@ -27,7 +27,7 @@ const DOCS_REGISTRY = {
     title: 'How privacy works',
     eyebrow: 'Reference',
     description:
-      'What stays sealed, what becomes public, and when. The cryptography that makes "sealed from everyone, including the buyer" a guarantee instead of a promise.',
+      'What stays sealed, what becomes public, and when. The four privacy modes (anonymous-buyer + anonymous-bidder axes), the HD-keychain ephemeral derivation, the Cloak shielded-pool funding, and the claim-based reputation merge.',
   },
   lifecycle: {
     file: 'docs/lifecycle.md',
@@ -41,7 +41,7 @@ const DOCS_REGISTRY = {
     title: 'On-chain reputation',
     eyebrow: 'Reference',
     description:
-      'What every BuyerReputation + ProviderReputation field counts, which actions update it, and the derived metrics the UI shows.',
+      'What every BuyerReputation + ProviderReputation field counts, which actions update it, the four privacy-mode accrual paths, and the claim ix that merges anonymous-mode counters into the main wallet&rsquo;s public rep.',
   },
   identity: {
     file: 'docs/identity.md',

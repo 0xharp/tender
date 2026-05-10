@@ -44,6 +44,7 @@ test-ledger/
 *.key
 keypairs/
 wallets/
+.local-backups/
 
 # Local model files (large; not committed)
 apps/ai-sidecar/models/

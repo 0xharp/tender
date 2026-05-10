@@ -7,11 +7,18 @@
  * `rfp.winner_provider`). Surfaces start/submit/auto-release/dispute-propose
  * for each milestone in flight.
  */
-import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
+import {
+  type KeychainHandle,
+  type TendrAccount,
+  useKeychainContext,
+  useMyActivity,
+  useTendrAccount,
+  useTendrSignTransactions,
+} from '@/lib/wallet';
 import type { Address } from '@solana/kit';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { MilestoneNotesThread } from '@/components/escrow/milestone-notes-thread';
@@ -37,8 +44,9 @@ import type { MilestoneNoteRow } from '@tender/shared';
 
 import type { MilestoneSummary } from './buyer-action-panel';
 
-/** Circle's devnet USDC mint. */
-const DEVNET_MOCK_USDC_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU' as Address;
+/** Cloak's mock USDC mint on devnet — required for the v2 private-funding
+ *  flow. Faucet: https://devnet.cloak.ag/privacy/faucet */
+const DEVNET_MOCK_USDC_MINT = '61ro7AExqfk4dZYoCyRzTahahCC2TdUUZ4M5epMPunJf' as Address;
 
 export interface ProviderActionPanelProps {
   rfpPda: string;
@@ -58,17 +66,37 @@ export interface ProviderActionPanelProps {
 
 export function ProviderActionPanel(props: ProviderActionPanelProps) {
   const account = useTendrAccount();
+  const activity = useMyActivity();
+  const keychain = useKeychainContext();
   if (!account) return null;
   if (!props.winnerProvider) return null;
-  // Render only when the connected wallet IS the winner_provider.
-  // Post-simplification: winner_provider is always the verified main wallet
-  // (cryptographically bound at select_bid via Ed25519SigVerify), so the
-  // provider just needs to connect their main wallet to manage milestones -
-  // no separate "attest later" step needed.
-  if (account.address !== props.winnerProvider) {
+
+  // Two ways the connected wallet can own this win:
+  //   (a) Public bidder mode: bid was signed by main wallet, so
+  //       winner_provider == account.address.
+  //   (b) Private bidder mode (v2 claim-based): bid was signed by an HD
+  //       bidder eph, so winner_provider on chain is the eph pubkey. The
+  //       connected MAIN wallet matches if it has an HD bid in MyActivity
+  //       whose bidPda equals winnerBidPda. We then derive the bidder eph
+  //       on the fly inside the panel and use it for every milestone
+  //       action (provider rep accumulates on eph PDA; main wallet claims
+  //       later via attest_win).
+  const isPublicWinner = account.address === props.winnerProvider;
+  const hdBidEntry = activity.ownBids.find(
+    (b) => b.via === 'hd' && b.bidPda === props.winnerBidPda,
+  );
+  const isHdWinner = !!hdBidEntry && !!keychain;
+  if (!isPublicWinner && !isHdWinner) {
     return null;
   }
-  return <ConnectedProviderPanel account={account} {...props} />;
+  return (
+    <ConnectedProviderPanel
+      account={account}
+      hdBidderIndex={isHdWinner ? hdBidEntry!.hdIndex : undefined}
+      keychain={keychain}
+      {...props}
+    />
+  );
 }
 
 function ConnectedProviderPanel({
@@ -81,21 +109,53 @@ function ConnectedProviderPanel({
   milestones,
   activeMilestoneIndex,
   notesByMilestoneIndex,
-}: ProviderActionPanelProps & { account: TendrAccount }) {
+  hdBidderIndex,
+  keychain,
+}: ProviderActionPanelProps & {
+  account: TendrAccount;
+  /** When set, this RFP was won via an HD bidder ephemeral. All milestone
+   *  actions must sign with the bidder eph (not main wallet) to avoid
+   *  leaking the eph→main link via tx fee payer. The eph keypair is
+   *  derived lazily inside each row via keychain.bidderEphemeral. */
+  hdBidderIndex: number | undefined;
+  keychain: KeychainHandle | null;
+}) {
   const signTransactions = useTendrSignTransactions(account);
   const wallet = account.address as Address;
+  const isHdProvider = hdBidderIndex !== undefined && !!keychain;
+
+  // ALL hooks must run before any conditional return. The terminal-state
+  // early return below can flip on/off between renders (rfpStatus moves
+  // from 'inprogress' → 'completed' after the buyer accepts the final
+  // milestone, or after a wallet swap re-runs MyActivity). Calling
+  // useState AFTER an early return that's sometimes-true and sometimes-
+  // false produces "Rendered fewer hooks than expected" — the bug we
+  // hit when the provider proposed a dispute split right after the
+  // buyer did, with both wallets swapped in the same session.
+  //
+  // Lazily-decrypted winning-bid plaintext. A single decrypt unlocks the
+  // success-criteria acceptance bar in every milestone row + the dispute
+  // UI. State lives at this level so the decrypt button is shown once
+  // at the top of the card, not per-row.
+  const [plaintext, setPlaintext] = useState<SealedBidPlaintext | null>(null);
+
+  // Terminal-state surface: at completed/cancelled the action panel
+  // can't drive any new tx, but the winning provider still needs to
+  // see what shipped, what got cancelled, and what ended up in dispute.
+  // Without this, the provider just sees the lifecycle bar's generic
+  // "Project is done" line — no per-milestone breakdown of who took
+  // what, which is the info they need to verify earnings + reconcile
+  // off-chain. Mirror of the buyer-side terminal summary at
+  // `buyer-action-panel.tsx:303`, framed from the provider's POV.
+  if (rfpStatus === 'completed' || rfpStatus === 'cancelled') {
+    return <ProviderTerminalPanel rfpStatus={rfpStatus} milestones={milestones} />;
+  }
 
   if (rfpStatus !== 'funded' && rfpStatus !== 'inprogress' && rfpStatus !== 'disputed') {
     return null;
   }
 
   const slotTaken = activeMilestoneIndex !== 255;
-
-  // Lazily-decrypted winning-bid plaintext. A single decrypt unlocks the
-  // success-criteria acceptance bar in every milestone row + the dispute UI.
-  // State lives at this level so the decrypt button is shown once at the top
-  // of the card, not per-row.
-  const [plaintext, setPlaintext] = useState<SealedBidPlaintext | null>(null);
   const successByIndex: Record<number, string | undefined> = {};
   if (plaintext) {
     plaintext.milestones.forEach((m, i) => {
@@ -122,6 +182,7 @@ function ConnectedProviderPanel({
           <ProviderWinningBidPanel
             rfpPda={rfpPda as Address}
             winnerBidPda={winnerBidPda as Address}
+            isPrivateBidder={isHdProvider}
             plaintext={plaintext}
             onDecrypted={setPlaintext}
           />
@@ -139,6 +200,9 @@ function ConnectedProviderPanel({
             slotTaken={slotTaken}
             // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook
             signTransactions={signTransactions as any}
+            isHdProvider={isHdProvider}
+            hdBidderIndex={hdBidderIndex}
+            keychain={keychain}
           />
         ))}
       </CardContent>
@@ -156,6 +220,9 @@ function ProviderMilestoneRow({
   notes,
   slotTaken,
   signTransactions,
+  isHdProvider,
+  hdBidderIndex,
+  keychain,
 }: {
   wallet: Address;
   rfpPda: Address;
@@ -172,9 +239,46 @@ function ProviderMilestoneRow({
   slotTaken: boolean;
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard
   signTransactions: any;
+  /** v2 — when true, this is a private-bidder mode RFP we won via an HD
+   *  bidder eph. Every milestone action signs locally with that eph
+   *  (not main wallet). */
+  isHdProvider: boolean;
+  hdBidderIndex: number | undefined;
+  keychain: KeychainHandle | null;
 }) {
   const [busy, setBusy] = useState(false);
-  const [splitInput, setSplitInput] = useState('5000');
+  // Hydrate from chain — see buyer-action-panel for the same pattern.
+  // SPLIT_NOT_PROPOSED = 0xFFFF; anything below 10000 is a real prior
+  // proposal we should rehydrate instead of resetting to the 5000
+  // default.
+  const SPLIT_NOT_PROPOSED = 0xffff;
+  const [splitInput, setSplitInput] = useState(() => {
+    const prior = milestone.providerProposedSplitBps;
+    return prior !== undefined && prior !== SPLIT_NOT_PROPOSED ? String(prior) : '5000';
+  });
+
+  // Lazily derive the bidder ephemeral on first action click + cache for
+  // subsequent actions in the same row. Same pattern as the buyer-side
+  // `getEphemeralBuyer` helper in buyer-action-panel.tsx.
+  const ephemeralRef = useRef<import('@solana/web3.js').Keypair | null>(null);
+  async function getBidderEph(): Promise<import('@solana/web3.js').Keypair> {
+    if (ephemeralRef.current) return ephemeralRef.current;
+    if (!keychain || hdBidderIndex === undefined) {
+      throw new Error('HD bidder ephemeral unavailable — keychain locked or not an HD bid.');
+    }
+    const eph = await keychain.bidderEphemeral(hdBidderIndex);
+    ephemeralRef.current = eph;
+    return eph;
+  }
+  /** The on-chain identity for this row's provider actions. In public
+   *  bidder mode == main wallet (the connected wallet IS winner_provider).
+   *  In HD bidder mode == bidder eph pubkey (which is winner_provider on
+   *  chain). */
+  async function getProviderAddress(): Promise<Address> {
+    if (!isHdProvider) return wallet;
+    const eph = await getBidderEph();
+    return eph.publicKey.toBase58() as Address;
+  }
   /** Inline note that ships with the next Submit click. Cleared after a
    *  successful post. Strongly encouraged: gives the buyer the deliverable
    *  link / what-shipped context inline with the on-chain Submit. */
@@ -261,17 +365,18 @@ function ProviderMilestoneRow({
               disabled={busy || slotTaken}
               title={slotTaken ? 'Another milestone is in flight. Submit it first.' : undefined}
               onClick={() =>
-                run(
-                  () =>
-                    startMilestone({
-                      signer: wallet,
-                      rfpPda,
-                      milestoneIndex: milestone.index,
-                      signTransactions,
-                      rpc,
-                    }),
-                  'Start milestone',
-                )
+                run(async () => {
+                  const provider = await getProviderAddress();
+                  const eph = isHdProvider ? await getBidderEph() : undefined;
+                  return startMilestone({
+                    signer: provider,
+                    rfpPda,
+                    milestoneIndex: milestone.index,
+                    signTransactions,
+                    rpc,
+                    ephemeralProviderKeypair: eph,
+                  });
+                }, 'Start milestone')
               }
             >
               {slotTaken ? 'Start (waiting on active milestone)' : 'Start this milestone'}
@@ -322,14 +427,18 @@ function ProviderMilestoneRow({
               disabled={busy}
               onClick={() =>
                 run(
-                  () =>
-                    submitMilestone({
-                      signer: wallet,
+                  async () => {
+                    const provider = await getProviderAddress();
+                    const eph = isHdProvider ? await getBidderEph() : undefined;
+                    return submitMilestone({
+                      signer: provider,
                       rfpPda,
                       milestoneIndex: milestone.index,
                       signTransactions,
                       rpc,
-                    }),
+                      ephemeralProviderKeypair: eph,
+                    });
+                  },
                   'Submit milestone',
                   {
                     note: {
@@ -363,26 +472,45 @@ function ProviderMilestoneRow({
                   size="sm"
                   disabled={busy}
                   onClick={() =>
-                    run(
-                      () =>
-                        autoReleaseMilestone({
-                          signer: wallet,
-                          rfpPda,
-                          milestoneIndex: milestone.index,
-                          mint: DEVNET_MOCK_USDC_MINT,
-                          buyerWallet,
-                          providerPayoutWallet: winnerProvider,
-                          signTransactions,
-                          rpc,
-                        }),
-                      'Auto-release',
-                    )
+                    run(async () => {
+                      const provider = await getProviderAddress();
+                      const eph = isHdProvider ? await getBidderEph() : undefined;
+                      return autoReleaseMilestone({
+                        signer: provider,
+                        rfpPda,
+                        milestoneIndex: milestone.index,
+                        mint: DEVNET_MOCK_USDC_MINT,
+                        buyerWallet,
+                        providerPayoutWallet: winnerProvider,
+                        signTransactions,
+                        rpc,
+                        ephemeralProviderKeypair: eph,
+                      });
+                    }, 'Auto-release')
                   }
                 >
                   Trigger auto-release (silence = consent)
                 </Button>
               </div>
             )}
+        </div>
+      )}
+
+      {/* Settled-via-dispute panel — shows the actual matched split AFTER
+          resolution. Symmetric mirror of the buyer-side surface; reads the
+          same on-chain fields. */}
+      {(milestone.status === 'disputeresolved' || milestone.status === 'disputedefault') && (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs">
+          <p className="font-medium text-emerald-700 dark:text-emerald-400">
+            Settled via dispute —{' '}
+            {milestone.status === 'disputedefault'
+              ? '50% to you, 50% refunded to buyer (default fallback applied)'
+              : `${(milestone.providerProposedSplitBps / 100).toFixed(milestone.providerProposedSplitBps % 100 === 0 ? 0 : 2)}% to you, ${((10000 - milestone.providerProposedSplitBps) / 100).toFixed(milestone.providerProposedSplitBps % 100 === 0 ? 0 : 2)}% refunded to buyer`}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Settlement is on-chain — escrow distributed (net of platform fee), reputation counters
+            updated. No further action needed for this milestone.
+          </p>
         </div>
       )}
 
@@ -426,21 +554,22 @@ function ProviderMilestoneRow({
               size="sm"
               disabled={busy}
               onClick={() =>
-                run(
-                  () =>
-                    proposeDisputeSplit({
-                      signer: wallet,
-                      rfpPda,
-                      milestoneIndex: milestone.index,
-                      splitToProviderBps: Number(splitInput),
-                      mint: DEVNET_MOCK_USDC_MINT,
-                      buyerWallet,
-                      providerPayoutWallet: winnerProvider,
-                      signTransactions,
-                      rpc,
-                    }),
-                  'Propose split',
-                )
+                run(async () => {
+                  const provider = await getProviderAddress();
+                  const eph = isHdProvider ? await getBidderEph() : undefined;
+                  return proposeDisputeSplit({
+                    signer: provider,
+                    rfpPda,
+                    milestoneIndex: milestone.index,
+                    splitToProviderBps: Number(splitInput),
+                    mint: DEVNET_MOCK_USDC_MINT,
+                    buyerWallet,
+                    providerPayoutWallet: winnerProvider,
+                    signTransactions,
+                    rpc,
+                    ephemeralProviderKeypair: eph,
+                  });
+                }, 'Propose split')
               }
             >
               Propose split
@@ -451,20 +580,21 @@ function ProviderMilestoneRow({
               variant="outline"
               disabled={busy}
               onClick={() =>
-                run(
-                  () =>
-                    disputeDefaultSplit({
-                      signer: wallet,
-                      rfpPda,
-                      milestoneIndex: milestone.index,
-                      mint: DEVNET_MOCK_USDC_MINT,
-                      buyerWallet,
-                      providerPayoutWallet: winnerProvider,
-                      signTransactions,
-                      rpc,
-                    }),
-                  'Apply default split',
-                )
+                run(async () => {
+                  const provider = await getProviderAddress();
+                  const eph = isHdProvider ? await getBidderEph() : undefined;
+                  return disputeDefaultSplit({
+                    signer: provider,
+                    rfpPda,
+                    milestoneIndex: milestone.index,
+                    mint: DEVNET_MOCK_USDC_MINT,
+                    buyerWallet,
+                    providerPayoutWallet: winnerProvider,
+                    signTransactions,
+                    rpc,
+                    ephemeralProviderKeypair: eph,
+                  });
+                }, 'Apply default split')
               }
             >
               Apply 50/50 default (cool-off must have expired)
@@ -475,5 +605,149 @@ function ProviderMilestoneRow({
 
       <MilestoneNotesThread notes={notes} />
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Terminal-state provider summary                                             */
+/* -------------------------------------------------------------------------- */
+
+/** USDC base unit → "$X.XX" display. Local helper so we don't pull the
+ *  full chain-reads helper into a client bundle. */
+function formatMicroUsdc(micro: bigint): string {
+  const usdc = Number(micro) / 1_000_000;
+  if (usdc >= 1000) return `$${usdc.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  return `$${usdc.toFixed(2)}`;
+}
+
+/**
+ * Renders at completed/cancelled status, replacing the "milestone progress"
+ * card the provider sees mid-project. Two jobs:
+ *
+ * 1. **Outcome summary line** — counts of released vs cancelled vs
+ *    dispute-settled milestones, framed as "you delivered N of K".
+ *    Mirrors the buyer-side terminal summary so both sides converge on
+ *    the same narrative for partial-delivery projects.
+ *
+ * 2. **Per-milestone breakdown** — one row per milestone showing its
+ *    terminal status + amount. The provider needs this to reconcile
+ *    earnings (a partial-completion RFP can have any combination of
+ *    released / cancelled / 30-70 dispute settlements; one summary
+ *    line can't communicate which milestones earned what).
+ *
+ * Notes thread is intentionally not surfaced here — it lives in the
+ * mid-project per-row UI and would just be re-presenting the same data.
+ */
+function ProviderTerminalPanel({
+  rfpStatus,
+  milestones,
+}: { rfpStatus: string; milestones: MilestoneSummary[] }) {
+  const released = milestones.filter((m) => m.status === 'released');
+  const cancelled = milestones.filter((m) => m.status === 'cancelledbybuyer');
+  const disputeResolved = milestones.filter(
+    (m) => m.status === 'disputeresolved' || m.status === 'disputedefault',
+  );
+  // Sum what actually landed in the provider's wallet:
+  //   released → 100% of the milestone amount
+  //   disputeResolved/disputeDefault → providerProposedSplitBps share (the
+  //     program enforces buyer + provider proposed splits to match before
+  //     resolving, so this is the agreed split)
+  const earnedMicro =
+    released.reduce((acc, m) => acc + m.amount, 0n) +
+    disputeResolved.reduce(
+      (acc, m) => acc + (m.amount * BigInt(m.providerProposedSplitBps)) / 10_000n,
+      0n,
+    );
+  const totalMicro = milestones.reduce((acc, m) => acc + m.amount, 0n);
+
+  if (rfpStatus === 'cancelled') {
+    return (
+      <Card className="border-muted-foreground/30 bg-muted/40">
+        <CardHeader>
+          <CardTitle className="text-base">Project cancelled</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Every milestone was refunded to the buyer — no work was retained on chain. Total
+            contract value:{' '}
+            <span className="font-mono text-foreground">{formatMicroUsdc(totalMicro)}</span>.
+          </p>
+          <ProviderMilestoneBreakdown milestones={milestones} />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // completed
+  const isPartial = cancelled.length > 0 || disputeResolved.length > 0;
+  return (
+    <Card className="border-emerald-500/40 bg-emerald-500/5">
+      <CardHeader>
+        <CardTitle className="text-base">
+          {isPartial ? 'Project closed (partial delivery)' : 'Project completed'}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">
+          You delivered{' '}
+          <span className="font-mono text-foreground">
+            {released.length} of {milestones.length}
+          </span>{' '}
+          milestone{milestones.length === 1 ? '' : 's'} ·{' '}
+          <span className="font-mono text-foreground">{formatMicroUsdc(earnedMicro)}</span> earned
+          out of <span className="font-mono">{formatMicroUsdc(totalMicro)}</span>
+          {cancelled.length > 0 && ` · ${cancelled.length} cancelled by buyer`}
+          {disputeResolved.length > 0 && ` · ${disputeResolved.length} settled via dispute`}.
+        </p>
+        <ProviderMilestoneBreakdown milestones={milestones} />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Per-milestone outcome chip list. Renders one row per milestone with a
+ *  status pill + the amount that ended up where. Dispute-settled rows
+ *  also surface the agreed split (e.g. "30/70 → you took $700"). */
+function ProviderMilestoneBreakdown({ milestones }: { milestones: MilestoneSummary[] }) {
+  return (
+    <ul className="flex flex-col divide-y divide-border/40 rounded-xl border border-border/60 bg-card/40 text-sm">
+      {milestones.map((m) => {
+        const label = `Milestone ${m.index + 1}`;
+        const amount = formatMicroUsdc(m.amount);
+        let outcome: { tone: 'good' | 'neutral' | 'warn'; text: string };
+        if (m.status === 'released') {
+          outcome = { tone: 'good', text: `released to you · ${amount}` };
+        } else if (m.status === 'cancelledbybuyer') {
+          outcome = { tone: 'neutral', text: `cancelled by buyer · ${amount} refunded` };
+        } else if (m.status === 'disputeresolved' || m.status === 'disputedefault') {
+          // providerProposedSplitBps is in basis points; both sides
+          // agreed on the same value for the program to resolve.
+          const providerBps = m.providerProposedSplitBps;
+          const buyerBps = 10_000 - providerBps;
+          const providerShare = (m.amount * BigInt(providerBps)) / 10_000n;
+          const note = m.status === 'disputedefault' ? ' (default 50/50)' : '';
+          outcome = {
+            tone: 'warn',
+            text: `dispute settled ${providerBps / 100}/${buyerBps / 100}${note} · you took ${formatMicroUsdc(providerShare)}`,
+          };
+        } else {
+          // Defensive: shouldn't reach a non-terminal milestone in a
+          // completed RFP, but render rather than crash.
+          outcome = { tone: 'neutral', text: `${m.status} · ${amount}` };
+        }
+        const toneClass =
+          outcome.tone === 'good'
+            ? 'text-emerald-700 dark:text-emerald-300'
+            : outcome.tone === 'warn'
+              ? 'text-amber-700 dark:text-amber-400'
+              : 'text-muted-foreground';
+        return (
+          <li key={m.index} className="flex items-center justify-between gap-3 px-3 py-2">
+            <span className="font-medium">{label}</span>
+            <span className={`font-mono text-xs ${toneClass}`}>{outcome.text}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

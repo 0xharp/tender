@@ -1,59 +1,50 @@
-import { GavelIcon, LockKeyholeIcon } from 'lucide-react';
+import { LockKeyholeIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
 export interface ReserveTagProps {
   /** Whether a reserve commitment exists on-chain. */
   hasReserve: boolean;
-  /** If reserve has been revealed (post-award), the value in USDC base units (micro). */
+  /** Kept in the prop signature for backwards-compat (RfpCardData still
+   *  passes it from the chain). v2: we deliberately DO NOT surface the
+   *  revealed amount in the UI — `reveal_reserve` runs at award time on
+   *  chain so `select_bid` can enforce the cap, but we don't want to
+   *  visually expose the buyer's max to observers. The badge is now a
+   *  single state ("Reserve set") regardless of revealed status. */
   revealedMicroUsdc?: bigint;
   size?: 'sm' | 'md';
   className?: string;
 }
 
-function formatUsdc(micro: bigint): string {
-  const whole = Number(micro / 1_000_000n);
-  return `$${whole.toLocaleString('en-US')}`;
-}
-
 /**
- * Visible whenever an RFP has a reserve commitment on chain. Two states:
- *  - sealed (pre-award): "Reserve set" - value is hidden
- *  - revealed (post-award): "Reserve $X" - value is visible
- *
- * The reserve is enforced by `select_bid` (rejects winning bids over the
- * revealed amount). Providers see only that one exists, not the value -
- * that's the point: it caps without anchoring bidding behavior to the cap.
+ * Visible whenever an RFP has a reserve commitment on chain. Single
+ * state — icon-only badge with hover tooltip. The actual reserve value
+ * is enforced on chain (select_bid rejects winning bids above it) but
+ * never surfaced in the UI; that keeps the buyer's cap private even
+ * after the reveal_reserve tx lands. Matches the icon-only PrivacyBadges
+ * styling so the privacy + reserve row stays compact + glanceable.
  */
 export function ReserveTag({
   hasReserve,
-  revealedMicroUsdc,
+  revealedMicroUsdc: _revealedMicroUsdc,
   size = 'sm',
   className,
 }: ReserveTagProps) {
   if (!hasReserve) return null;
 
-  const revealed = typeof revealedMicroUsdc === 'bigint' && revealedMicroUsdc > 0n;
-  const Icon = revealed ? GavelIcon : LockKeyholeIcon;
-  const label = revealed ? `Reserve ${formatUsdc(revealedMicroUsdc!)}` : 'Reserve set';
-  const hint = revealed
-    ? 'Buyer revealed their reserve at award time. Winning bid was within it.'
-    : 'Buyer committed to a maximum acceptable price (sealed). Bids above it will be rejected at award. The value is revealed only when the buyer awards.';
-
+  const tooltip =
+    'Reserve set — buyer committed to a maximum acceptable price. Bids above it are rejected at award. The value stays sealed in the UI even after on-chain reveal.';
   return (
     <span
-      title={hint}
+      title={tooltip}
+      aria-label={tooltip}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border font-medium tracking-[0.12em] uppercase',
-        size === 'sm' ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1 text-xs',
-        revealed
-          ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-          : 'border-amber-500/20 bg-amber-500/5 text-amber-700/90 dark:text-amber-400/90',
+        'inline-flex shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-700/90 transition-colors hover:bg-amber-500/15 dark:text-amber-400/90',
+        size === 'sm' ? 'size-5' : 'size-6',
         className,
       )}
     >
-      <Icon className={size === 'sm' ? 'size-3' : 'size-3.5'} />
-      {label}
+      <LockKeyholeIcon className={size === 'sm' ? 'size-3' : 'size-3.5'} />
     </span>
   );
 }

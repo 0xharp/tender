@@ -20,6 +20,7 @@ import { useMemo, useState } from 'react';
 import { Stagger, StaggerItem } from '@/components/motion/stagger';
 import { RfpCard, type RfpCardData } from '@/components/rfp/rfp-card';
 import { cn } from '@/lib/utils';
+import { useMyActivity } from '@/lib/wallet';
 
 export interface RfpMarketplaceGridProps {
   rfps: (RfpCardData & { bid_open_at?: string })[];
@@ -43,6 +44,25 @@ export function RfpMarketplaceGrid({ rfps }: RfpMarketplaceGridProps) {
   const [privacy, setPrivacy] = useState<PrivacyFilter>('any');
   const [reserve, setReserve] = useState<ReserveFilter>('any');
   const [lifecycle, setLifecycle] = useState<LifecycleScope>('active');
+
+  // HD-ownership overlay. The server-rendered `mine` flag is computed
+  // as `rfp.buyer == sessionWallet`, which misses private-buyer RFPs
+  // (where the on-chain buyer is an HD-derived ephemeral, not the main
+  // wallet). MyActivityProvider already enumerates HD-owned RFPs once
+  // per session — caches them in localStorage AND keeps them in sync
+  // across surfaces — so we just read from there. Single source of
+  // truth: whatever the dashboard's "Buying" tab considers yours, this
+  // grid will also tag with MINE. No duplicate enumeration, no
+  // localStorage-key drift, no chance of dashboard + marketplace
+  // disagreeing about which RFPs you own.
+  const activity = useMyActivity();
+  const hdOwnedPdas = useMemo(() => {
+    const out = new Set<string>();
+    for (const r of activity.ownedRfps) {
+      if (r.via === 'hd') out.add(r.pda);
+    }
+    return out;
+  }, [activity.ownedRfps]);
 
   const filtered = useMemo(() => {
     // PDA tiebreaker keeps the order deterministic across refreshes when two
@@ -170,7 +190,16 @@ export function RfpMarketplaceGrid({ rfps }: RfpMarketplaceGridProps) {
         >
           {filtered.map((r) => (
             <StaggerItem key={r.on_chain_pda}>
-              <RfpCard rfp={r} />
+              <RfpCard
+                rfp={
+                  // Override `mine` with the union of (server-flagged
+                  // public-buyer ownership) ∪ (client-detected HD
+                  // private-buyer ownership). Server-rendered `mine`
+                  // can't see HD ownership because it has no master
+                  // seed; localStorage fills that gap per-device.
+                  hdOwnedPdas.has(r.on_chain_pda) ? { ...r, mine: true } : r
+                }
+              />
             </StaggerItem>
           ))}
         </Stagger>

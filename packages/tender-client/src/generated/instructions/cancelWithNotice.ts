@@ -61,7 +61,7 @@ export type CancelWithNoticeInstruction<
   TAccountEscrow extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountEscrowAta extends string | AccountMeta<string> = string,
-  TAccountBuyerAta extends string | AccountMeta<string> = string,
+  TAccountRefundDestinationAta extends string | AccountMeta<string> = string,
   TAccountBuyerReputation extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -87,9 +87,9 @@ export type CancelWithNoticeInstruction<
       TAccountEscrowAta extends string
         ? WritableAccount<TAccountEscrowAta>
         : TAccountEscrowAta,
-      TAccountBuyerAta extends string
-        ? WritableAccount<TAccountBuyerAta>
-        : TAccountBuyerAta,
+      TAccountRefundDestinationAta extends string
+        ? WritableAccount<TAccountRefundDestinationAta>
+        : TAccountRefundDestinationAta,
       TAccountBuyerReputation extends string
         ? WritableAccount<TAccountBuyerReputation>
         : TAccountBuyerReputation,
@@ -141,7 +141,7 @@ export type CancelWithNoticeAsyncInput<
   TAccountEscrow extends string = string,
   TAccountMint extends string = string,
   TAccountEscrowAta extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountRefundDestinationAta extends string = string,
   TAccountBuyerReputation extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
@@ -151,7 +151,14 @@ export type CancelWithNoticeAsyncInput<
   escrow?: Address<TAccountEscrow>;
   mint: Address<TAccountMint>;
   escrowAta?: Address<TAccountEscrowAta>;
-  buyerAta: Address<TAccountBuyerAta>;
+  /**
+   * Where the refund lands. v2 — owner is unconstrained so the buyer
+   * can route the refund to a Cloak-shielded ephemeral instead of
+   * their main wallet (private buyer mode). In public buyer mode the
+   * front-end defaults this to `buyer_ata` and the behavior is
+   * identical to v1.
+   */
+  refundDestinationAta: Address<TAccountRefundDestinationAta>;
   buyerReputation?: Address<TAccountBuyerReputation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   milestoneIndex: CancelWithNoticeInstructionDataArgs["milestoneIndex"];
@@ -164,7 +171,7 @@ export async function getCancelWithNoticeInstructionAsync<
   TAccountEscrow extends string,
   TAccountMint extends string,
   TAccountEscrowAta extends string,
-  TAccountBuyerAta extends string,
+  TAccountRefundDestinationAta extends string,
   TAccountBuyerReputation extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
@@ -176,7 +183,7 @@ export async function getCancelWithNoticeInstructionAsync<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountTokenProgram
   >,
@@ -190,7 +197,7 @@ export async function getCancelWithNoticeInstructionAsync<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountTokenProgram
   >
@@ -206,7 +213,10 @@ export async function getCancelWithNoticeInstructionAsync<
     escrow: { value: input.escrow ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    refundDestinationAta: {
+      value: input.refundDestinationAta ?? null,
+      isWritable: true,
+    },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
@@ -270,7 +280,7 @@ export async function getCancelWithNoticeInstructionAsync<
       getAccountMeta("escrow", accounts.escrow),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("escrowAta", accounts.escrowAta),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("refundDestinationAta", accounts.refundDestinationAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
@@ -286,7 +296,7 @@ export async function getCancelWithNoticeInstructionAsync<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountTokenProgram
   >);
@@ -299,7 +309,7 @@ export type CancelWithNoticeInput<
   TAccountEscrow extends string = string,
   TAccountMint extends string = string,
   TAccountEscrowAta extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountRefundDestinationAta extends string = string,
   TAccountBuyerReputation extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
@@ -309,7 +319,14 @@ export type CancelWithNoticeInput<
   escrow: Address<TAccountEscrow>;
   mint: Address<TAccountMint>;
   escrowAta: Address<TAccountEscrowAta>;
-  buyerAta: Address<TAccountBuyerAta>;
+  /**
+   * Where the refund lands. v2 — owner is unconstrained so the buyer
+   * can route the refund to a Cloak-shielded ephemeral instead of
+   * their main wallet (private buyer mode). In public buyer mode the
+   * front-end defaults this to `buyer_ata` and the behavior is
+   * identical to v1.
+   */
+  refundDestinationAta: Address<TAccountRefundDestinationAta>;
   buyerReputation: Address<TAccountBuyerReputation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   milestoneIndex: CancelWithNoticeInstructionDataArgs["milestoneIndex"];
@@ -322,7 +339,7 @@ export function getCancelWithNoticeInstruction<
   TAccountEscrow extends string,
   TAccountMint extends string,
   TAccountEscrowAta extends string,
-  TAccountBuyerAta extends string,
+  TAccountRefundDestinationAta extends string,
   TAccountBuyerReputation extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
@@ -334,7 +351,7 @@ export function getCancelWithNoticeInstruction<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountTokenProgram
   >,
@@ -347,7 +364,7 @@ export function getCancelWithNoticeInstruction<
   TAccountEscrow,
   TAccountMint,
   TAccountEscrowAta,
-  TAccountBuyerAta,
+  TAccountRefundDestinationAta,
   TAccountBuyerReputation,
   TAccountTokenProgram
 > {
@@ -362,7 +379,10 @@ export function getCancelWithNoticeInstruction<
     escrow: { value: input.escrow ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    refundDestinationAta: {
+      value: input.refundDestinationAta ?? null,
+      isWritable: true,
+    },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
@@ -389,7 +409,7 @@ export function getCancelWithNoticeInstruction<
       getAccountMeta("escrow", accounts.escrow),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("escrowAta", accounts.escrowAta),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("refundDestinationAta", accounts.refundDestinationAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
@@ -405,7 +425,7 @@ export function getCancelWithNoticeInstruction<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountTokenProgram
   >);
@@ -423,7 +443,14 @@ export type ParsedCancelWithNoticeInstruction<
     escrow: TAccountMetas[3];
     mint: TAccountMetas[4];
     escrowAta: TAccountMetas[5];
-    buyerAta: TAccountMetas[6];
+    /**
+     * Where the refund lands. v2 — owner is unconstrained so the buyer
+     * can route the refund to a Cloak-shielded ephemeral instead of
+     * their main wallet (private buyer mode). In public buyer mode the
+     * front-end defaults this to `buyer_ata` and the behavior is
+     * identical to v1.
+     */
+    refundDestinationAta: TAccountMetas[6];
     buyerReputation: TAccountMetas[7];
     tokenProgram: TAccountMetas[8];
   };
@@ -462,7 +489,7 @@ export function parseCancelWithNoticeInstruction<
       escrow: getNextAccount(),
       mint: getNextAccount(),
       escrowAta: getNextAccount(),
-      buyerAta: getNextAccount(),
+      refundDestinationAta: getNextAccount(),
       buyerReputation: getNextAccount(),
       tokenProgram: getNextAccount(),
     },

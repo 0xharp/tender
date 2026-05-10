@@ -6,11 +6,14 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./attestWinMainRep";
 export * from "./bid";
 export * from "./bufferBid";
 export * from "./buyerReputation";
+export * from "./claimReceipt";
 export * from "./delegationMetadataBid";
 export * from "./delegationRecordBid";
 export * from "./escrow";
+export * from "./mainRep";
 export * from "./permission";
 export * from "./treasury";

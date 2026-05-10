@@ -129,6 +129,11 @@ export async function startMilestone(input: {
   milestoneIndex: number;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — sign locally with this bidder ephemeral keypair instead of via
+   *  the wallet adapter. Used in private bidder mode where rfp.winner_provider
+   *  is the bidder eph (not main wallet) — signing with main would fail
+   *  with NotProvider AND leak the eph→main link via tx fee payer. */
+  ephemeralProviderKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
@@ -138,6 +143,9 @@ export async function startMilestone(input: {
     milestone,
     milestoneIndex: input.milestoneIndex,
   });
+  if (input.ephemeralProviderKeypair) {
+    return await sendOneFromEphemeral(ix, input.ephemeralProviderKeypair, input.rpc);
+  }
   return await sendOne(ix, input.signer, input.rpc, input.signTransactions);
 }
 
@@ -147,6 +155,8 @@ export async function submitMilestone(input: {
   milestoneIndex: number;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — see startMilestone above. */
+  ephemeralProviderKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
@@ -156,6 +166,9 @@ export async function submitMilestone(input: {
     milestone,
     milestoneIndex: input.milestoneIndex,
   });
+  if (input.ephemeralProviderKeypair) {
+    return await sendOneFromEphemeral(ix, input.ephemeralProviderKeypair, input.rpc);
+  }
   return await sendOne(ix, input.signer, input.rpc, input.signTransactions);
 }
 
@@ -171,6 +184,11 @@ export async function acceptMilestone(input: {
   providerPayoutWallet: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — sign locally with this ephemeral_buyer keypair instead of via
+   *  the wallet adapter. Used in private buyer mode where rfp.buyer is
+   *  the HD-derived ephemeral and only that keypair (held in keychain
+   *  tab memory) can authorize accept_milestone. */
+  ephemeralBuyerKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
@@ -202,13 +220,22 @@ export async function acceptMilestone(input: {
   // AccountNotInitialized (3012) on whichever is missing. The idempotent
   // variant is a no-op (~30 CU) if the ATA already exists. Buyer pays the
   // rent (~0.002 SOL each) when creating.
+  const ataPayer =
+    (input.ephemeralBuyerKeypair?.publicKey.toBase58() as Address | undefined) ?? input.signer;
   const ensureProviderAta = createAtaIdempotentIx(
-    input.signer,
+    ataPayer,
     input.providerPayoutWallet,
     input.mint,
     providerAta,
   );
-  const ensureTreasuryAta = createAtaIdempotentIx(input.signer, treasury, input.mint, treasuryAta);
+  const ensureTreasuryAta = createAtaIdempotentIx(ataPayer, treasury, input.mint, treasuryAta);
+  if (input.ephemeralBuyerKeypair) {
+    return await sendManyFromEphemeral(
+      [ensureProviderAta, ensureTreasuryAta, ix],
+      input.ephemeralBuyerKeypair,
+      input.rpc,
+    );
+  }
   return await sendMany(
     [ensureProviderAta, ensureTreasuryAta, ix],
     input.signer,
@@ -223,6 +250,9 @@ export async function requestChanges(input: {
   milestoneIndex: number;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — sign locally with this ephemeral_buyer keypair instead of via
+   *  the wallet adapter. Used in private buyer mode. */
+  ephemeralBuyerKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
@@ -232,6 +262,9 @@ export async function requestChanges(input: {
     milestone,
     milestoneIndex: input.milestoneIndex,
   });
+  if (input.ephemeralBuyerKeypair) {
+    return await sendOneFromEphemeral(ix, input.ephemeralBuyerKeypair, input.rpc);
+  }
   return await sendOne(ix, input.signer, input.rpc, input.signTransactions);
 }
 
@@ -242,6 +275,9 @@ export async function rejectMilestone(input: {
   providerPayoutWallet: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — sign locally with this ephemeral_buyer keypair instead of via
+   *  the wallet adapter. Used in private buyer mode. */
+  ephemeralBuyerKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
@@ -255,6 +291,9 @@ export async function rejectMilestone(input: {
     providerReputation: providerRep,
     milestoneIndex: input.milestoneIndex,
   });
+  if (input.ephemeralBuyerKeypair) {
+    return await sendOneFromEphemeral(ix, input.ephemeralBuyerKeypair, input.rpc);
+  }
   return await sendOne(ix, input.signer, input.rpc, input.signTransactions);
 }
 
@@ -274,6 +313,11 @@ export async function autoReleaseMilestone(input: {
   providerPayoutWallet: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — sign locally with this bidder ephemeral instead of via the
+   *  wallet adapter. Permissionless ix, but in private bidder mode the
+   *  provider should pay from their bidder eph so auto-release doesn't
+   *  surface on the main wallet. */
+  ephemeralProviderKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
@@ -300,13 +344,22 @@ export async function autoReleaseMilestone(input: {
     milestoneIndex: input.milestoneIndex,
   });
   // Same as acceptMilestone: provider + treasury ATAs may not exist yet.
+  const ataPayer =
+    (input.ephemeralProviderKeypair?.publicKey.toBase58() as Address | undefined) ?? input.signer;
   const ensureProviderAta = createAtaIdempotentIx(
-    input.signer,
+    ataPayer,
     input.providerPayoutWallet,
     input.mint,
     providerAta,
   );
-  const ensureTreasuryAta = createAtaIdempotentIx(input.signer, treasury, input.mint, treasuryAta);
+  const ensureTreasuryAta = createAtaIdempotentIx(ataPayer, treasury, input.mint, treasuryAta);
+  if (input.ephemeralProviderKeypair) {
+    return await sendManyFromEphemeral(
+      [ensureProviderAta, ensureTreasuryAta, ix],
+      input.ephemeralProviderKeypair,
+      input.rpc,
+    );
+  }
   return await sendMany(
     [ensureProviderAta, ensureTreasuryAta, ix],
     input.signer,
@@ -316,19 +369,37 @@ export async function autoReleaseMilestone(input: {
 }
 
 export async function cancelWithNotice(input: {
+  /** Wallet pubkey for whichever entity is `rfp.buyer` on chain. In
+   *  public mode this is the connected main wallet; in private buyer
+   *  mode it's the HD-derived ephemeral_buyer's pubkey. */
   signer: Address;
   rfpPda: Address;
   milestoneIndex: number;
   mint: Address;
+  /**
+   * Where the refund lands. Defaults to the signer's USDC ATA (today's
+   * behavior). Pass an arbitrary ATA in private buyer mode to route the
+   * refund to a Cloak-shielded address that's decorrelated from the
+   * main wallet.
+   */
+  refundDestinationAta?: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /**
+   * v2 — when set, sign the cancel tx locally with this ephemeral keypair
+   * instead of bouncing through the wallet adapter. Used in private buyer
+   * mode where `rfp.buyer = ephemeral_buyer` and only that keypair (held
+   * in the keychain's tab memory) can authorize the cancel.
+   */
+  ephemeralBuyerKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
   const [escrow] = await findEscrowPda(input.rfpPda);
   const [buyerRep] = await findBuyerRepPda(input.signer);
   const escrowAta = await findAta(input.mint, escrow);
-  const buyerAta = await findAta(input.mint, input.signer);
+  const refundDestinationAta =
+    input.refundDestinationAta ?? (await findAta(input.mint, input.signer));
 
   const ix = instructions.getCancelWithNoticeInstruction({
     buyer: noop,
@@ -337,10 +408,13 @@ export async function cancelWithNotice(input: {
     escrow,
     mint: input.mint,
     escrowAta,
-    buyerAta,
+    refundDestinationAta,
     buyerReputation: buyerRep,
     milestoneIndex: input.milestoneIndex,
   });
+  if (input.ephemeralBuyerKeypair) {
+    return await sendOneFromEphemeral(ix, input.ephemeralBuyerKeypair, input.rpc);
+  }
   return await sendOne(ix, input.signer, input.rpc, input.signTransactions);
 }
 
@@ -352,8 +426,13 @@ export async function cancelLateMilestone(input: {
   milestoneIndex: number;
   mint: Address;
   providerPayoutWallet: Address;
+  /** v2 — override refund destination (default: signer's USDC ATA). */
+  refundDestinationAta?: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — sign locally with this ephemeral_buyer keypair instead of via
+   *  the wallet adapter. Used in private buyer mode. */
+  ephemeralBuyerKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
@@ -361,7 +440,8 @@ export async function cancelLateMilestone(input: {
   const [buyerRep] = await findBuyerRepPda(input.signer);
   const [providerRep] = await findProviderRepPda(input.providerPayoutWallet);
   const escrowAta = await findAta(input.mint, escrow);
-  const buyerAta = await findAta(input.mint, input.signer);
+  const refundDestinationAta =
+    input.refundDestinationAta ?? (await findAta(input.mint, input.signer));
 
   const ix = instructions.getCancelLateMilestoneInstruction({
     buyer: noop,
@@ -370,11 +450,14 @@ export async function cancelLateMilestone(input: {
     escrow,
     mint: input.mint,
     escrowAta,
-    buyerAta,
+    refundDestinationAta,
     buyerReputation: buyerRep,
     providerReputation: providerRep,
     milestoneIndex: input.milestoneIndex,
   });
+  if (input.ephemeralBuyerKeypair) {
+    return await sendOneFromEphemeral(ix, input.ephemeralBuyerKeypair, input.rpc);
+  }
   return await sendOne(ix, input.signer, input.rpc, input.signTransactions);
 }
 
@@ -384,15 +467,21 @@ export async function cancelWithPenalty(input: {
   milestoneIndex: number;
   mint: Address;
   providerPayoutWallet: Address;
+  /** v2 — override refund destination (default: signer's USDC ATA). */
+  refundDestinationAta?: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — sign locally with this ephemeral_buyer keypair instead of via
+   *  the wallet adapter. Used in private buyer mode. */
+  ephemeralBuyerKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
   const [escrow] = await findEscrowPda(input.rfpPda);
   const [buyerRep] = await findBuyerRepPda(input.signer);
   const escrowAta = await findAta(input.mint, escrow);
-  const buyerAta = await findAta(input.mint, input.signer);
+  const refundDestinationAta =
+    input.refundDestinationAta ?? (await findAta(input.mint, input.signer));
   const providerAta = await findAta(input.mint, input.providerPayoutWallet);
 
   const [providerRep] = await findProviderRepPda(input.providerPayoutWallet);
@@ -403,7 +492,7 @@ export async function cancelWithPenalty(input: {
     escrow,
     mint: input.mint,
     escrowAta,
-    buyerAta,
+    refundDestinationAta,
     providerAta,
     buyerReputation: buyerRep,
     providerReputation: providerRep,
@@ -414,11 +503,20 @@ export async function cancelWithPenalty(input: {
   // Buyer's ATA already exists (they funded the escrow), so we only need
   // the provider's. See note in `acceptMilestone` on why we do this.
   const ensureProviderAta = createAtaIdempotentIx(
-    input.signer,
+    // ATA-create payer must be SOL-funded. In private mode we pay from
+    // the ephemeral; in public mode from the main wallet.
+    (input.ephemeralBuyerKeypair?.publicKey.toBase58() as Address | undefined) ?? input.signer,
     input.providerPayoutWallet,
     input.mint,
     providerAta,
   );
+  if (input.ephemeralBuyerKeypair) {
+    return await sendManyFromEphemeral(
+      [ensureProviderAta, ix],
+      input.ephemeralBuyerKeypair,
+      input.rpc,
+    );
+  }
   return await sendMany([ensureProviderAta, ix], input.signer, input.rpc, input.signTransactions);
 }
 
@@ -450,12 +548,20 @@ export async function expireRfp(input: {
   rfpPda: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — sign locally with this ephemeral_buyer keypair instead of via
+   *  the wallet adapter. Permissionless ix; in private buyer mode the
+   *  buyer pays from their HD ephemeral so the expiry doesn't surface on
+   *  the main wallet. */
+  ephemeralBuyerKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const ix = instructions.getExpireRfpInstruction({
     caller: noop,
     rfp: input.rfpPda,
   });
+  if (input.ephemeralBuyerKeypair) {
+    return await sendOneFromEphemeral(ix, input.ephemeralBuyerKeypair, input.rpc);
+  }
   return await sendOne(ix, input.signer, input.rpc, input.signTransactions);
 }
 
@@ -471,15 +577,28 @@ export async function proposeDisputeSplit(input: {
   mint: Address;
   buyerWallet: Address;
   providerPayoutWallet: Address;
+  /** v2 — override refund destination (default: buyerWallet's USDC ATA). */
+  refundDestinationAta?: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — sign locally with this ephemeral_buyer keypair (party = the
+   *  ephemeral) instead of via the wallet adapter. Used when the buyer
+   *  side of the dispute is in private buyer mode. */
+  ephemeralBuyerKeypair?: import('@solana/web3.js').Keypair;
+  /** v2 — same as ephemeralBuyerKeypair but for the provider side. Used
+   *  in private bidder mode where the bidder eph is the on-chain party
+   *  and we don't want main wallet to surface as the dispute signer. At
+   *  most one of (ephemeralBuyerKeypair, ephemeralProviderKeypair) should
+   *  be set per call — they correspond to which side is calling. */
+  ephemeralProviderKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
   const [escrow] = await findEscrowPda(input.rfpPda);
   const [treasury] = await findTreasuryPda();
   const escrowAta = await findAta(input.mint, escrow);
-  const buyerAta = await findAta(input.mint, input.buyerWallet);
+  const refundDestinationAta =
+    input.refundDestinationAta ?? (await findAta(input.mint, input.buyerWallet));
   const providerAta = await findAta(input.mint, input.providerPayoutWallet);
   const treasuryAta = await findAta(input.mint, treasury);
 
@@ -493,7 +612,7 @@ export async function proposeDisputeSplit(input: {
     mint: input.mint,
     escrowAta,
     providerAta,
-    buyerAta,
+    refundDestinationAta,
     treasury,
     treasuryAta,
     buyerReputation: buyerRep,
@@ -502,15 +621,23 @@ export async function proposeDisputeSplit(input: {
     splitToProviderBps: input.splitToProviderBps,
   });
   // Provider + treasury ATAs may not exist yet on first dispute settlement.
-  // Buyer's ATA exists (they funded escrow). Either party can call this ix,
-  // so the signer pays for any ATA rent that's still missing.
+  // Either party can call this ix, so whoever's signing pays for the rent.
+  const ephemeralKp = input.ephemeralBuyerKeypair ?? input.ephemeralProviderKeypair;
+  const payer = (ephemeralKp?.publicKey.toBase58() as Address | undefined) ?? input.signer;
   const ensureProviderAta = createAtaIdempotentIx(
-    input.signer,
+    payer,
     input.providerPayoutWallet,
     input.mint,
     providerAta,
   );
-  const ensureTreasuryAta = createAtaIdempotentIx(input.signer, treasury, input.mint, treasuryAta);
+  const ensureTreasuryAta = createAtaIdempotentIx(payer, treasury, input.mint, treasuryAta);
+  if (ephemeralKp) {
+    return await sendManyFromEphemeral(
+      [ensureProviderAta, ensureTreasuryAta, ix],
+      ephemeralKp,
+      input.rpc,
+    );
+  }
   return await sendMany(
     [ensureProviderAta, ensureTreasuryAta, ix],
     input.signer,
@@ -526,15 +653,32 @@ export async function disputeDefaultSplit(input: {
   mint: Address;
   buyerWallet: Address;
   providerPayoutWallet: Address;
+  /** v2 — override refund destination (default: buyerWallet's USDC ATA).
+   *  Permissionless ix; in private buyer mode the buyer can pass their
+   *  Cloak-funded refund ephemeral here so the refund doesn't surface
+   *  on the main wallet. The signer of THIS tx can stay as the main
+   *  wallet (cheap), since the privacy property comes from the
+   *  refund_destination, not the payer. */
+  refundDestinationAta?: Address;
   signTransactions: SignTransactions;
   rpc: Rpc<SolanaRpcApi>;
+  /** v2 — when set, sign locally with this ephemeral keypair instead of
+   *  the wallet adapter. Permissionless on-chain, but in HD private buyer
+   *  mode the buyer wants the payer signature to ALSO be the ephemeral so
+   *  the main wallet doesn't show a fee-paying tx tied to this RFP. */
+  ephemeralBuyerKeypair?: import('@solana/web3.js').Keypair;
+  /** v2 — same as ephemeralBuyerKeypair but for the provider side. Used
+   *  in private bidder mode where the bidder eph is the on-chain party
+   *  and we don't want main wallet to surface as the dispute signer. */
+  ephemeralProviderKeypair?: import('@solana/web3.js').Keypair;
 }): Promise<string> {
   const noop = createNoopSigner(input.signer);
   const [milestone] = await findMilestonePda(input.rfpPda, input.milestoneIndex);
   const [escrow] = await findEscrowPda(input.rfpPda);
   const [treasury] = await findTreasuryPda();
   const escrowAta = await findAta(input.mint, escrow);
-  const buyerAta = await findAta(input.mint, input.buyerWallet);
+  const refundDestinationAta =
+    input.refundDestinationAta ?? (await findAta(input.mint, input.buyerWallet));
   const providerAta = await findAta(input.mint, input.providerPayoutWallet);
   const treasuryAta = await findAta(input.mint, treasury);
 
@@ -548,7 +692,7 @@ export async function disputeDefaultSplit(input: {
     mint: input.mint,
     escrowAta,
     providerAta,
-    buyerAta,
+    refundDestinationAta,
     treasury,
     treasuryAta,
     buyerReputation: buyerRep,
@@ -557,13 +701,22 @@ export async function disputeDefaultSplit(input: {
   });
   // 50/50 default split touches all three parties' ATAs. Buyer's exists;
   // provider's + treasury's may not on first call.
+  const ephemeralKp = input.ephemeralBuyerKeypair ?? input.ephemeralProviderKeypair;
+  const ataPayer = (ephemeralKp?.publicKey.toBase58() as Address | undefined) ?? input.signer;
   const ensureProviderAta = createAtaIdempotentIx(
-    input.signer,
+    ataPayer,
     input.providerPayoutWallet,
     input.mint,
     providerAta,
   );
-  const ensureTreasuryAta = createAtaIdempotentIx(input.signer, treasury, input.mint, treasuryAta);
+  const ensureTreasuryAta = createAtaIdempotentIx(ataPayer, treasury, input.mint, treasuryAta);
+  if (ephemeralKp) {
+    return await sendManyFromEphemeral(
+      [ensureProviderAta, ensureTreasuryAta, ix],
+      ephemeralKp,
+      input.rpc,
+    );
+  }
   return await sendMany(
     [ensureProviderAta, ensureTreasuryAta, ix],
     input.signer,
@@ -605,6 +758,50 @@ async function sendMany(
   const [signed] = await signTransactions({ transaction: tx });
   if (!signed) throw new Error('signTransactions returned no outputs');
   const b64 = b64Decoder.decode(signed.signedTransaction);
+  const sig = await rpc
+    .sendTransaction(b64 as never, { encoding: 'base64', skipPreflight: true })
+    .send();
+  await waitConfirmed(rpc, sig as string);
+  return sig as string;
+}
+
+/**
+ * v2 — sign + send with a local ephemeral keypair (no wallet popup).
+ * Used by private-buyer cancel/dispute paths where `rfp.buyer` is the
+ * HD-derived ephemeral, so the on-chain ix's signer must be that
+ * ephemeral. Keypair is short-lived (in keychain memory only) and
+ * signs the raw v0 message via web3's VersionedTransaction.sign.
+ */
+async function sendOneFromEphemeral(
+  // biome-ignore lint/suspicious/noExplicitAny: ix parameterizations vary
+  ix: any,
+  ephemeral: import('@solana/web3.js').Keypair,
+  rpc: Rpc<SolanaRpcApi>,
+): Promise<string> {
+  return sendManyFromEphemeral([ix], ephemeral, rpc);
+}
+
+async function sendManyFromEphemeral(
+  // biome-ignore lint/suspicious/noExplicitAny: ix parameterizations vary
+  ixs: any[],
+  ephemeral: import('@solana/web3.js').Keypair,
+  rpc: Rpc<SolanaRpcApi>,
+): Promise<string> {
+  const { value: blockhash } = await rpc.getLatestBlockhash().send();
+  const ephemeralAddress = ephemeral.publicKey.toBase58() as Address;
+  const message = pipe(
+    createTransactionMessage({ version: 0 }),
+    (m) => setTransactionMessageFeePayer(ephemeralAddress, m),
+    // biome-ignore lint/suspicious/noExplicitAny: kit blockhash branding
+    (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash as any, m),
+    (m) => appendTransactionMessageInstructions(ixs, m),
+  );
+  const txBytes = new Uint8Array(txEncoder.encode(compileTransaction(message)));
+  const { VersionedTransaction } = await import('@solana/web3.js');
+  const versionedTx = VersionedTransaction.deserialize(txBytes);
+  versionedTx.sign([ephemeral]);
+  const signedBytes = versionedTx.serialize();
+  const b64 = b64Decoder.decode(signedBytes);
   const sig = await rpc
     .sendTransaction(b64 as never, { encoding: 'base64', skipPreflight: true })
     .send();

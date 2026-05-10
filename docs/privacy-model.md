@@ -14,7 +14,7 @@ This doc walks through what stays sealed, what becomes public, when each transit
 | **Bid window closed**, reveal not yet open | 🔒 Still sealed | 🌐 Public | 🔒 Sealed | n/a |
 | **Reveal window** (post-close, pre-award) | 🔓 Buyer + each bidder can decrypt their own bid | 🌐 Public | 🔓 Buyer can decrypt the envelope and see who bid | n/a |
 | **Awarded** | Winning bid: 🌐 published. Losing bids: 🔒 sealed forever | 🌐 Public | Winner: 🌐 main wallet revealed via binding signature. Losers: 🔒 main wallets stay hidden | n/a |
-| **Funded → in progress** | (settled) | (settled) | (settled) | Public USDC transfers on devnet · shielded via Cloak on mainnet |
+| **Funded → in progress** | (settled) | (settled) | (settled) | Public USDC transfers on devnet |
 
 🔒 = cryptographically inaccessible · 🔓 = decryptable by listed parties only · 🌐 = readable by anyone
 
@@ -40,12 +40,21 @@ Provider behavior under uncertainty: if providers know the buyer can peek, they 
 
 ---
 
-## Two privacy modes
+## Two orthogonal privacy axes
 
-Bid contents are always sealed (above). Bidder *identity* — i.e., which wallets submitted bids on a given RFP — is configurable per RFP at creation time. The form labels these:
+Bid contents are always sealed (above). On top of that, **bidder identity** and **buyer identity** are independently configurable per RFP at creation time.
 
-- **"Bid contents private"** (default)
-- **"Bid contents + bidder identity private"**
+**Bidder privacy** (form label: "Bidder privacy mode"):
+- **"Bid contents private"** (default) — bidder wallet visible
+- **"Bid contents + bidder identity private"** — bidder wallet hidden
+
+**Buyer privacy** (form label: "Buyer privacy mode"):
+- **"Public buyer"** (default) — RFP's `buyer` field on chain is the main wallet
+- **"Anonymous buyer"** — RFP signed by an HD-derived buyer ephemeral funded via Cloak
+
+Four combinations: public/public, public-buyer + private-bidder, private-buyer + public-bidder, fully sealed.
+
+The mechanism on each side is symmetric — both modes use HD-derived ephemerals from the same keychain, both fund through Cloak's shielded pool, both accrue reputation to a per-ephemeral PDA, both merge into the main wallet via an explicit claim ix on the user's terms (`attest_buyer_history` for buyers, `attest_win` for providers — see "Claim-based reputation merge" below).
 
 ### Default mode: contents private, bidder visible
 
@@ -71,17 +80,19 @@ When this is the right pick:
 
 How it works under the hood (you don't have to understand this to use it, but here's the mechanism):
 
-1. **Per-RFP ephemeral wallet.** Provider's main wallet signs a single deterministic message (`tender-ephemeral-bid-v1 || rfp_pda`); the resulting Ed25519 signature is HKDF-expanded into a fresh keypair. Deterministic so the provider can re-derive it on any client without storing key material.
+1. **HD-derived bidder ephemeral.** Provider's main wallet signs a single deterministic master message (`tender-keychain-master-v1`); the resulting Ed25519 signature is HKDF-expanded into a 32-byte master seed cached in tab-scoped sessionStorage. From that seed, every per-role ephemeral the user will ever need is derived deterministically — bidder ephemerals (one per bid), buyer ephemerals (one per private RFP), funding/refund/payout sub-wallets — so a user gets exactly **one** wallet popup per session even as they bid on multiple RFPs and run multiple flows. Cross-tab sync via BroadcastChannel; same keychain handle backs every surface.
 
-2. **Cloak shielded funding.** The ephemeral wallet has 0 SOL by default. To pay for bid txs, the provider tops it up via Cloak's shielded UTXO pool: deposit from main wallet → ZK-shielded transfer → relay-paid withdraw to ephemeral. The on-chain "By" column on every bid tx shows only the ephemeral wallet, with no provable link to the main wallet.
+2. **Cloak shielded funding.** The bidder ephemeral has 0 SOL by default. The provider tops it up via Cloak's shielded UTXO pool: deposit from main wallet → ZK-shielded transfer (Groth16 proof) → relay-paid withdraw to ephemeral. The on-chain "By" column on every bid tx shows only the ephemeral wallet; the funding link to the main wallet is broken cryptographically.
 
-3. **Bid commitment uses the ephemeral wallet.** The commitment account becomes `[b"bid", rfp_pda, ephemeral_wallet]`. The encrypted envelope inside it carries the provider's *main* wallet plus a binding signature (main wallet signs `tender-bid-binding-v1 || program_id || rfp_pda || bid_pda || main_wallet`).
+3. **Bid commitment uses the ephemeral wallet.** The commitment account becomes `[b"bid", rfp_pda, ephemeral_wallet]`. `bid.provider` is the ephemeral pubkey. The encrypted envelope inside carries a binding signature from the main wallet (signs `tender-bid-binding-v1 || program_id || rfp_pda || bid_pda || main_wallet`) — used later for the optional claim, not for the live bid.
 
-4. **Reveal happens at award.** When the buyer awards a private bid, the award transaction includes an Ed25519 signature-verification instruction that proves the main wallet committed to that bid. The program writes the verified main wallet to `rfp.winner_provider`. From this moment forward the winner's main wallet is on-chain — needed for reputation, for milestone payouts, and for the provider to manage their project.
+4. **The bidder ephemeral signs every post-award action.** When the bid wins, all subsequent provider actions (`start_milestone`, `submit_milestone`, `propose_dispute_split`, `auto_release_milestone`, etc.) sign with the **bidder ephemeral**, not the main wallet. This is the load-bearing piece: without it, the very first milestone tx would leak the eph→main link via the tx fee payer. Every action through project completion stays on the ephemeral.
 
-5. **Reputation auto-binds on win.** Because the on-chain winner field is the verified main wallet, reputation updates accrue to it identically to a public-mode win. There's no separate "claim later" step.
+5. **ProviderReputation accrues to the ephemeral.** During the project, the eph's per-role ProviderReputation PDA tracks wins, completions, dispute counts, earnings — all the same fields as a normal main-wallet rep account. The user's main wallet stays unlinked.
 
-6. **Losers stay sealed.** Losing bidders' main wallets are never revealed. Their bid envelopes are never decrypted in a context that publishes the main wallet on chain.
+6. **Optional claim merges into main wallet rep.** After the RFP completes, the user runs **Claim reputation** from their dashboard. The `attest_win` ix verifies the cached binding signature on chain (Ed25519SigVerify precompile), atomically copies the eph's counters into the main wallet's ProviderReputation, and flips a `winner_attested` idempotency flag. Until the user calls this, no on-chain link exists between the main wallet and the anonymous win.
+
+7. **Losers stay sealed forever.** Losing bidders' main wallets are never revealed — even if their winning peer claims, the program ix only ever links the winning bid's main wallet, never the losers'.
 
 ### Where private-bidder mode hides identity
 
@@ -97,7 +108,59 @@ Cloak's shielded pool provides **cryptographic** unlinkability (Groth16 ZK proof
 
 ### What private-bidder mode is NOT
 
-It's not "blind bidding even from the buyer until select." That stronger model (call it L2) prevents the buyer from biasing selection by knowing who bid, but conflicts with vetting and reputation-aware evaluation. It's a future toggle, not what we ship today.
+It's not "blind bidding even from the buyer until select." That stronger model — buyer can't see *who* bid even at reveal time — conflicts with vetting and reputation-aware evaluation, which are core to the buyer's decision. tendr.bid deliberately stops one step short of fully blind: contents stay sealed from the buyer until close, identity stays sealed from observers throughout, but the buyer learns who bid at reveal so they can evaluate counterparty fit alongside the bid itself.
+
+---
+
+### Anonymous-buyer mode: RFP + buyer identity sealed
+
+The mirror of private-bidder mode, applied to the buyer side. The RFP itself is signed by an HD-derived buyer ephemeral funded via Cloak's shielded pool; the buyer's main wallet leaves zero on-chain footprint during the RFP's lifecycle.
+
+When this is the right pick:
+
+- **Strategic procurement** where the buying organization's identity is the sensitive piece (the budget alone might tip off a competitor that you're entering a market, or signal an upcoming pivot to your own community).
+- **Private treasury operations** for DAOs / multisigs that don't want every RFP they post tied to their public treasury wallet.
+- **Personal-budget projects** where the buyer doesn't want to publish a wallet they also use for other on-chain activity.
+
+How it works:
+
+1. **HD-derived buyer ephemeral.** Same keychain primitive as the bidder side — one master signature on first use, all future buyer ephemerals derive from that seed. Cross-tab cache survives reload.
+2. **Cloak shielded funding.** The buyer ephemeral is funded with ~0.05 SOL from Cloak's shielded pool at create time. That covers every privacy-preserving signature the buyer will make on this RFP through completion (close bidding, reveal, award, fund, accept milestone, release). Refundable any time via the Ephemeral Sweep panel on the dashboard.
+3. **The buyer ephemeral signs every action.** `rfp_create`, `rfp_close_bidding`, `open_reveal_window`, `select_bid`, `fund_project`, `accept_milestone`, `cancel_*`, `propose_dispute_split` — all signed by the ephemeral. Main wallet never appears as a tx fee payer.
+4. **BuyerReputation accrues to the ephemeral.** Same shape as ProviderReputation on the bidder side — per-eph PDA tracks RFPs awarded, funded, completed, ghosted, USDC locked/released/refunded, milestone counters.
+5. **Optional claim merges into main wallet rep.** After the RFP completes, the user runs **Claim reputation** from the Buying tab on the dashboard. The `attest_buyer_history` ix atomically copies the eph's BuyerReputation counters into the main wallet's, idempotent via a `buyer_attested` flag on the RFP.
+
+### Where private-buyer mode hides identity
+
+Same threat-model surfaces as private-bidder mode, on the buyer side:
+
+- **Account data**: `rfp.buyer` carries the ephemeral pubkey. Anyone scanning the program can see "ephemeral X created RFP Y" but cannot link it to a main wallet.
+- **Transaction history**: every buyer-side action through the RFP's lifecycle is signed by the ephemeral, funded via Cloak.
+- **Reputation**: counters accrue to the eph's BuyerReputation PDA. The main wallet's rep stays unchanged unless the user explicitly claims via `attest_buyer_history`.
+
+---
+
+## Claim-based reputation merge (symmetric anonymity)
+
+Both private-buyer and private-bidder modes share the same end-of-project pattern: reputation accrues to the **ephemeral's** PDA during the project, and an **optional, idempotent claim ix** merges those counters into the main wallet's rep when the user is ready.
+
+| Side | Claim ix | Eph rep PDA | Idempotency flag | Surface |
+|---|---|---|---|---|
+| Buyer | `attest_buyer_history` | `[b"buyer_rep", buyer_eph]` | `rfp.buyer_attested: bool` | Dashboard → Buying tab → "Claim reputation" CTA on completed-anonymous cards |
+| Provider | `attest_win` | `[b"provider_rep", bidder_eph]` | `bid.winner_attested: bool` | Dashboard → Bidding tab → "Claim reputation" CTA on completed-anonymous cards |
+
+Both ix:
+
+- **Gate to `RfpStatus::Completed`** — claims are only allowed once the project is in a terminal "delivered" state. No partial claims, no claims while a project is still in flight.
+- **Atomically copy every counter** from the ephemeral PDA into the main-wallet PDA. RFPs/wins, completed projects, late milestones, dispute counters, USDC totals — all in one tx.
+- **Verify a binding signature** via the Ed25519SigVerify precompile, proving the main wallet that's running the claim is the same main wallet that originally derived the ephemeral. Without this check, anyone could front-run a claim and steal another user's anonymous reputation.
+- **Set the idempotency flag** so a second call reverts. One claim per RFP/bid, ever.
+
+What the claim does NOT do:
+
+- It does NOT rewrite `rfp.buyer` or `bid.provider` on chain — those stay as the ephemeral pubkey forever. Surfacing the claimed RFP under the main wallet's profile-page RFP list would re-create the eph→main link the project ran under, defeating the privacy property. Only the reputation **counters** merge.
+- It does NOT touch losing bidders' state. A buyer claiming their RFP doesn't reveal who lost; a provider claiming their win doesn't reveal who else bid.
+- It does NOT consume the ephemeral PDA. The eph's rep account stays in place but is dead — its counters were already copied. The leaderboard filters known ephemerals out so they don't pollute the rankings (see `apps/web/app/leaderboard/page.tsx` `ephemeralBuyers` set construction).
 
 ---
 
@@ -141,15 +204,14 @@ What tendr.bid protects against, and what it doesn't:
 
 ---
 
-## Out of scope (intentionally)
+## Out of scope (by design)
 
-What this design does NOT promise, and why:
+What this design does NOT promise, and why each is a deliberate scope decision:
 
-- **Privacy of the RFP itself.** RFP titles, scopes, budgets, and milestone structures are public on-chain. tendr.bid is a marketplace — buyers need to be discoverable. Encrypted-scope flow with a per-bidder allowlist is a future design.
-- **Privacy of buyer identity.** The buyer's wallet is on every RFP. If you want pseudonymous procurement, use a fresh address — tendr.bid doesn't link wallets to off-chain identities.
-- **Fully blind bidding** (buyer can't see bidders even at reveal). Conflicts with vetting and reputation-aware evaluation. A future toggle.
-- **Provider verification beyond pseudonymous.** No KYC, no oracles, no proof-of-prior-work. Reputation is built natively through the on-chain registry — see [reputation-model](/docs/reputation-model).
-- **Encryption-key rotation.** Keys are deterministic per (wallet, rfp_nonce). If a buyer suspects key compromise, they cancel the RFP. Rotation epoch is a future addition.
+- **Privacy of RFP scope text.** RFP titles, scopes, budgets, and milestone structures are public on-chain. tendr.bid is a marketplace — buyers need to be discoverable, and providers need to evaluate the work itself before bidding. (Buyer **identity** is a separate axis and is hidable via anonymous-buyer mode — see "Anonymous-buyer mode" above.)
+- **Fully blind bidding** (buyer can't see who bid even at reveal). The buyer needs counterparty visibility to evaluate fit, not just price. tendr.bid stops one step short of fully blind: contents stay sealed from the buyer until close, identities stay sealed from outside observers throughout, but the buyer learns the bidder list at reveal so they can vet alongside the bid.
+- **Provider verification beyond pseudonymous.** No KYC, no oracles, no proof-of-prior-work — the on-chain reputation registry is the trust signal. See [reputation-model](/docs/reputation-model) for the full set of fields each rep account tracks.
+- **Encryption-key rotation.** Keys are deterministic per (wallet, rfp_nonce). If a buyer suspects key compromise, they cancel the RFP and post a new one — rotation is the same primitive as starting over.
 
 ---
 

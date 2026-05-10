@@ -28,9 +28,15 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js';
 
-const TENDER_PROGRAM_ID = new PublicKey('4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ');
-// Circle's devnet USDC mint.
-const DEVNET_USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+const TENDER_PROGRAM_ID = new PublicKey('GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z');
+// Cloak's mock USDC mint on devnet — required for the v2 private-funding
+// flow (Cloak's shielded-pool transfer only supports this mint on devnet;
+// real Circle USDC is mainnet-only on Cloak). Faucet:
+//   https://devnet.cloak.ag/privacy/faucet
+// Note: SNS subdomain claims (tendr.sol) still use Circle's devnet USDC
+// at `apps/web/lib/sns/devnet/constants.ts` — SNS's registrar is hardcoded
+// to that mint and can't be reconfigured.
+const DEVNET_USDC_MINT = new PublicKey('61ro7AExqfk4dZYoCyRzTahahCC2TdUUZ4M5epMPunJf');
 
 // RPC must come from the environment. Never hardcode an API key here — this
 // file is committed to git, so any literal lands in public history.

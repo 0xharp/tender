@@ -61,7 +61,7 @@ export type CancelWithPenaltyInstruction<
   TAccountEscrow extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountEscrowAta extends string | AccountMeta<string> = string,
-  TAccountBuyerAta extends string | AccountMeta<string> = string,
+  TAccountRefundDestinationAta extends string | AccountMeta<string> = string,
   TAccountProviderAta extends string | AccountMeta<string> = string,
   TAccountBuyerReputation extends string | AccountMeta<string> = string,
   TAccountProviderReputation extends string | AccountMeta<string> = string,
@@ -91,9 +91,9 @@ export type CancelWithPenaltyInstruction<
       TAccountEscrowAta extends string
         ? WritableAccount<TAccountEscrowAta>
         : TAccountEscrowAta,
-      TAccountBuyerAta extends string
-        ? WritableAccount<TAccountBuyerAta>
-        : TAccountBuyerAta,
+      TAccountRefundDestinationAta extends string
+        ? WritableAccount<TAccountRefundDestinationAta>
+        : TAccountRefundDestinationAta,
       TAccountProviderAta extends string
         ? WritableAccount<TAccountProviderAta>
         : TAccountProviderAta,
@@ -154,7 +154,7 @@ export type CancelWithPenaltyAsyncInput<
   TAccountEscrow extends string = string,
   TAccountMint extends string = string,
   TAccountEscrowAta extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountRefundDestinationAta extends string = string,
   TAccountProviderAta extends string = string,
   TAccountBuyerReputation extends string = string,
   TAccountProviderReputation extends string = string,
@@ -167,7 +167,13 @@ export type CancelWithPenaltyAsyncInput<
   escrow?: Address<TAccountEscrow>;
   mint: Address<TAccountMint>;
   escrowAta?: Address<TAccountEscrowAta>;
-  buyerAta: Address<TAccountBuyerAta>;
+  /**
+   * Where the buyer-side refund lands. v2 — owner is unconstrained so
+   * the buyer can route the refund to a Cloak-shielded ephemeral
+   * instead of their main wallet (private buyer mode). In public
+   * buyer mode the front-end defaults this to `buyer_ata`.
+   */
+  refundDestinationAta: Address<TAccountRefundDestinationAta>;
   providerAta: Address<TAccountProviderAta>;
   buyerReputation?: Address<TAccountBuyerReputation>;
   /** Provider rep - receives the penalty as `total_earned_usdc`. */
@@ -184,7 +190,7 @@ export async function getCancelWithPenaltyInstructionAsync<
   TAccountEscrow extends string,
   TAccountMint extends string,
   TAccountEscrowAta extends string,
-  TAccountBuyerAta extends string,
+  TAccountRefundDestinationAta extends string,
   TAccountProviderAta extends string,
   TAccountBuyerReputation extends string,
   TAccountProviderReputation extends string,
@@ -199,7 +205,7 @@ export async function getCancelWithPenaltyInstructionAsync<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountProviderAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
@@ -216,7 +222,7 @@ export async function getCancelWithPenaltyInstructionAsync<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountProviderAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
@@ -235,7 +241,10 @@ export async function getCancelWithPenaltyInstructionAsync<
     escrow: { value: input.escrow ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    refundDestinationAta: {
+      value: input.refundDestinationAta ?? null,
+      isWritable: true,
+    },
     providerAta: { value: input.providerAta ?? null, isWritable: true },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
     providerReputation: {
@@ -309,7 +318,7 @@ export async function getCancelWithPenaltyInstructionAsync<
       getAccountMeta("escrow", accounts.escrow),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("escrowAta", accounts.escrowAta),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("refundDestinationAta", accounts.refundDestinationAta),
       getAccountMeta("providerAta", accounts.providerAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
       getAccountMeta("providerReputation", accounts.providerReputation),
@@ -328,7 +337,7 @@ export async function getCancelWithPenaltyInstructionAsync<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountProviderAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
@@ -344,7 +353,7 @@ export type CancelWithPenaltyInput<
   TAccountEscrow extends string = string,
   TAccountMint extends string = string,
   TAccountEscrowAta extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountRefundDestinationAta extends string = string,
   TAccountProviderAta extends string = string,
   TAccountBuyerReputation extends string = string,
   TAccountProviderReputation extends string = string,
@@ -357,7 +366,13 @@ export type CancelWithPenaltyInput<
   escrow: Address<TAccountEscrow>;
   mint: Address<TAccountMint>;
   escrowAta: Address<TAccountEscrowAta>;
-  buyerAta: Address<TAccountBuyerAta>;
+  /**
+   * Where the buyer-side refund lands. v2 — owner is unconstrained so
+   * the buyer can route the refund to a Cloak-shielded ephemeral
+   * instead of their main wallet (private buyer mode). In public
+   * buyer mode the front-end defaults this to `buyer_ata`.
+   */
+  refundDestinationAta: Address<TAccountRefundDestinationAta>;
   providerAta: Address<TAccountProviderAta>;
   buyerReputation: Address<TAccountBuyerReputation>;
   /** Provider rep - receives the penalty as `total_earned_usdc`. */
@@ -374,7 +389,7 @@ export function getCancelWithPenaltyInstruction<
   TAccountEscrow extends string,
   TAccountMint extends string,
   TAccountEscrowAta extends string,
-  TAccountBuyerAta extends string,
+  TAccountRefundDestinationAta extends string,
   TAccountProviderAta extends string,
   TAccountBuyerReputation extends string,
   TAccountProviderReputation extends string,
@@ -389,7 +404,7 @@ export function getCancelWithPenaltyInstruction<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountProviderAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
@@ -405,7 +420,7 @@ export function getCancelWithPenaltyInstruction<
   TAccountEscrow,
   TAccountMint,
   TAccountEscrowAta,
-  TAccountBuyerAta,
+  TAccountRefundDestinationAta,
   TAccountProviderAta,
   TAccountBuyerReputation,
   TAccountProviderReputation,
@@ -423,7 +438,10 @@ export function getCancelWithPenaltyInstruction<
     escrow: { value: input.escrow ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    refundDestinationAta: {
+      value: input.refundDestinationAta ?? null,
+      isWritable: true,
+    },
     providerAta: { value: input.providerAta ?? null, isWritable: true },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
     providerReputation: {
@@ -460,7 +478,7 @@ export function getCancelWithPenaltyInstruction<
       getAccountMeta("escrow", accounts.escrow),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("escrowAta", accounts.escrowAta),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("refundDestinationAta", accounts.refundDestinationAta),
       getAccountMeta("providerAta", accounts.providerAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
       getAccountMeta("providerReputation", accounts.providerReputation),
@@ -479,7 +497,7 @@ export function getCancelWithPenaltyInstruction<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountProviderAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
@@ -500,7 +518,13 @@ export type ParsedCancelWithPenaltyInstruction<
     escrow: TAccountMetas[3];
     mint: TAccountMetas[4];
     escrowAta: TAccountMetas[5];
-    buyerAta: TAccountMetas[6];
+    /**
+     * Where the buyer-side refund lands. v2 — owner is unconstrained so
+     * the buyer can route the refund to a Cloak-shielded ephemeral
+     * instead of their main wallet (private buyer mode). In public
+     * buyer mode the front-end defaults this to `buyer_ata`.
+     */
+    refundDestinationAta: TAccountMetas[6];
     providerAta: TAccountMetas[7];
     buyerReputation: TAccountMetas[8];
     /** Provider rep - receives the penalty as `total_earned_usdc`. */
@@ -543,7 +567,7 @@ export function parseCancelWithPenaltyInstruction<
       escrow: getNextAccount(),
       mint: getNextAccount(),
       escrowAta: getNextAccount(),
-      buyerAta: getNextAccount(),
+      refundDestinationAta: getNextAccount(),
       providerAta: getNextAccount(),
       buyerReputation: getNextAccount(),
       providerReputation: getNextAccount(),

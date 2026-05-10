@@ -61,7 +61,7 @@ export type CancelLateMilestoneInstruction<
   TAccountEscrow extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountEscrowAta extends string | AccountMeta<string> = string,
-  TAccountBuyerAta extends string | AccountMeta<string> = string,
+  TAccountRefundDestinationAta extends string | AccountMeta<string> = string,
   TAccountBuyerReputation extends string | AccountMeta<string> = string,
   TAccountProviderReputation extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
@@ -90,9 +90,9 @@ export type CancelLateMilestoneInstruction<
       TAccountEscrowAta extends string
         ? WritableAccount<TAccountEscrowAta>
         : TAccountEscrowAta,
-      TAccountBuyerAta extends string
-        ? WritableAccount<TAccountBuyerAta>
-        : TAccountBuyerAta,
+      TAccountRefundDestinationAta extends string
+        ? WritableAccount<TAccountRefundDestinationAta>
+        : TAccountRefundDestinationAta,
       TAccountBuyerReputation extends string
         ? WritableAccount<TAccountBuyerReputation>
         : TAccountBuyerReputation,
@@ -153,7 +153,7 @@ export type CancelLateMilestoneAsyncInput<
   TAccountEscrow extends string = string,
   TAccountMint extends string = string,
   TAccountEscrowAta extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountRefundDestinationAta extends string = string,
   TAccountBuyerReputation extends string = string,
   TAccountProviderReputation extends string = string,
   TAccountTokenProgram extends string = string,
@@ -165,7 +165,13 @@ export type CancelLateMilestoneAsyncInput<
   escrow?: Address<TAccountEscrow>;
   mint: Address<TAccountMint>;
   escrowAta?: Address<TAccountEscrowAta>;
-  buyerAta: Address<TAccountBuyerAta>;
+  /**
+   * Where the buyer-side refund lands. v2 — owner is unconstrained so
+   * the buyer can route the refund to a Cloak-shielded ephemeral
+   * instead of their main wallet (private buyer mode). In public
+   * buyer mode the front-end defaults this to `buyer_ata`.
+   */
+  refundDestinationAta: Address<TAccountRefundDestinationAta>;
   buyerReputation?: Address<TAccountBuyerReputation>;
   /** Provider rep - gets the late_milestones increment. */
   providerReputation: Address<TAccountProviderReputation>;
@@ -181,7 +187,7 @@ export async function getCancelLateMilestoneInstructionAsync<
   TAccountEscrow extends string,
   TAccountMint extends string,
   TAccountEscrowAta extends string,
-  TAccountBuyerAta extends string,
+  TAccountRefundDestinationAta extends string,
   TAccountBuyerReputation extends string,
   TAccountProviderReputation extends string,
   TAccountTokenProgram extends string,
@@ -195,7 +201,7 @@ export async function getCancelLateMilestoneInstructionAsync<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
     TAccountTokenProgram,
@@ -211,7 +217,7 @@ export async function getCancelLateMilestoneInstructionAsync<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
     TAccountTokenProgram,
@@ -229,7 +235,10 @@ export async function getCancelLateMilestoneInstructionAsync<
     escrow: { value: input.escrow ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    refundDestinationAta: {
+      value: input.refundDestinationAta ?? null,
+      isWritable: true,
+    },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
     providerReputation: {
       value: input.providerReputation ?? null,
@@ -302,7 +311,7 @@ export async function getCancelLateMilestoneInstructionAsync<
       getAccountMeta("escrow", accounts.escrow),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("escrowAta", accounts.escrowAta),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("refundDestinationAta", accounts.refundDestinationAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
       getAccountMeta("providerReputation", accounts.providerReputation),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
@@ -320,7 +329,7 @@ export async function getCancelLateMilestoneInstructionAsync<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
     TAccountTokenProgram,
@@ -335,7 +344,7 @@ export type CancelLateMilestoneInput<
   TAccountEscrow extends string = string,
   TAccountMint extends string = string,
   TAccountEscrowAta extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountRefundDestinationAta extends string = string,
   TAccountBuyerReputation extends string = string,
   TAccountProviderReputation extends string = string,
   TAccountTokenProgram extends string = string,
@@ -347,7 +356,13 @@ export type CancelLateMilestoneInput<
   escrow: Address<TAccountEscrow>;
   mint: Address<TAccountMint>;
   escrowAta: Address<TAccountEscrowAta>;
-  buyerAta: Address<TAccountBuyerAta>;
+  /**
+   * Where the buyer-side refund lands. v2 — owner is unconstrained so
+   * the buyer can route the refund to a Cloak-shielded ephemeral
+   * instead of their main wallet (private buyer mode). In public
+   * buyer mode the front-end defaults this to `buyer_ata`.
+   */
+  refundDestinationAta: Address<TAccountRefundDestinationAta>;
   buyerReputation: Address<TAccountBuyerReputation>;
   /** Provider rep - gets the late_milestones increment. */
   providerReputation: Address<TAccountProviderReputation>;
@@ -363,7 +378,7 @@ export function getCancelLateMilestoneInstruction<
   TAccountEscrow extends string,
   TAccountMint extends string,
   TAccountEscrowAta extends string,
-  TAccountBuyerAta extends string,
+  TAccountRefundDestinationAta extends string,
   TAccountBuyerReputation extends string,
   TAccountProviderReputation extends string,
   TAccountTokenProgram extends string,
@@ -377,7 +392,7 @@ export function getCancelLateMilestoneInstruction<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
     TAccountTokenProgram,
@@ -392,7 +407,7 @@ export function getCancelLateMilestoneInstruction<
   TAccountEscrow,
   TAccountMint,
   TAccountEscrowAta,
-  TAccountBuyerAta,
+  TAccountRefundDestinationAta,
   TAccountBuyerReputation,
   TAccountProviderReputation,
   TAccountTokenProgram,
@@ -409,7 +424,10 @@ export function getCancelLateMilestoneInstruction<
     escrow: { value: input.escrow ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    refundDestinationAta: {
+      value: input.refundDestinationAta ?? null,
+      isWritable: true,
+    },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
     providerReputation: {
       value: input.providerReputation ?? null,
@@ -445,7 +463,7 @@ export function getCancelLateMilestoneInstruction<
       getAccountMeta("escrow", accounts.escrow),
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("escrowAta", accounts.escrowAta),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("refundDestinationAta", accounts.refundDestinationAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
       getAccountMeta("providerReputation", accounts.providerReputation),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
@@ -463,7 +481,7 @@ export function getCancelLateMilestoneInstruction<
     TAccountEscrow,
     TAccountMint,
     TAccountEscrowAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountBuyerReputation,
     TAccountProviderReputation,
     TAccountTokenProgram,
@@ -483,7 +501,13 @@ export type ParsedCancelLateMilestoneInstruction<
     escrow: TAccountMetas[3];
     mint: TAccountMetas[4];
     escrowAta: TAccountMetas[5];
-    buyerAta: TAccountMetas[6];
+    /**
+     * Where the buyer-side refund lands. v2 — owner is unconstrained so
+     * the buyer can route the refund to a Cloak-shielded ephemeral
+     * instead of their main wallet (private buyer mode). In public
+     * buyer mode the front-end defaults this to `buyer_ata`.
+     */
+    refundDestinationAta: TAccountMetas[6];
     buyerReputation: TAccountMetas[7];
     /** Provider rep - gets the late_milestones increment. */
     providerReputation: TAccountMetas[8];
@@ -525,7 +549,7 @@ export function parseCancelLateMilestoneInstruction<
       escrow: getNextAccount(),
       mint: getNextAccount(),
       escrowAta: getNextAccount(),
-      buyerAta: getNextAccount(),
+      refundDestinationAta: getNextAccount(),
       buyerReputation: getNextAccount(),
       providerReputation: getNextAccount(),
       tokenProgram: getNextAccount(),

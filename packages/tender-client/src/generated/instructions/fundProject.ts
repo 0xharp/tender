@@ -54,13 +54,16 @@ export function getFundProjectDiscriminatorBytes(): ReadonlyUint8Array {
 
 export type FundProjectInstruction<
   TProgram extends string = typeof TENDER_PROGRAM_ADDRESS,
+  TAccountFunder extends string | AccountMeta<string> = string,
   TAccountBuyer extends string | AccountMeta<string> = string,
   TAccountRfp extends string | AccountMeta<string> = string,
   TAccountMint extends string | AccountMeta<string> = string,
-  TAccountBuyerAta extends string | AccountMeta<string> = string,
+  TAccountFunderAta extends string | AccountMeta<string> = string,
   TAccountEscrow extends string | AccountMeta<string> = string,
   TAccountEscrowAta extends string | AccountMeta<string> = string,
   TAccountBuyerReputation extends string | AccountMeta<string> = string,
+  TAccountInstructionsSysvar extends string | AccountMeta<string> =
+    "Sysvar1nstructions1111111111111111111111111",
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountAssociatedTokenProgram extends string | AccountMeta<string> =
@@ -72,17 +75,20 @@ export type FundProjectInstruction<
   InstructionWithData<ReadonlyUint8Array> &
   InstructionWithAccounts<
     [
+      TAccountFunder extends string
+        ? WritableSignerAccount<TAccountFunder> &
+            AccountSignerMeta<TAccountFunder>
+        : TAccountFunder,
       TAccountBuyer extends string
-        ? WritableSignerAccount<TAccountBuyer> &
-            AccountSignerMeta<TAccountBuyer>
+        ? ReadonlyAccount<TAccountBuyer>
         : TAccountBuyer,
       TAccountRfp extends string ? WritableAccount<TAccountRfp> : TAccountRfp,
       TAccountMint extends string
         ? ReadonlyAccount<TAccountMint>
         : TAccountMint,
-      TAccountBuyerAta extends string
-        ? WritableAccount<TAccountBuyerAta>
-        : TAccountBuyerAta,
+      TAccountFunderAta extends string
+        ? WritableAccount<TAccountFunderAta>
+        : TAccountFunderAta,
       TAccountEscrow extends string
         ? WritableAccount<TAccountEscrow>
         : TAccountEscrow,
@@ -92,6 +98,9 @@ export type FundProjectInstruction<
       TAccountBuyerReputation extends string
         ? WritableAccount<TAccountBuyerReputation>
         : TAccountBuyerReputation,
+      TAccountInstructionsSysvar extends string
+        ? ReadonlyAccount<TAccountInstructionsSysvar>
+        : TAccountInstructionsSysvar,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -133,62 +142,92 @@ export function getFundProjectInstructionDataCodec(): FixedSizeCodec<
 }
 
 export type FundProjectAsyncInput<
+  TAccountFunder extends string = string,
   TAccountBuyer extends string = string,
   TAccountRfp extends string = string,
   TAccountMint extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountFunderAta extends string = string,
   TAccountEscrow extends string = string,
   TAccountEscrowAta extends string = string,
   TAccountBuyerReputation extends string = string,
+  TAccountInstructionsSysvar extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountAssociatedTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
-  buyer: TransactionSigner<TAccountBuyer>;
   /**
-   * `Box<Account>` (instead of plain `Account`) heap-allocates the
-   * deserialized struct - critical here because `Rfp` is now 431 bytes
-   * and Anchor's expanded `try_accounts` function would otherwise put it
-   * directly on the 4KB Solana stack frame. Combined with the other
-   * stack-allocated accounts below (escrow init + ATA init + reputation),
-   * the un-boxed version overflows the stack with "Access violation in
-   * stack frame N" at runtime. Same pattern applied to every other heavy
-   * account in this struct.
+   * Pays tx fee + ATA/escrow rent + provides the source token account.
+   * Decoupled from `buyer` (v2) so a Cloak-shielded ephemeral can settle
+   * the deposit without on-chain link to the buyer's main wallet.
    */
+  funder: TransactionSigner<TAccountFunder>;
+  /**
+   * Read-only reference to whoever the program treats as the buyer
+   * (`rfp.buyer`). Verified two ways:
+   * 1. Anchor's `has_one = buyer` on the rfp account
+   * 2. The Ed25519SigVerify ix in this tx must sign the canonical
+   * `tender-fund-auth-v1` message with this pubkey
+   */
+  buyer: Address<TAccountBuyer>;
+  /** `Box<Account>` for the same stack-frame reason as before. */
   rfp: Address<TAccountRfp>;
   mint: Address<TAccountMint>;
-  /** Source ATA: buyer's USDC. */
-  buyerAta?: Address<TAccountBuyerAta>;
+  /**
+   * Source ATA: funder's USDC. (v2 — was buyer's ATA. In private
+   * buyer mode, the funder ephemeral receives USDC from a Cloak
+   * shielded withdraw before signing this tx.)
+   */
+  funderAta?: Address<TAccountFunderAta>;
   escrow?: Address<TAccountEscrow>;
-  /** Escrow ATA: the PDA that will hold the locked USDC. */
+  /**
+   * Escrow ATA: the PDA that will hold the locked USDC. (v2 — funder
+   * pays rent; same destination as before.)
+   */
   escrowAta?: Address<TAccountEscrowAta>;
+  /**
+   * Buyer reputation PDA — keyed on `rfp.buyer` regardless of mode.
+   * In public mode this is the buyer's main wallet rep (today's
+   * behavior). In private mode this is the ephemeral's stranded
+   * rep PDA: it gets the increment but nobody ever reads it; the
+   * buyer can later opt to merge it into their main rep via
+   * `attest_buyer_history`.
+   */
   buyerReputation?: Address<TAccountBuyerReputation>;
+  /**
+   * `sysvar_ix` helpers, which validate its address. Required to
+   * introspect the Ed25519SigVerify ix.
+   */
+  instructionsSysvar?: Address<TAccountInstructionsSysvar>;
   tokenProgram?: Address<TAccountTokenProgram>;
   associatedTokenProgram?: Address<TAccountAssociatedTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
 
 export async function getFundProjectInstructionAsync<
+  TAccountFunder extends string,
   TAccountBuyer extends string,
   TAccountRfp extends string,
   TAccountMint extends string,
-  TAccountBuyerAta extends string,
+  TAccountFunderAta extends string,
   TAccountEscrow extends string,
   TAccountEscrowAta extends string,
   TAccountBuyerReputation extends string,
+  TAccountInstructionsSysvar extends string,
   TAccountTokenProgram extends string,
   TAccountAssociatedTokenProgram extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
   input: FundProjectAsyncInput<
+    TAccountFunder,
     TAccountBuyer,
     TAccountRfp,
     TAccountMint,
-    TAccountBuyerAta,
+    TAccountFunderAta,
     TAccountEscrow,
     TAccountEscrowAta,
     TAccountBuyerReputation,
+    TAccountInstructionsSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -197,13 +236,15 @@ export async function getFundProjectInstructionAsync<
 ): Promise<
   FundProjectInstruction<
     TProgramAddress,
+    TAccountFunder,
     TAccountBuyer,
     TAccountRfp,
     TAccountMint,
-    TAccountBuyerAta,
+    TAccountFunderAta,
     TAccountEscrow,
     TAccountEscrowAta,
     TAccountBuyerReputation,
+    TAccountInstructionsSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -214,13 +255,18 @@ export async function getFundProjectInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    buyer: { value: input.buyer ?? null, isWritable: true },
+    funder: { value: input.funder ?? null, isWritable: true },
+    buyer: { value: input.buyer ?? null, isWritable: false },
     rfp: { value: input.rfp ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    funderAta: { value: input.funderAta ?? null, isWritable: true },
     escrow: { value: input.escrow ?? null, isWritable: true },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
+    instructionsSysvar: {
+      value: input.instructionsSysvar ?? null,
+      isWritable: false,
+    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     associatedTokenProgram: {
       value: input.associatedTokenProgram ?? null,
@@ -234,15 +280,15 @@ export async function getFundProjectInstructionAsync<
   >;
 
   // Resolve default values.
-  if (!accounts.buyerAta.value) {
-    accounts.buyerAta.value = await getProgramDerivedAddress({
+  if (!accounts.funderAta.value) {
+    accounts.funderAta.value = await getProgramDerivedAddress({
       programAddress:
         "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address<"ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL">,
       seeds: [
         getAddressEncoder().encode(
           getAddressFromResolvedInstructionAccount(
-            "buyer",
-            accounts.buyer.value,
+            "funder",
+            accounts.funder.value,
           ),
         ),
         getBytesEncoder().encode(
@@ -295,6 +341,10 @@ export async function getFundProjectInstructionAsync<
       ),
     });
   }
+  if (!accounts.instructionsSysvar.value) {
+    accounts.instructionsSysvar.value =
+      "Sysvar1nstructions1111111111111111111111111" as Address<"Sysvar1nstructions1111111111111111111111111">;
+  }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
@@ -311,13 +361,15 @@ export async function getFundProjectInstructionAsync<
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
+      getAccountMeta("funder", accounts.funder),
       getAccountMeta("buyer", accounts.buyer),
       getAccountMeta("rfp", accounts.rfp),
       getAccountMeta("mint", accounts.mint),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("funderAta", accounts.funderAta),
       getAccountMeta("escrow", accounts.escrow),
       getAccountMeta("escrowAta", accounts.escrowAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
+      getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
@@ -326,13 +378,15 @@ export async function getFundProjectInstructionAsync<
     programAddress,
   } as FundProjectInstruction<
     TProgramAddress,
+    TAccountFunder,
     TAccountBuyer,
     TAccountRfp,
     TAccountMint,
-    TAccountBuyerAta,
+    TAccountFunderAta,
     TAccountEscrow,
     TAccountEscrowAta,
     TAccountBuyerReputation,
+    TAccountInstructionsSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -340,62 +394,92 @@ export async function getFundProjectInstructionAsync<
 }
 
 export type FundProjectInput<
+  TAccountFunder extends string = string,
   TAccountBuyer extends string = string,
   TAccountRfp extends string = string,
   TAccountMint extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountFunderAta extends string = string,
   TAccountEscrow extends string = string,
   TAccountEscrowAta extends string = string,
   TAccountBuyerReputation extends string = string,
+  TAccountInstructionsSysvar extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountAssociatedTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
-  buyer: TransactionSigner<TAccountBuyer>;
   /**
-   * `Box<Account>` (instead of plain `Account`) heap-allocates the
-   * deserialized struct - critical here because `Rfp` is now 431 bytes
-   * and Anchor's expanded `try_accounts` function would otherwise put it
-   * directly on the 4KB Solana stack frame. Combined with the other
-   * stack-allocated accounts below (escrow init + ATA init + reputation),
-   * the un-boxed version overflows the stack with "Access violation in
-   * stack frame N" at runtime. Same pattern applied to every other heavy
-   * account in this struct.
+   * Pays tx fee + ATA/escrow rent + provides the source token account.
+   * Decoupled from `buyer` (v2) so a Cloak-shielded ephemeral can settle
+   * the deposit without on-chain link to the buyer's main wallet.
    */
+  funder: TransactionSigner<TAccountFunder>;
+  /**
+   * Read-only reference to whoever the program treats as the buyer
+   * (`rfp.buyer`). Verified two ways:
+   * 1. Anchor's `has_one = buyer` on the rfp account
+   * 2. The Ed25519SigVerify ix in this tx must sign the canonical
+   * `tender-fund-auth-v1` message with this pubkey
+   */
+  buyer: Address<TAccountBuyer>;
+  /** `Box<Account>` for the same stack-frame reason as before. */
   rfp: Address<TAccountRfp>;
   mint: Address<TAccountMint>;
-  /** Source ATA: buyer's USDC. */
-  buyerAta: Address<TAccountBuyerAta>;
+  /**
+   * Source ATA: funder's USDC. (v2 — was buyer's ATA. In private
+   * buyer mode, the funder ephemeral receives USDC from a Cloak
+   * shielded withdraw before signing this tx.)
+   */
+  funderAta: Address<TAccountFunderAta>;
   escrow: Address<TAccountEscrow>;
-  /** Escrow ATA: the PDA that will hold the locked USDC. */
+  /**
+   * Escrow ATA: the PDA that will hold the locked USDC. (v2 — funder
+   * pays rent; same destination as before.)
+   */
   escrowAta: Address<TAccountEscrowAta>;
+  /**
+   * Buyer reputation PDA — keyed on `rfp.buyer` regardless of mode.
+   * In public mode this is the buyer's main wallet rep (today's
+   * behavior). In private mode this is the ephemeral's stranded
+   * rep PDA: it gets the increment but nobody ever reads it; the
+   * buyer can later opt to merge it into their main rep via
+   * `attest_buyer_history`.
+   */
   buyerReputation: Address<TAccountBuyerReputation>;
+  /**
+   * `sysvar_ix` helpers, which validate its address. Required to
+   * introspect the Ed25519SigVerify ix.
+   */
+  instructionsSysvar?: Address<TAccountInstructionsSysvar>;
   tokenProgram?: Address<TAccountTokenProgram>;
   associatedTokenProgram?: Address<TAccountAssociatedTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
 
 export function getFundProjectInstruction<
+  TAccountFunder extends string,
   TAccountBuyer extends string,
   TAccountRfp extends string,
   TAccountMint extends string,
-  TAccountBuyerAta extends string,
+  TAccountFunderAta extends string,
   TAccountEscrow extends string,
   TAccountEscrowAta extends string,
   TAccountBuyerReputation extends string,
+  TAccountInstructionsSysvar extends string,
   TAccountTokenProgram extends string,
   TAccountAssociatedTokenProgram extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof TENDER_PROGRAM_ADDRESS,
 >(
   input: FundProjectInput<
+    TAccountFunder,
     TAccountBuyer,
     TAccountRfp,
     TAccountMint,
-    TAccountBuyerAta,
+    TAccountFunderAta,
     TAccountEscrow,
     TAccountEscrowAta,
     TAccountBuyerReputation,
+    TAccountInstructionsSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -403,13 +487,15 @@ export function getFundProjectInstruction<
   config?: { programAddress?: TProgramAddress },
 ): FundProjectInstruction<
   TProgramAddress,
+  TAccountFunder,
   TAccountBuyer,
   TAccountRfp,
   TAccountMint,
-  TAccountBuyerAta,
+  TAccountFunderAta,
   TAccountEscrow,
   TAccountEscrowAta,
   TAccountBuyerReputation,
+  TAccountInstructionsSysvar,
   TAccountTokenProgram,
   TAccountAssociatedTokenProgram,
   TAccountSystemProgram
@@ -419,13 +505,18 @@ export function getFundProjectInstruction<
 
   // Original accounts.
   const originalAccounts = {
-    buyer: { value: input.buyer ?? null, isWritable: true },
+    funder: { value: input.funder ?? null, isWritable: true },
+    buyer: { value: input.buyer ?? null, isWritable: false },
     rfp: { value: input.rfp ?? null, isWritable: true },
     mint: { value: input.mint ?? null, isWritable: false },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    funderAta: { value: input.funderAta ?? null, isWritable: true },
     escrow: { value: input.escrow ?? null, isWritable: true },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
+    instructionsSysvar: {
+      value: input.instructionsSysvar ?? null,
+      isWritable: false,
+    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     associatedTokenProgram: {
       value: input.associatedTokenProgram ?? null,
@@ -439,6 +530,10 @@ export function getFundProjectInstruction<
   >;
 
   // Resolve default values.
+  if (!accounts.instructionsSysvar.value) {
+    accounts.instructionsSysvar.value =
+      "Sysvar1nstructions1111111111111111111111111" as Address<"Sysvar1nstructions1111111111111111111111111">;
+  }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
@@ -455,13 +550,15 @@ export function getFundProjectInstruction<
   const getAccountMeta = getAccountMetaFactory(programAddress, "programId");
   return Object.freeze({
     accounts: [
+      getAccountMeta("funder", accounts.funder),
       getAccountMeta("buyer", accounts.buyer),
       getAccountMeta("rfp", accounts.rfp),
       getAccountMeta("mint", accounts.mint),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("funderAta", accounts.funderAta),
       getAccountMeta("escrow", accounts.escrow),
       getAccountMeta("escrowAta", accounts.escrowAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
+      getAccountMeta("instructionsSysvar", accounts.instructionsSysvar),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("associatedTokenProgram", accounts.associatedTokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
@@ -470,13 +567,15 @@ export function getFundProjectInstruction<
     programAddress,
   } as FundProjectInstruction<
     TProgramAddress,
+    TAccountFunder,
     TAccountBuyer,
     TAccountRfp,
     TAccountMint,
-    TAccountBuyerAta,
+    TAccountFunderAta,
     TAccountEscrow,
     TAccountEscrowAta,
     TAccountBuyerReputation,
+    TAccountInstructionsSysvar,
     TAccountTokenProgram,
     TAccountAssociatedTokenProgram,
     TAccountSystemProgram
@@ -489,28 +588,52 @@ export type ParsedFundProjectInstruction<
 > = {
   programAddress: Address<TProgram>;
   accounts: {
-    buyer: TAccountMetas[0];
     /**
-     * `Box<Account>` (instead of plain `Account`) heap-allocates the
-     * deserialized struct - critical here because `Rfp` is now 431 bytes
-     * and Anchor's expanded `try_accounts` function would otherwise put it
-     * directly on the 4KB Solana stack frame. Combined with the other
-     * stack-allocated accounts below (escrow init + ATA init + reputation),
-     * the un-boxed version overflows the stack with "Access violation in
-     * stack frame N" at runtime. Same pattern applied to every other heavy
-     * account in this struct.
+     * Pays tx fee + ATA/escrow rent + provides the source token account.
+     * Decoupled from `buyer` (v2) so a Cloak-shielded ephemeral can settle
+     * the deposit without on-chain link to the buyer's main wallet.
      */
-    rfp: TAccountMetas[1];
-    mint: TAccountMetas[2];
-    /** Source ATA: buyer's USDC. */
-    buyerAta: TAccountMetas[3];
-    escrow: TAccountMetas[4];
-    /** Escrow ATA: the PDA that will hold the locked USDC. */
-    escrowAta: TAccountMetas[5];
-    buyerReputation: TAccountMetas[6];
-    tokenProgram: TAccountMetas[7];
-    associatedTokenProgram: TAccountMetas[8];
-    systemProgram: TAccountMetas[9];
+    funder: TAccountMetas[0];
+    /**
+     * Read-only reference to whoever the program treats as the buyer
+     * (`rfp.buyer`). Verified two ways:
+     * 1. Anchor's `has_one = buyer` on the rfp account
+     * 2. The Ed25519SigVerify ix in this tx must sign the canonical
+     * `tender-fund-auth-v1` message with this pubkey
+     */
+    buyer: TAccountMetas[1];
+    /** `Box<Account>` for the same stack-frame reason as before. */
+    rfp: TAccountMetas[2];
+    mint: TAccountMetas[3];
+    /**
+     * Source ATA: funder's USDC. (v2 — was buyer's ATA. In private
+     * buyer mode, the funder ephemeral receives USDC from a Cloak
+     * shielded withdraw before signing this tx.)
+     */
+    funderAta: TAccountMetas[4];
+    escrow: TAccountMetas[5];
+    /**
+     * Escrow ATA: the PDA that will hold the locked USDC. (v2 — funder
+     * pays rent; same destination as before.)
+     */
+    escrowAta: TAccountMetas[6];
+    /**
+     * Buyer reputation PDA — keyed on `rfp.buyer` regardless of mode.
+     * In public mode this is the buyer's main wallet rep (today's
+     * behavior). In private mode this is the ephemeral's stranded
+     * rep PDA: it gets the increment but nobody ever reads it; the
+     * buyer can later opt to merge it into their main rep via
+     * `attest_buyer_history`.
+     */
+    buyerReputation: TAccountMetas[7];
+    /**
+     * `sysvar_ix` helpers, which validate its address. Required to
+     * introspect the Ed25519SigVerify ix.
+     */
+    instructionsSysvar: TAccountMetas[8];
+    tokenProgram: TAccountMetas[9];
+    associatedTokenProgram: TAccountMetas[10];
+    systemProgram: TAccountMetas[11];
   };
   data: FundProjectInstructionData;
 };
@@ -523,12 +646,12 @@ export function parseFundProjectInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedFundProjectInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 10) {
+  if (instruction.accounts.length < 12) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 10,
+        expectedAccountMetas: 12,
       },
     );
   }
@@ -541,13 +664,15 @@ export function parseFundProjectInstruction<
   return {
     programAddress: instruction.programAddress,
     accounts: {
+      funder: getNextAccount(),
       buyer: getNextAccount(),
       rfp: getNextAccount(),
       mint: getNextAccount(),
-      buyerAta: getNextAccount(),
+      funderAta: getNextAccount(),
       escrow: getNextAccount(),
       escrowAta: getNextAccount(),
       buyerReputation: getNextAccount(),
+      instructionsSysvar: getNextAccount(),
       tokenProgram: getNextAccount(),
       associatedTokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),

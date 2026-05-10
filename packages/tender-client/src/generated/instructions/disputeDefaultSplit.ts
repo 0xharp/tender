@@ -62,7 +62,7 @@ export type DisputeDefaultSplitInstruction<
   TAccountMint extends string | AccountMeta<string> = string,
   TAccountEscrowAta extends string | AccountMeta<string> = string,
   TAccountProviderAta extends string | AccountMeta<string> = string,
-  TAccountBuyerAta extends string | AccountMeta<string> = string,
+  TAccountRefundDestinationAta extends string | AccountMeta<string> = string,
   TAccountTreasury extends string | AccountMeta<string> = string,
   TAccountTreasuryAta extends string | AccountMeta<string> = string,
   TAccountBuyerReputation extends string | AccountMeta<string> = string,
@@ -96,9 +96,9 @@ export type DisputeDefaultSplitInstruction<
       TAccountProviderAta extends string
         ? WritableAccount<TAccountProviderAta>
         : TAccountProviderAta,
-      TAccountBuyerAta extends string
-        ? WritableAccount<TAccountBuyerAta>
-        : TAccountBuyerAta,
+      TAccountRefundDestinationAta extends string
+        ? WritableAccount<TAccountRefundDestinationAta>
+        : TAccountRefundDestinationAta,
       TAccountTreasury extends string
         ? WritableAccount<TAccountTreasury>
         : TAccountTreasury,
@@ -166,7 +166,7 @@ export type DisputeDefaultSplitAsyncInput<
   TAccountMint extends string = string,
   TAccountEscrowAta extends string = string,
   TAccountProviderAta extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountRefundDestinationAta extends string = string,
   TAccountTreasury extends string = string,
   TAccountTreasuryAta extends string = string,
   TAccountBuyerReputation extends string = string,
@@ -181,7 +181,13 @@ export type DisputeDefaultSplitAsyncInput<
   mint: Address<TAccountMint>;
   escrowAta?: Address<TAccountEscrowAta>;
   providerAta: Address<TAccountProviderAta>;
-  buyerAta: Address<TAccountBuyerAta>;
+  /**
+   * Where the buyer-side refund lands when the dispute defaults to a
+   * 50/50 split. v2 — owner is unconstrained so the buyer can route
+   * to a Cloak-shielded ephemeral in private buyer mode. Front-end
+   * defaults to `buyer_ata` in public mode.
+   */
+  refundDestinationAta: Address<TAccountRefundDestinationAta>;
   treasury?: Address<TAccountTreasury>;
   treasuryAta?: Address<TAccountTreasuryAta>;
   /**
@@ -208,7 +214,7 @@ export async function getDisputeDefaultSplitInstructionAsync<
   TAccountMint extends string,
   TAccountEscrowAta extends string,
   TAccountProviderAta extends string,
-  TAccountBuyerAta extends string,
+  TAccountRefundDestinationAta extends string,
   TAccountTreasury extends string,
   TAccountTreasuryAta extends string,
   TAccountBuyerReputation extends string,
@@ -225,7 +231,7 @@ export async function getDisputeDefaultSplitInstructionAsync<
     TAccountMint,
     TAccountEscrowAta,
     TAccountProviderAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountBuyerReputation,
@@ -244,7 +250,7 @@ export async function getDisputeDefaultSplitInstructionAsync<
     TAccountMint,
     TAccountEscrowAta,
     TAccountProviderAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountBuyerReputation,
@@ -265,7 +271,10 @@ export async function getDisputeDefaultSplitInstructionAsync<
     mint: { value: input.mint ?? null, isWritable: false },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
     providerAta: { value: input.providerAta ?? null, isWritable: true },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    refundDestinationAta: {
+      value: input.refundDestinationAta ?? null,
+      isWritable: true,
+    },
     treasury: { value: input.treasury ?? null, isWritable: true },
     treasuryAta: { value: input.treasuryAta ?? null, isWritable: true },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
@@ -360,7 +369,7 @@ export async function getDisputeDefaultSplitInstructionAsync<
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("escrowAta", accounts.escrowAta),
       getAccountMeta("providerAta", accounts.providerAta),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("refundDestinationAta", accounts.refundDestinationAta),
       getAccountMeta("treasury", accounts.treasury),
       getAccountMeta("treasuryAta", accounts.treasuryAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
@@ -381,7 +390,7 @@ export async function getDisputeDefaultSplitInstructionAsync<
     TAccountMint,
     TAccountEscrowAta,
     TAccountProviderAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountBuyerReputation,
@@ -399,7 +408,7 @@ export type DisputeDefaultSplitInput<
   TAccountMint extends string = string,
   TAccountEscrowAta extends string = string,
   TAccountProviderAta extends string = string,
-  TAccountBuyerAta extends string = string,
+  TAccountRefundDestinationAta extends string = string,
   TAccountTreasury extends string = string,
   TAccountTreasuryAta extends string = string,
   TAccountBuyerReputation extends string = string,
@@ -414,7 +423,13 @@ export type DisputeDefaultSplitInput<
   mint: Address<TAccountMint>;
   escrowAta: Address<TAccountEscrowAta>;
   providerAta: Address<TAccountProviderAta>;
-  buyerAta: Address<TAccountBuyerAta>;
+  /**
+   * Where the buyer-side refund lands when the dispute defaults to a
+   * 50/50 split. v2 — owner is unconstrained so the buyer can route
+   * to a Cloak-shielded ephemeral in private buyer mode. Front-end
+   * defaults to `buyer_ata` in public mode.
+   */
+  refundDestinationAta: Address<TAccountRefundDestinationAta>;
   treasury: Address<TAccountTreasury>;
   treasuryAta: Address<TAccountTreasuryAta>;
   /**
@@ -441,7 +456,7 @@ export function getDisputeDefaultSplitInstruction<
   TAccountMint extends string,
   TAccountEscrowAta extends string,
   TAccountProviderAta extends string,
-  TAccountBuyerAta extends string,
+  TAccountRefundDestinationAta extends string,
   TAccountTreasury extends string,
   TAccountTreasuryAta extends string,
   TAccountBuyerReputation extends string,
@@ -458,7 +473,7 @@ export function getDisputeDefaultSplitInstruction<
     TAccountMint,
     TAccountEscrowAta,
     TAccountProviderAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountBuyerReputation,
@@ -476,7 +491,7 @@ export function getDisputeDefaultSplitInstruction<
   TAccountMint,
   TAccountEscrowAta,
   TAccountProviderAta,
-  TAccountBuyerAta,
+  TAccountRefundDestinationAta,
   TAccountTreasury,
   TAccountTreasuryAta,
   TAccountBuyerReputation,
@@ -496,7 +511,10 @@ export function getDisputeDefaultSplitInstruction<
     mint: { value: input.mint ?? null, isWritable: false },
     escrowAta: { value: input.escrowAta ?? null, isWritable: true },
     providerAta: { value: input.providerAta ?? null, isWritable: true },
-    buyerAta: { value: input.buyerAta ?? null, isWritable: true },
+    refundDestinationAta: {
+      value: input.refundDestinationAta ?? null,
+      isWritable: true,
+    },
     treasury: { value: input.treasury ?? null, isWritable: true },
     treasuryAta: { value: input.treasuryAta ?? null, isWritable: true },
     buyerReputation: { value: input.buyerReputation ?? null, isWritable: true },
@@ -535,7 +553,7 @@ export function getDisputeDefaultSplitInstruction<
       getAccountMeta("mint", accounts.mint),
       getAccountMeta("escrowAta", accounts.escrowAta),
       getAccountMeta("providerAta", accounts.providerAta),
-      getAccountMeta("buyerAta", accounts.buyerAta),
+      getAccountMeta("refundDestinationAta", accounts.refundDestinationAta),
       getAccountMeta("treasury", accounts.treasury),
       getAccountMeta("treasuryAta", accounts.treasuryAta),
       getAccountMeta("buyerReputation", accounts.buyerReputation),
@@ -556,7 +574,7 @@ export function getDisputeDefaultSplitInstruction<
     TAccountMint,
     TAccountEscrowAta,
     TAccountProviderAta,
-    TAccountBuyerAta,
+    TAccountRefundDestinationAta,
     TAccountTreasury,
     TAccountTreasuryAta,
     TAccountBuyerReputation,
@@ -579,7 +597,13 @@ export type ParsedDisputeDefaultSplitInstruction<
     mint: TAccountMetas[4];
     escrowAta: TAccountMetas[5];
     providerAta: TAccountMetas[6];
-    buyerAta: TAccountMetas[7];
+    /**
+     * Where the buyer-side refund lands when the dispute defaults to a
+     * 50/50 split. v2 — owner is unconstrained so the buyer can route
+     * to a Cloak-shielded ephemeral in private buyer mode. Front-end
+     * defaults to `buyer_ata` in public mode.
+     */
+    refundDestinationAta: TAccountMetas[7];
     treasury: TAccountMetas[8];
     treasuryAta: TAccountMetas[9];
     /**
@@ -632,7 +656,7 @@ export function parseDisputeDefaultSplitInstruction<
       mint: getNextAccount(),
       escrowAta: getNextAccount(),
       providerAta: getNextAccount(),
-      buyerAta: getNextAccount(),
+      refundDestinationAta: getNextAccount(),
       treasury: getNextAccount(),
       treasuryAta: getNextAccount(),
       buyerReputation: getNextAccount(),

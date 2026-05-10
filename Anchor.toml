@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-tender = "4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ"
+tender = "GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z"
 
 [programs.devnet]
-tender = "4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ"
+tender = "GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z"
 
 [registry]
 url = "https://api.apr.dev"

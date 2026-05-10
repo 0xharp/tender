@@ -25,6 +25,13 @@ export interface BuildRfpOgPropsInput {
   /** Raw on-chain status string (`rfpStatusToString(chainRfp.status)`). */
   onChainStatus: string;
   privacyMode: RfpOgPrivacyMode;
+  /**
+   * v2: when 'private', the buyerHandle renders as "Anonymous 🔒"
+   * regardless of slug/wallet. The on-chain rfp.buyer is an HD-derived
+   * ephemeral; surfacing it here would encourage observers to cluster
+   * an unrelated chunk of the buyer's keychain. Default 'public'.
+   */
+  buyerVisibility?: 'public' | 'private';
 }
 
 export const fmtUsdShort = (microUsdc: bigint): string => {
@@ -65,12 +72,16 @@ function fmtBidsEndStat(bidCloseAtIso: string): { value: string; label: string }
 }
 
 export function buildRfpOgProps(input: BuildRfpOgPropsInput): RfpOgCardProps {
+  const isPrivateBuyer = input.buyerVisibility === 'private';
   return {
     title: input.title,
-    buyerHandle: input.buyerSlug.endsWith('.sol')
-      ? input.buyerSlug
-      : truncateWallet(input.buyerWallet),
+    buyerHandle: isPrivateBuyer
+      ? 'anonymous 🔒'
+      : input.buyerSlug.endsWith('.sol')
+        ? input.buyerSlug
+        : truncateWallet(input.buyerWallet),
     privacyMode: input.privacyMode,
+    buyerVisibility: input.buyerVisibility,
     status: mapRfpOgStatus(input.onChainStatus, input.bidCloseAtIso),
     stats: [
       { value: fmtUsdShort(input.contractValueMicroUsdc), label: 'value' },

@@ -23,7 +23,7 @@ use solana_sdk::{
     system_program,
     transaction::Transaction,
 };
-use tender::state::{BidCommit, BidStatus, BidderVisibility, Rfp, RfpStatus};
+use tender::state::{BidCommit, BidStatus, BidderVisibility, BuyerVisibility, Rfp, RfpStatus};
 
 const PROGRAM_SO: &str = "../../target/deploy/tender.so";
 const ONE_SOL: u64 = 1_000_000_000;
@@ -65,6 +65,7 @@ fn default_rfp_args(
         bid_close_at: T0 + 86_400,
         reveal_close_at: T0 + 86_400 * 3,
         bidder_visibility,
+        buyer_visibility: BuyerVisibility::Public,
         reserve_price_commitment: [0u8; 32],
         funding_window_secs: 0,
         review_window_secs: 0,
@@ -223,6 +224,110 @@ fn rfp_create_with_buyer_only_visibility() {
     let (mut svm, buyer) = fresh_svm();
     let rfp = create_rfp_with(&mut svm, &buyer, [7u8; 8], BidderVisibility::BuyerOnly);
     assert_eq!(read_rfp(&svm, rfp).bidder_visibility, BidderVisibility::BuyerOnly);
+}
+
+// -----------------------------------------------------------------------------
+// v2: buyer_visibility + buyer_attested invariants
+// -----------------------------------------------------------------------------
+
+/// Build an `RfpCreate` ix with an explicit buyer_visibility — needed because
+/// `create_rfp` / `create_rfp_with` always pass BuyerVisibility::Public via
+/// default_rfp_args. Locks v2's new field at the program boundary.
+fn create_rfp_full_visibility(
+    svm: &mut LiteSVM,
+    buyer: &Keypair,
+    nonce: [u8; 8],
+    bidder_visibility: BidderVisibility,
+    buyer_visibility: BuyerVisibility,
+) -> Pubkey {
+    let (rfp, _bump) = rfp_pda(&buyer.pubkey(), &nonce);
+    let mut args = default_rfp_args(nonce, bidder_visibility);
+    args.buyer_visibility = buyer_visibility;
+    let ix = Instruction {
+        program_id: tender::ID,
+        accounts: tender::accounts::RfpCreate {
+            buyer: buyer.pubkey(),
+            rfp,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: tender::instruction::RfpCreate { args }.data(),
+    };
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&buyer.pubkey()),
+        &[buyer],
+        svm.latest_blockhash(),
+    );
+    svm.send_transaction(tx).expect("rfp_create should succeed");
+    rfp
+}
+
+#[test]
+fn rfp_create_default_buyer_visibility_is_public() {
+    // The standard create_rfp (used everywhere upstream) defaults to Public.
+    // This pins that the existing public-mode flow continues to work without
+    // any caller change — v2 adds Private as opt-in, doesn't replace.
+    let (mut svm, buyer) = fresh_svm();
+    let rfp = create_rfp(&mut svm, &buyer, [42u8; 8]);
+    let state = read_rfp(&svm, rfp);
+    assert_eq!(state.buyer_visibility, BuyerVisibility::Public);
+}
+
+#[test]
+fn rfp_create_with_buyer_visibility_private() {
+    // Private buyer mode is just a parameter flip at create time. The program
+    // doesn't enforce anything about the signer wallet's relationship to the
+    // main wallet — that's an off-chain (HD-keychain-derived ephemeral) decision
+    // owned by the front-end.
+    let (mut svm, buyer) = fresh_svm();
+    let rfp = create_rfp_full_visibility(
+        &mut svm,
+        &buyer,
+        [99u8; 8],
+        BidderVisibility::Public,
+        BuyerVisibility::Private,
+    );
+    assert_eq!(read_rfp(&svm, rfp).buyer_visibility, BuyerVisibility::Private);
+}
+
+#[test]
+fn rfp_create_initializes_buyer_attested_false() {
+    // The attest flag must always be false on creation — it can only flip via
+    // a successful attest_buyer_history ix (post-completion). Pinning it here
+    // catches any future regression where create_rfp accidentally pre-sets it.
+    let (mut svm, buyer) = fresh_svm();
+    let rfp = create_rfp_full_visibility(
+        &mut svm,
+        &buyer,
+        [11u8; 8],
+        BidderVisibility::Public,
+        BuyerVisibility::Private,
+    );
+    assert!(!read_rfp(&svm, rfp).buyer_attested, "buyer_attested must default to false");
+}
+
+#[test]
+fn rfp_create_all_four_visibility_combinations_succeed() {
+    // BuyerVisibility × BidderVisibility are independent enums — every cell
+    // of the 2x2 must succeed at create time. The program-side has no rule
+    // about pairing them; the front-end may recommend "fully sealed" (both
+    // private) but doesn't reject other combinations.
+    let combos = [
+        (BidderVisibility::Public, BuyerVisibility::Public),
+        (BidderVisibility::Public, BuyerVisibility::Private),
+        (BidderVisibility::BuyerOnly, BuyerVisibility::Public),
+        (BidderVisibility::BuyerOnly, BuyerVisibility::Private),
+    ];
+    for (i, (bv, buv)) in combos.iter().enumerate() {
+        let (mut svm, buyer) = fresh_svm();
+        // Distinct nonces so each iteration creates an independent RFP.
+        let nonce = [i as u8; 8];
+        let rfp = create_rfp_full_visibility(&mut svm, &buyer, nonce, *bv, *buv);
+        let state = read_rfp(&svm, rfp);
+        assert_eq!(state.bidder_visibility, *bv);
+        assert_eq!(state.buyer_visibility, *buv);
+    }
 }
 
 // -----------------------------------------------------------------------------

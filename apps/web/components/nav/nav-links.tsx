@@ -22,7 +22,6 @@ export const PUBLIC_LINKS: NavLink[] = [
 
 export const AUTHED_LINKS: NavLink[] = [
   { href: '/dashboard', label: 'Dashboard', matchPrefix: '/dashboard', authOnly: true },
-  { href: '/me/projects', label: 'My projects', matchPrefix: '/me/projects', authOnly: true },
 ];
 
 export function NavLinks({

@@ -7,6 +7,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { getCurrentWallet } from '@/lib/auth/session';
 import {
   bidderVisibilityToString,
+  buyerVisibilityToString,
   listRfps,
   rfpStatusToString,
   unixSecondsToIso,
@@ -53,6 +54,7 @@ export default async function Page() {
         bid_count: data.bidCount,
         status: rfpStatusToString(data.status),
         bidder_visibility: bidderVisibilityToString(data.bidderVisibility),
+        buyer_visibility: buyerVisibilityToString(data.buyerVisibility),
         has_reserve: !data.reservePriceCommitment.every((b: number) => b === 0),
         reserve_price_revealed_micro: data.reservePriceRevealed,
         // String compare on the base58 form — both sides are typed as

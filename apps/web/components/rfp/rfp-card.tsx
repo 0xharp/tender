@@ -1,7 +1,12 @@
 import { ArrowUpRightIcon } from 'lucide-react';
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
-import { type PrivacyMode, PrivacyTag } from '@/components/primitives/privacy-tag';
+import {
+  type BidderVisibility,
+  type BuyerVisibility,
+  PrivacyBadges,
+} from '@/components/primitives/privacy-tag';
 import { ReserveTag } from '@/components/primitives/reserve-tag';
 import { StatusPill, type StatusTone } from '@/components/primitives/status-pill';
 import { stripMarkdown } from '@/lib/markdown/strip';
@@ -14,6 +19,9 @@ export interface RfpCardData {
   scope_summary: string;
   /** Bidder visibility - "public" or "buyer_only". */
   bidder_visibility: string;
+  /** v2: Buyer visibility - "public" or "private". When "private", the
+   *  on-chain buyer is an HD-derived ephemeral, not the user's main wallet. */
+  buyer_visibility?: string;
   bid_close_at: string;
   /** Reveal-window deadline. When in `reveal` past this, the RFP is lapsed
    *  (no award possible). Optional for backwards compat. */
@@ -28,6 +36,13 @@ export interface RfpCardData {
    *  visual highlight (primary ring + "YOURS" badge) so the buyer can
    *  spot their own RFPs while browsing the marketplace. */
   mine?: boolean;
+  /** Optional next-action label + urgency, used on dashboard surfaces.
+   *  When `actionUrgency==='now'`, the card grows an amber border +
+   *  inline badge surfacing the actual label so the user knows the RFP
+   *  is blocking them. Provided by /dashboard/buying + /dashboard/bidding;
+   *  the marketplace grid omits these (no action context there). */
+  actionLabel?: string;
+  actionUrgency?: 'now' | 'soon' | 'wait' | 'done';
 }
 
 function timeLeft(iso: string): { label: string; tone: 'normal' | 'urgent' | 'closed' } {
@@ -78,7 +93,24 @@ function displayStatus(
   return status ?? 'open';
 }
 
-export function RfpCard({ rfp }: { rfp: RfpCardData }) {
+export function RfpCard({
+  rfp,
+  claimNode,
+  claimPreview,
+}: {
+  rfp: RfpCardData;
+  /** Optional claim CTA to render in the action area (replaces the
+   *  amber "Review milestone N" banner when present). Provided by
+   *  dashboard buying / bidding grids for completed-but-unattested HD
+   *  RFPs / wins. The grid passes a fully-wired button (AttestRfpButton
+   *  or AttestWinButton) since those need wallet hooks the card doesn't
+   *  have access to. */
+  claimNode?: ReactNode;
+  /** Short preview of what the claim merges (e.g. "+1 RFP awarded · $10
+   *  released"). Rendered as the headline above `claimNode`. Required
+   *  when `claimNode` is set. */
+  claimPreview?: string;
+}) {
   const time = timeLeft(rfp.bid_close_at);
   const status = displayStatus(rfp.status, rfp.bid_close_at, rfp.reveal_close_at);
   // Hide the top-right time chip when bidding is over (the StatusPill +
@@ -86,6 +118,8 @@ export function RfpCard({ rfp }: { rfp: RfpCardData }) {
   // corner ribbon is on (the ribbon occupies the same top-right corner
   // and the bottom-row date is enough).
   const showTimeChip = time.tone !== 'closed' && !rfp.mine;
+  const needsAction = rfp.actionUrgency === 'now';
+  const showClaim = !!claimNode;
 
   return (
     <Link
@@ -93,13 +127,14 @@ export function RfpCard({ rfp }: { rfp: RfpCardData }) {
       className={cn(
         'group relative flex h-full flex-col gap-4 overflow-hidden rounded-2xl border bg-card p-5 transition-all',
         'hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/5',
-        // "Your RFP" treatment: a stronger primary-tinted border + subtle
-        // background tint, so the buyer can scan the grid and spot their
-        // own RFPs at a glance. Falls back to the neutral border + hover
-        // accent for everyone else's RFPs.
-        rfp.mine
-          ? 'border-primary/50 bg-primary/[0.04] hover:border-primary/70'
-          : 'border-border/60 hover:border-primary/30',
+        // Action-required treatment wins over "mine" tinting — both
+        // could apply (every dashboard card is "yours" after all),
+        // and the actionable amber should pop hardest.
+        needsAction
+          ? 'border-amber-500/50 bg-amber-500/[0.04] hover:border-amber-500/70'
+          : rfp.mine
+            ? 'border-primary/50 bg-primary/[0.04] hover:border-primary/70'
+            : 'border-border/60 hover:border-primary/30',
       )}
     >
       <span
@@ -123,10 +158,35 @@ export function RfpCard({ rfp }: { rfp: RfpCardData }) {
         </div>
       )}
 
+      {showClaim ? (
+        <div className="-mx-1 -mt-1 flex items-center justify-between gap-3 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/[0.06] px-3 py-1.5 text-[11px] leading-relaxed">
+          <span className="flex flex-col">
+            <span className="font-medium text-fuchsia-700 dark:text-fuchsia-300">
+              Claim into public rep
+            </span>
+            {claimPreview && (
+              <span className="text-[10px] text-muted-foreground">{claimPreview}</span>
+            )}
+          </span>
+          {claimNode}
+        </div>
+      ) : (
+        needsAction &&
+        rfp.actionLabel && (
+          <div className="-mx-1 -mt-1 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+            <span className="size-1.5 animate-pulse rounded-full bg-amber-500 shadow-[0_0_8px] shadow-amber-500/60" />
+            {rfp.actionLabel}
+          </div>
+        )
+      )}
+
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusPill tone={statusTone(status)}>{status}</StatusPill>
-          <PrivacyTag mode={(rfp.bidder_visibility as PrivacyMode) ?? 'public'} />
+          <PrivacyBadges
+            bidderVisibility={(rfp.bidder_visibility as BidderVisibility) ?? 'public'}
+            buyerVisibility={(rfp.buyer_visibility as BuyerVisibility) ?? 'public'}
+          />
           <ReserveTag
             hasReserve={!!rfp.has_reserve}
             revealedMicroUsdc={rfp.reserve_price_revealed_micro}

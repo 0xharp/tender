@@ -51,12 +51,15 @@ pub struct DisputeDefaultSplit<'info> {
     )]
     pub provider_ata: Box<Account<'info, TokenAccount>>,
 
+    /// Where the buyer-side refund lands when the dispute defaults to a
+    /// 50/50 split. v2 — owner is unconstrained so the buyer can route
+    /// to a Cloak-shielded ephemeral in private buyer mode. Front-end
+    /// defaults to `buyer_ata` in public mode.
     #[account(
         mut,
-        constraint = buyer_ata.mint == mint.key() @ TenderError::InvalidRfpStatus,
-        constraint = buyer_ata.owner == rfp.buyer @ TenderError::NotBuyer,
+        constraint = refund_destination_ata.mint == mint.key() @ TenderError::InvalidRfpStatus,
     )]
-    pub buyer_ata: Box<Account<'info, TokenAccount>>,
+    pub refund_destination_ata: Box<Account<'info, TokenAccount>>,
 
     #[account(mut, seeds = [TREASURY_SEED], bump = treasury.bump)]
     pub treasury: Account<'info, Treasury>,
@@ -149,7 +152,7 @@ pub fn handler(ctx: Context<DisputeDefaultSplit>, _milestone_index: u8) -> Resul
                 ctx.accounts.token_program.to_account_info(),
                 TransferChecked {
                     from: ctx.accounts.escrow_ata.to_account_info(),
-                    to: ctx.accounts.buyer_ata.to_account_info(),
+                    to: ctx.accounts.refund_destination_ata.to_account_info(),
                     authority: ctx.accounts.escrow.to_account_info(),
                     mint: ctx.accounts.mint.to_account_info(),
                 },

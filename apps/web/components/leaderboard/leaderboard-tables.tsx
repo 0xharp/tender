@@ -36,7 +36,6 @@ export interface ProviderRow {
   completedProjects: number;
   disputedMilestones: number;
   lateMilestones: number;
-  abandonedProjects: number;
   totalWonUsdc: string;
   totalEarnedUsdc: string;
   totalDisputedUsdc: string;
@@ -67,24 +66,38 @@ type BuyerSort = 'rfps' | 'funded' | 'completed' | 'released' | 'locked' | 'ghos
 export function LeaderboardTables({
   providers,
   buyers,
+  snsByWallet,
 }: {
   providers: ProviderRow[];
   buyers: BuyerRow[];
+  /** SSR-resolved SNS map (wallet pubkey → `<handle>.tendr.sol` or null).
+   *  When provided, rows render their tendr identity on first paint with
+   *  no truncated→SNS flash. Falls back to client-side lookup if a row's
+   *  wallet isn't in the map. */
+  snsByWallet?: Record<string, string | null>;
 }) {
   const [tab, setTab] = useState<Tab>('providers');
 
-  // Bulk-prime the SNS cache with one batched RPC call covering every wallet
-  // on both tabs. Without this, each row's HashLink (with withSns) would fire
-  // its own resolveWalletToSns - 20+ round-trips per leaderboard render.
-  // After the prime, individual hooks hit the in-memory cache instantly.
+  // Prime the in-memory cache with the SSR-resolved values so any other
+  // surface on this page (or a navigation back) gets instant hits.
   useEffect(() => {
+    if (!snsByWallet) return;
+    const map = new Map<Address, string | null>();
+    for (const [w, name] of Object.entries(snsByWallet)) map.set(w as Address, name);
+    primeSnsCache(map);
+  }, [snsByWallet]);
+
+  // Fallback: if SSR didn't pass a map (e.g. older callers), keep the
+  // client-side bulk prime so individual row hooks still hit cache.
+  useEffect(() => {
+    if (snsByWallet) return;
     const wallets = [
       ...providers.map((r) => r.wallet),
       ...buyers.map((r) => r.wallet),
     ] as Address[];
     if (wallets.length === 0) return;
     void resolveWalletsToSns(snsRpc, wallets).then(primeSnsCache);
-  }, [providers, buyers]);
+  }, [providers, buyers, snsByWallet]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -103,12 +116,19 @@ export function LeaderboardTables({
         </TabButton>
       </div>
 
-      {tab === 'providers' ? <ProvidersTable rows={providers} /> : <BuyersTable rows={buyers} />}
+      {tab === 'providers' ? (
+        <ProvidersTable rows={providers} snsByWallet={snsByWallet} />
+      ) : (
+        <BuyersTable rows={buyers} snsByWallet={snsByWallet} />
+      )}
     </div>
   );
 }
 
-function ProvidersTable({ rows }: { rows: ProviderRow[] }) {
+function ProvidersTable({
+  rows,
+  snsByWallet,
+}: { rows: ProviderRow[]; snsByWallet?: Record<string, string | null> }) {
   const [sort, setSort] = useState<ProviderSort>('completed');
   const [asc, setAsc] = useState(false);
 
@@ -228,13 +248,18 @@ function ProvidersTable({ rows }: { rows: ProviderRow[] }) {
                     #{i + 1}
                   </td>
                   <td className="px-4 py-3">
-                    <ProfileLink kind="providers" wallet={row.wallet}>
+                    <ProfileLink
+                      kind="providers"
+                      wallet={row.wallet}
+                      initialSnsName={snsByWallet?.[row.wallet]}
+                    >
                       <HashLink
                         hash={row.wallet}
                         kind="account"
                         visibleChars={6}
                         linkable={false}
                         withSns
+                        initialSnsName={snsByWallet?.[row.wallet]}
                       />
                     </ProfileLink>
                   </td>
@@ -277,7 +302,10 @@ function ProvidersTable({ rows }: { rows: ProviderRow[] }) {
   );
 }
 
-function BuyersTable({ rows }: { rows: BuyerRow[] }) {
+function BuyersTable({
+  rows,
+  snsByWallet,
+}: { rows: BuyerRow[]; snsByWallet?: Record<string, string | null> }) {
   const [sort, setSort] = useState<BuyerSort>('completed');
   const [asc, setAsc] = useState(false);
 
@@ -395,13 +423,18 @@ function BuyersTable({ rows }: { rows: BuyerRow[] }) {
                     #{i + 1}
                   </td>
                   <td className="px-4 py-3">
-                    <ProfileLink kind="buyers" wallet={row.wallet}>
+                    <ProfileLink
+                      kind="buyers"
+                      wallet={row.wallet}
+                      initialSnsName={snsByWallet?.[row.wallet]}
+                    >
                       <HashLink
                         hash={row.wallet}
                         kind="account"
                         visibleChars={6}
                         linkable={false}
                         withSns
+                        initialSnsName={snsByWallet?.[row.wallet]}
                       />
                     </ProfileLink>
                   </td>
@@ -520,13 +553,21 @@ function EmptyTab({ message }: { message: string }) {
 function ProfileLink({
   kind,
   wallet,
+  initialSnsName,
   children,
 }: {
   kind: 'providers' | 'buyers';
   wallet: string;
+  /** SSR-resolved SNS — when present, the href is correct on first paint
+   *  with no post-mount swap. Caller threads this from the table's
+   *  `snsByWallet` prop. */
+  initialSnsName?: string | null;
   children: React.ReactNode;
 }) {
-  const snsName = useSnsName(wallet as Address);
+  // Skip the hook when SSR already resolved this wallet — eliminates
+  // the truncated→.sol href swap entirely.
+  const hookName = useSnsName(initialSnsName === undefined ? (wallet as Address) : null);
+  const snsName = initialSnsName !== undefined ? initialSnsName : hookName;
   const slug = snsName ?? wallet;
   return (
     <Link

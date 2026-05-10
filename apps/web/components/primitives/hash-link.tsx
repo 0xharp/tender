@@ -40,6 +40,25 @@ export interface HashLinkProps {
    * per-RFP ephemeral bid signer. See `lib/sns/resolve.ts` for why.
    */
   withSns?: boolean;
+  /**
+   * Server-resolved SNS name (e.g. `harp.tendr.sol`) — when provided, used
+   * as the initial display value with NO hook call + NO post-mount flash.
+   * Pass `null` to indicate "we already checked, no SNS set." Pass
+   * `undefined` to fall back to client-side `withSns` resolution. Use
+   * this on SSR pages (leaderboard, profile pages) that bulk-resolve
+   * SNS via `resolveWalletsToSns` ahead of render.
+   */
+  initialSnsName?: string | null;
+  /**
+   * When set, the wallet is known to be a per-RFP ephemeral (HD-derived
+   * buyer-eph or bidder-eph). Renders as `Anon Buyer · {trunc}` /
+   * `Anon Provider · {trunc}` instead of the bare truncated hash, and
+   * unconditionally suppresses SNS resolution (ephemerals never have
+   * `.tendr.sol` claims and even if they did the privacy invariant
+   * forbids resolving them). Caller is responsible for knowing the
+   * role — there's no on-chain marker that says "this is an ephemeral."
+   */
+  ephemeralRole?: 'buyer' | 'provider';
   className?: string;
 }
 
@@ -64,15 +83,20 @@ export function HashLink({
   copyable = true,
   linkable = true,
   withSns = false,
+  initialSnsName,
+  ephemeralRole,
   className,
 }: HashLinkProps) {
   const [copied, setCopied] = useState(false);
 
-  // SNS reverse-resolution: only when explicitly opted in by the caller
-  // AND the kind suggests this is a wallet (not a tx hash). Hook returns
-  // undefined while loading + null if no .sol set; either way we fall
-  // back to the truncated-hash display.
-  const snsName = useSnsName(withSns && kind === 'account' ? (hash as Address) : null);
+  // Ephemeral wallets never get SNS resolution (privacy invariant). Same
+  // for non-account kinds (tx hashes etc.). When a server-resolved
+  // `initialSnsName` is provided we trust it and skip the hook entirely
+  // — eliminates the truncated-hash → SNS post-mount flash.
+  const shouldUseHook =
+    withSns && kind === 'account' && !ephemeralRole && initialSnsName === undefined;
+  const hookSnsName = useSnsName(shouldUseHook ? (hash as Address) : null);
+  const snsName = initialSnsName !== undefined ? initialSnsName : hookSnsName;
 
   const resolvedHref =
     href ?? (kind === 'none' ? null : `https://solscan.io/${kind}/${hash}?cluster=${cluster}`);
@@ -84,11 +108,21 @@ export function HashLink({
       ? hash
       : `${hash.slice(0, visibleChars)}…${hash.slice(-visibleChars)}`;
 
-  // When SNS resolves, swap the visible label to the .sol name. Tooltip
-  // (title attr) keeps the underlying wallet visible so users can verify
-  // they're looking at the right wallet.
-  const display = snsName ?? truncated;
-  const titleAttr = snsName ? `${snsName} · ${hash}` : undefined;
+  // Display order of preference:
+  //   1. ephemeral label ("Anon Buyer · {trunc}") when caller flagged it
+  //   2. SNS name when resolved (server-passed or hook)
+  //   3. truncated hash
+  // Tooltip (title attr) keeps the underlying wallet visible so users
+  // can always verify the address regardless of label.
+  const ephemeralLabel = ephemeralRole
+    ? `Anon ${ephemeralRole === 'buyer' ? 'Buyer' : 'Provider'} · ${truncated}`
+    : null;
+  const display = ephemeralLabel ?? snsName ?? truncated;
+  const titleAttr = ephemeralLabel
+    ? `${ephemeralLabel.split(' · ')[0]} (per-RFP ephemeral) · ${hash}`
+    : snsName
+      ? `${snsName} · ${hash}`
+      : undefined;
 
   const copy = async (e: React.MouseEvent) => {
     e.preventDefault();

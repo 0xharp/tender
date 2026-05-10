@@ -108,8 +108,13 @@ export const TENDER_ERROR__NO_DELIVERY_DEADLINE = 0x179c; // 6044
 export const TENDER_ERROR__MATH_OVERFLOW = 0x179d; // 6045
 /** InsufficientEscrow: Insufficient escrow balance */
 export const TENDER_ERROR__INSUFFICIENT_ESCROW = 0x179e; // 6046
+/** NotAttestable: attest_buyer_history is only valid on private RFPs in Completed state */
+export const TENDER_ERROR__NOT_ATTESTABLE = 0x179f; // 6047
+/** AlreadyAttested: This RFP has already been attested */
+export const TENDER_ERROR__ALREADY_ATTESTED = 0x17a0; // 6048
 
 export type TenderError =
+  | typeof TENDER_ERROR__ALREADY_ATTESTED
   | typeof TENDER_ERROR__ANOTHER_MILESTONE_ACTIVE
   | typeof TENDER_ERROR__BID_ALREADY_COMMITTED
   | typeof TENDER_ERROR__BID_COMMIT_HASH_MISMATCH
@@ -146,6 +151,7 @@ export type TenderError =
   | typeof TENDER_ERROR__ITERATIONS_EXHAUSTED
   | typeof TENDER_ERROR__MATH_OVERFLOW
   | typeof TENDER_ERROR__NO_DELIVERY_DEADLINE
+  | typeof TENDER_ERROR__NOT_ATTESTABLE
   | typeof TENDER_ERROR__NOT_BUYER
   | typeof TENDER_ERROR__NOT_DISPUTE_PARTY
   | typeof TENDER_ERROR__NOT_PROVIDER
@@ -161,6 +167,7 @@ export type TenderError =
 let tenderErrorMessages: Record<TenderError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   tenderErrorMessages = {
+    [TENDER_ERROR__ALREADY_ATTESTED]: `This RFP has already been attested`,
     [TENDER_ERROR__ANOTHER_MILESTONE_ACTIVE]: `Another milestone is currently active - only one milestone can be in flight at a time`,
     [TENDER_ERROR__BID_ALREADY_COMMITTED]: `Bid commit already exists for this provider`,
     [TENDER_ERROR__BID_COMMIT_HASH_MISMATCH]: `Bid commit hash mismatch`,
@@ -197,6 +204,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [TENDER_ERROR__ITERATIONS_EXHAUSTED]: `Iteration count exceeded`,
     [TENDER_ERROR__MATH_OVERFLOW]: `Token math overflow`,
     [TENDER_ERROR__NO_DELIVERY_DEADLINE]: `Milestone has no delivery deadline configured - cancel_late_milestone unavailable`,
+    [TENDER_ERROR__NOT_ATTESTABLE]: `attest_buyer_history is only valid on private RFPs in Completed state`,
     [TENDER_ERROR__NOT_BUYER]: `Signer is not the buyer`,
     [TENDER_ERROR__NOT_DISPUTE_PARTY]: `Signer is not a party to this dispute`,
     [TENDER_ERROR__NOT_PROVIDER]: `Signer is not the provider`,

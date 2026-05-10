@@ -1,4 +1,6 @@
 pub mod accept_milestone;
+pub mod attest_buyer_history;
+pub mod attest_win;
 pub mod auto_release_milestone;
 pub mod cancel_late_milestone;
 pub mod cancel_with_notice;
@@ -27,6 +29,10 @@ pub mod write_bid_chunk;
 
 #[allow(ambiguous_glob_reexports)]
 pub use accept_milestone::*;
+#[allow(ambiguous_glob_reexports)]
+pub use attest_buyer_history::*;
+#[allow(ambiguous_glob_reexports)]
+pub use attest_win::*;
 #[allow(ambiguous_glob_reexports)]
 pub use auto_release_milestone::*;
 #[allow(ambiguous_glob_reexports)]

@@ -47,6 +47,26 @@ pub struct ProviderReputation {
 pub const BUYER_REP_SEED: &[u8] = b"buyer_rep";
 pub const PROVIDER_REP_SEED: &[u8] = b"provider_rep";
 
+/// Seed for the per-bid `AttestWinReceipt` PDA created by `attest_win`.
+/// We can't store the idempotency flag on `BidCommit` itself because the bid
+/// stays delegated to the MagicBlock delegation program after `select_bid`
+/// (so the tender program loses write authority over it). The receipt PDA
+/// gives us the same idempotency guarantee — Anchor's `init` constraint
+/// rejects the second call with `AccountAlreadyInUse`.
+pub const ATTEST_WIN_RECEIPT_SEED: &[u8] = b"win_receipt";
+
+/// One-shot proof that a particular bid's win was claimed into a main wallet's
+/// public reputation. Existence == claimed (idempotency); contents are pure
+/// telemetry (off-chain queries, future "who claimed what when" UIs).
+#[account]
+#[derive(InitSpace)]
+pub struct AttestWinReceipt {
+    pub bid: Pubkey,
+    pub main_wallet: Pubkey,
+    pub at: i64,
+    pub bump: u8,
+}
+
 #[event]
 pub struct BuyerReputationUpdated {
     pub buyer: Pubkey,

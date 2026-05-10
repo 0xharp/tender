@@ -11,7 +11,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { getCurrentWallet } from '@/lib/auth/session';
-import { TendrWalletProvider } from '@/lib/wallet';
+import { KeychainProvider, MyActivityProvider, TendrWalletProvider } from '@/lib/wallet';
 
 import './globals.css';
 
@@ -26,19 +26,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'tendr.bid - private procurement for crypto-native organizations',
+  title: 'tendr.bid · End-to-end private RFP procurement on Solana',
   description:
-    'Sealed-bid RFPs, on-chain escrow with milestone-based release, cross-chain payouts, and portable on-chain reputation. Built on Solana.',
+    'Sealed bids on a TEE-backed rollup, milestone escrow funded through Cloak, anonymous buyer + bidder ephemerals, and on-chain reputation that merges into your main wallet on your terms.',
   openGraph: {
     title: 'tendr.bid',
-    description: 'Sealed-bid procurement on Solana - privacy, escrow, reputation.',
+    description:
+      'End-to-end private RFP procurement on Solana — sealed bids, milestone escrow, anonymous wallets, on-chain reputation.',
     type: 'website',
     siteName: 'tendr.bid',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'tendr.bid',
-    description: 'Sealed-bid procurement on Solana - privacy, escrow, reputation.',
+    description:
+      'End-to-end private RFP procurement on Solana — sealed bids, milestone escrow, anonymous wallets, on-chain reputation.',
     // `site` is the brand handle that gets attribution on every X link
     // card pointing at tendr.bid. `creator` is the founder's handle.
     site: '@tendrdotbid',
@@ -69,14 +71,29 @@ export default async function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
           <TooltipProvider>
             <TendrWalletProvider>
-              <IdentityModalProvider signedInWallet={signedInWallet}>
-                <div className="flex min-h-screen flex-col">
-                  <TopNav />
-                  <PageTransition>{children}</PageTransition>
-                  <SiteFooter />
-                </div>
-                <Toaster />
-              </IdentityModalProvider>
+              {/* KeychainProvider — single source of HD-master-seed
+                  derivation per session. Mounted INSIDE the wallet
+                  provider so it can read the connected account, but
+                  OUTSIDE the route children so the cached seed
+                  survives navigation. */}
+              <KeychainProvider signedInWallet={signedInWallet}>
+                {/* MyActivityProvider — single source of truth for
+                    "all my RFPs + bids + ephemerals" across both the
+                    main wallet AND HD-derived ephemerals. Mounted
+                    inside KeychainProvider so it can read the keychain
+                    handle; outside the route children so its cache
+                    survives navigation. */}
+                <MyActivityProvider signedInWallet={signedInWallet}>
+                  <IdentityModalProvider signedInWallet={signedInWallet}>
+                    <div className="flex min-h-screen flex-col">
+                      <TopNav />
+                      <PageTransition>{children}</PageTransition>
+                      <SiteFooter />
+                    </div>
+                    <Toaster />
+                  </IdentityModalProvider>
+                </MyActivityProvider>
+              </KeychainProvider>
             </TendrWalletProvider>
           </TooltipProvider>
         </ThemeProvider>

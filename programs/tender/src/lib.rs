@@ -7,7 +7,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ");
+declare_id!("GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z");
 
 #[ephemeral]
 #[program]
@@ -126,6 +126,16 @@ pub mod tender {
         milestone_index: u8,
     ) -> Result<()> {
         instructions::dispute_default_split::handler(ctx, milestone_index)
+    }
+
+    /* ----- v2: private buyer attestation ---------------------------------- */
+    pub fn attest_buyer_history(ctx: Context<AttestBuyerHistory>) -> Result<()> {
+        instructions::attest_buyer_history::handler(ctx)
+    }
+
+    /* ----- v2: private bidder/provider attestation ------------------------- */
+    pub fn attest_win(ctx: Context<AttestWin>) -> Result<()> {
+        instructions::attest_win::handler(ctx)
     }
 
 }

@@ -48,12 +48,16 @@ pub struct CancelWithNotice<'info> {
     #[account(mut, associated_token::mint = mint, associated_token::authority = escrow)]
     pub escrow_ata: Account<'info, TokenAccount>,
 
+    /// Where the refund lands. v2 — owner is unconstrained so the buyer
+    /// can route the refund to a Cloak-shielded ephemeral instead of
+    /// their main wallet (private buyer mode). In public buyer mode the
+    /// front-end defaults this to `buyer_ata` and the behavior is
+    /// identical to v1.
     #[account(
         mut,
-        constraint = buyer_ata.mint == mint.key() @ TenderError::InvalidRfpStatus,
-        constraint = buyer_ata.owner == buyer.key() @ TenderError::NotBuyer,
+        constraint = refund_destination_ata.mint == mint.key() @ TenderError::InvalidRfpStatus,
     )]
-    pub buyer_ata: Account<'info, TokenAccount>,
+    pub refund_destination_ata: Account<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -81,7 +85,7 @@ pub fn handler(ctx: Context<CancelWithNotice>, _milestone_index: u8) -> Result<(
                 ctx.accounts.token_program.to_account_info(),
                 TransferChecked {
                     from: ctx.accounts.escrow_ata.to_account_info(),
-                    to: ctx.accounts.buyer_ata.to_account_info(),
+                    to: ctx.accounts.refund_destination_ata.to_account_info(),
                     authority: ctx.accounts.escrow.to_account_info(),
                     mint: ctx.accounts.mint.to_account_info(),
                 },

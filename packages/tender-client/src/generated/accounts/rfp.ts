@@ -19,6 +19,8 @@ import {
   getAddressEncoder,
   getArrayDecoder,
   getArrayEncoder,
+  getBooleanDecoder,
+  getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getI64Decoder,
@@ -53,10 +55,14 @@ import {
 import {
   getBidderVisibilityDecoder,
   getBidderVisibilityEncoder,
+  getBuyerVisibilityDecoder,
+  getBuyerVisibilityEncoder,
   getRfpStatusDecoder,
   getRfpStatusEncoder,
   type BidderVisibility,
   type BidderVisibilityArgs,
+  type BuyerVisibility,
+  type BuyerVisibilityArgs,
   type RfpStatus,
   type RfpStatusArgs,
 } from "../types";
@@ -80,6 +86,24 @@ export type Rfp = {
   revealCloseAt: bigint;
   milestoneCount: number;
   bidderVisibility: BidderVisibility;
+  /**
+   * v2: hides the buyer's main wallet by routing all RFP-side authority
+   * through a per-RFP HD-derived ephemeral. When `Private`, `rfp.buyer`
+   * is that ephemeral pubkey (not the main wallet) and the program
+   * skips all buyer-reputation reads/writes for the lifecycle. The
+   * buyer can optionally claim public credit later via
+   * `attest_buyer_history` once the RFP completes.
+   */
+  buyerVisibility: BuyerVisibility;
+  /**
+   * v2: idempotency flag for `attest_buyer_history`. Default false.
+   * Flips to true when the buyer's main wallet successfully merges
+   * the stranded ephemeral rep into their main rep account. Prevents
+   * double-credit if attest is called twice. Meaningless for Public
+   * RFPs (rep updates land on main wallet directly during the
+   * lifecycle, no merge step required).
+   */
+  buyerAttested: boolean;
   status: RfpStatus;
   winner: Option<Address>;
   winnerProvider: Option<Address>;
@@ -143,6 +167,24 @@ export type RfpArgs = {
   revealCloseAt: number | bigint;
   milestoneCount: number;
   bidderVisibility: BidderVisibilityArgs;
+  /**
+   * v2: hides the buyer's main wallet by routing all RFP-side authority
+   * through a per-RFP HD-derived ephemeral. When `Private`, `rfp.buyer`
+   * is that ephemeral pubkey (not the main wallet) and the program
+   * skips all buyer-reputation reads/writes for the lifecycle. The
+   * buyer can optionally claim public credit later via
+   * `attest_buyer_history` once the RFP completes.
+   */
+  buyerVisibility: BuyerVisibilityArgs;
+  /**
+   * v2: idempotency flag for `attest_buyer_history`. Default false.
+   * Flips to true when the buyer's main wallet successfully merges
+   * the stranded ephemeral rep into their main rep account. Prevents
+   * double-credit if attest is called twice. Meaningless for Public
+   * RFPs (rep updates land on main wallet directly during the
+   * lifecycle, no merge step required).
+   */
+  buyerAttested: boolean;
   status: RfpStatusArgs;
   winner: OptionOrNullable<Address>;
   winnerProvider: OptionOrNullable<Address>;
@@ -210,6 +252,8 @@ export function getRfpEncoder(): Encoder<RfpArgs> {
       ["revealCloseAt", getI64Encoder()],
       ["milestoneCount", getU8Encoder()],
       ["bidderVisibility", getBidderVisibilityEncoder()],
+      ["buyerVisibility", getBuyerVisibilityEncoder()],
+      ["buyerAttested", getBooleanEncoder()],
       ["status", getRfpStatusEncoder()],
       ["winner", getOptionEncoder(getAddressEncoder())],
       ["winnerProvider", getOptionEncoder(getAddressEncoder())],
@@ -247,6 +291,8 @@ export function getRfpDecoder(): Decoder<Rfp> {
     ["revealCloseAt", getI64Decoder()],
     ["milestoneCount", getU8Decoder()],
     ["bidderVisibility", getBidderVisibilityDecoder()],
+    ["buyerVisibility", getBuyerVisibilityDecoder()],
+    ["buyerAttested", getBooleanDecoder()],
     ["status", getRfpStatusDecoder()],
     ["winner", getOptionDecoder(getAddressDecoder())],
     ["winnerProvider", getOptionDecoder(getAddressDecoder())],

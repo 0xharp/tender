@@ -19,21 +19,20 @@ Both PDAs are created on first use (`init_if_needed` from `select_bid`) and
 mutated by every subsequent ix that touches their lifecycle. Reads don't need
 any of this app's code — `getProgramAccounts` + the codama decoder is enough.
 
-## Privacy semantics for the provider rep
+## Privacy semantics across the four privacy modes
 
-In default-mode RFPs (bid contents private, bidder identity public) the bid
-signer IS the main wallet, so reputation keys directly to it. In private-bidder
-mode (bid contents + identity private) the bid is signed by an ephemeral wallet
-but the encrypted envelope carries the main wallet plus a binding signature.
-At award time `select_bid` verifies the binding signature on-chain
-(Ed25519SigVerify precompile) and records `winner_provider = main wallet` on
-the RFP. Every subsequent reputation update keys off `rfp.winner_provider`,
-so reputation always lands on the bidder's main wallet — even when that
-wallet was hidden until award.
+Reputation accrual differs based on the per-RFP **bidder privacy** + **buyer privacy** axes (see [privacy-model](/docs/privacy-model) for the mechanism):
 
-Losing bidders' main wallets stay anonymous forever (their envelopes are never
-decrypted by anyone but themselves). See [privacy-model](/docs/privacy-model)
-for the full mechanism.
+| Mode | `rfp.buyer` | `bid.provider` (winner) | BuyerReputation accrues to | ProviderReputation accrues to |
+|---|---|---|---|---|
+| Public buyer + public bidder | Buyer's main wallet | Provider's main wallet | Main wallet directly | Main wallet directly |
+| Public buyer + private bidder | Buyer's main wallet | Bidder ephemeral | Main wallet directly | Bidder eph PDA, until merged via `attest_win` |
+| Private buyer + public bidder | Buyer ephemeral | Provider's main wallet | Buyer eph PDA, until merged via `attest_buyer_history` | Main wallet directly |
+| Private buyer + private bidder (fully sealed) | Buyer ephemeral | Bidder ephemeral | Buyer eph PDA, until merged via `attest_buyer_history` | Bidder eph PDA, until merged via `attest_win` |
+
+Both ephemerals are HD-derived from the main wallet's master keychain seed (one signature per session unlocks the entire derivation tree). The merge ix on each side is symmetric: idempotent, gated to RFP status `Completed`, verifies an Ed25519 binding signature proving the claiming main wallet is the same one that derived the ephemeral, and atomically copies every counter from the eph PDA into the main-wallet PDA.
+
+Losing bidders' main wallets stay anonymous **forever** — their envelopes are never decrypted in any context that publishes the main wallet on chain, and no claim ix ever runs against them. See [privacy-model](/docs/privacy-model) § "Claim-based reputation merge" for the full mechanism.
 
 ## BuyerReputation fields
 
@@ -75,23 +74,12 @@ cheaper for the common-case "create-and-experiment" path.
 | `total_wins` | u32 | RFPs the provider was awarded | `select_bid` |
 | `completed_projects` | u32 | Won RFPs that drained the escrow with **at least some value released to the provider**. Projects where every milestone was refunded (RFP terminates as `Cancelled`) don't tick this counter. | `accept_milestone`, `auto_release_milestone`, `resolve_dispute`, `dispute_default_split` |
 | `disputed_milestones` | u32 | Milestones that hit the dispute path | `reject_milestone` |
-| `abandoned_projects` | u32 | (Reserved for future provider-walks ix; currently always 0) | — |
 | `late_milestones` | u32 | Milestones provider missed the per-milestone delivery deadline on | `cancel_late_milestone` |
 | `total_won_usdc` | u64 | Sum of `contract_value` across all wins (gross USDC base units) | `select_bid` |
 | `total_earned_usdc` | u64 | Sum NET-of-fee that landed in provider's payout wallet (incl. cancel-penalty payouts) | `accept_milestone`, `auto_release_milestone`, `resolve_dispute`, `dispute_default_split`, `cancel_with_penalty` |
 | `total_disputed_usdc` | u64 | Sum of milestone amounts that hit dispute path (regardless of how dispute closed) | `reject_milestone` (set at dispute-OPEN time) |
 | `last_updated` | i64 | Unix seconds; bumped on every write | every ix above |
 | `bump` | u8 | PDA bump | init only |
-
-### Semantic note: `abandoned_projects`
-
-Field exists in the schema for a future "provider walks the project" ix
-(separate from the dispute path), but no ix currently writes to it. Today, a
-provider that misses delivery is captured by `late_milestones` via
-`cancel_late_milestone`. A provider that initiates a dispute on their own work
-goes through `propose_dispute_split` → reputation writes happen via the
-resolve/default-split paths. UI should treat `abandoned_projects` as an unused
-field for now.
 
 ### Semantic note: `total_disputed_usdc`
 
@@ -181,28 +169,95 @@ Confirms every settlement-path ix updates BOTH sides' rep correctly. (Updated
 | `dispute_default_split` | ✓ amounts + completion (was missing pre-fix) | ✓ amount + completion (was missing pre-fix) |
 | `mark_buyer_ghosted` | ✓ counter | — |
 
+## Claim-based merge from ephemeral to main wallet
+
+Both privacy axes (anonymous buyer, anonymous bidder) accrue reputation on a
+**per-ephemeral PDA** during the project's lifetime. Two symmetric ix merge
+those counters into the main wallet's rep when the user is ready.
+
+### `attest_buyer_history` (buyer side)
+
+Called by the buyer's main wallet after a private-buyer RFP completes. Atomically
+copies every counter from the buyer ephemeral's BuyerReputation PDA into the
+main wallet's BuyerReputation PDA.
+
+| Aspect | Detail |
+|---|---|
+| Caller | Main wallet (signer + fee payer + rent payer for `init_if_needed` of main rep PDA) |
+| Source PDA | `[b"buyer_rep", buyer_eph]` — read-only |
+| Dest PDA | `[b"buyer_rep", main_wallet]` — `init_if_needed`, mut |
+| Idempotency | `rfp.buyer_attested: bool` flips true; second call reverts |
+| Status gate | `rfp.status == Completed` only |
+| Verification | Ed25519SigVerify ix at index 0 proves main wallet signed `tender-buyer-eph-binding-v1 || program_id || rfp_pda || main_wallet || buyer_eph` |
+
+Counters merged: `total_rfps`, `funded_rfps`, `completed_rfps`, `ghosted_rfps`,
+`disputed_milestones`, `cancelled_milestones`, `total_locked_usdc`,
+`total_released_usdc`, `total_refunded_usdc`. `last_updated` bumps on the
+main wallet's rep.
+
+### `attest_win` (provider side)
+
+Called by the provider's main wallet after a private-bidder win on a completed
+RFP. Atomically copies every counter from the bidder ephemeral's
+ProviderReputation PDA into the main wallet's ProviderReputation PDA.
+
+| Aspect | Detail |
+|---|---|
+| Caller | Main wallet (signer + fee payer + rent payer for `init_if_needed` of main rep PDA) |
+| Source PDA | `[b"provider_rep", bidder_eph]` — read-only |
+| Dest PDA | `[b"provider_rep", main_wallet]` — `init_if_needed`, mut |
+| Idempotency | `bid.winner_attested: bool` flips true; second call reverts |
+| Status gate | `rfp.status == Completed` AND `bid.status == Selected` AND `rfp.bidder_visibility == BuyerOnly` |
+| Verification | Ed25519SigVerify ix at index 0 proves main wallet signed `tender-bid-binding-v1 || program_id || rfp_pda || bid_pda || main_wallet` (the same binding signature cached on the bid envelope at submission time — no second wallet popup needed) |
+
+Counters merged: `total_wins`, `completed_projects`, `disputed_milestones`,
+`late_milestones`, `total_won_usdc`, `total_earned_usdc`,
+`total_disputed_usdc`. `last_updated` bumps on the main wallet's rep.
+
+### What the claim does NOT do
+
+- It does NOT rewrite `rfp.buyer` or `bid.provider` on chain. Those stay as
+  the ephemeral pubkey — surfacing the claimed RFP under the main wallet's
+  profile RFP list would re-link them and defeat the privacy property the
+  project ran under. The leaderboard filters known ephemerals out so they
+  don't pollute the rankings even after their counters were copied.
+- It does NOT touch loser state. Losing private bidders' main wallets stay
+  anonymous regardless of whether the winner claims.
+- It does NOT delete the source ephemeral PDA. The eph rep stays in place
+  but is dead — its counters were already merged. Eph-rep-PDA-keyed leaderboard
+  rows are filtered client-side via the `ephemeralBuyers` set construction
+  (see `apps/web/app/leaderboard/page.tsx`).
+
+### Public-mode wins skip the claim
+
+When `rfp.bidder_visibility == Public`, the bid is signed by the provider's
+main wallet directly, `bid.provider == main_wallet`, and reputation accrues
+to the main wallet's PDA at every settlement-path ix without any extra
+step. `attest_win` only applies to private-bidder mode. Same shape on the
+buyer side: public-buyer RFPs accrue directly to `[b"buyer_rep", main_wallet]`
+and don't need `attest_buyer_history`.
+
 ## Things this model does NOT track
 
 By design — these are explicit non-features:
 
-- **Qualitative ratings (1-5 stars).** Out of scope today; can be added
-  later via a `buyer_attestation` ix.
+- **Qualitative ratings (1-5 stars).** Reputation is purely behavioral —
+  what each side actually did with their counterparty's money and time, not
+  how they felt about it. Stars are noisy, gameable, and add a rating-fatigue
+  burden tendr.bid avoids.
 - **Per-category breakdown** (audits vs design vs marketing). Reputation is
   global across categories. Categories live on the RFP, not on the rep account.
-- **Recency weighting / decay.** All counters are lifetime; no half-life.
-- **Verified counterparty identity** (KYC/KYB). Pseudonymous tier 0 only.
-- **Cross-program portability.** Reputation lives only on tendr.bid's program.
-  A v2 could add an attestation ix to mirror to a generic on-chain registry.
-- **Provider's bid count, win rate.** Bid count comes from
-  `getProgramAccounts(BidCommit + provider memcmp)` — not stored on rep
-  account because it would need updating on every commit/withdraw.
-
-## Recovering from past bugs
-
-If a deployed program had a reputation update gap (as happened during the
-2026-05-03 audit), affected counters can't be retroactively repaired without
-either (a) writing a one-off "rep migration" ix that recomputes from on-chain
-events, or (b) accepting the historical undercount. We chose (b) — the gaps
-were caught before any RFP completed end-to-end on devnet, so no real
-reputation data was lost. Future deployments that change rep semantics
-should ship a migration ix or clearly document the semantic break.
+  Filtering reputation by category is a UI concern, not an on-chain one.
+- **Recency weighting / decay.** All counters are lifetime; no half-life. UIs
+  that want recency can derive it from the per-RFP `created_at` on the chain
+  RFP accounts.
+- **Verified counterparty identity** (KYC/KYB). Pseudonymous only — the
+  on-chain registry IS the trust signal. SNS adds a recognizable display name
+  on top (see [identity](/docs/identity)) without changing what's tracked.
+- **Cross-program portability.** Reputation lives on tendr.bid's program.
+  Other Solana programs can read it freely via `getProgramAccounts` + the
+  codama decoder; nothing depends on this app being online.
+- **Provider's bid count + win rate.** Bid count comes from
+  `getProgramAccounts(BidCommit + provider memcmp)` — not stored on the rep
+  account because it would need updating on every commit/withdraw, which
+  would burn rent + CU on a derivable signal.

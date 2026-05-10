@@ -315,8 +315,7 @@ export function AiDraftModal({ open, onOpenChange, mode }: AiDraftModalProps) {
                 phrases={mode.kind === 'rfp-scope' ? RFP_SCOPE_PHRASES : BID_DRAFT_PHRASES}
               />
               <p className="pl-5 text-[10px] text-muted-foreground">
-                First response on a cold sidecar can take up to a minute. Subsequent drafts in the
-                same session are usually under 10 seconds.
+                Each response can take up to ~90 seconds depending on the prompt and model load.
               </p>
             </div>
           )}

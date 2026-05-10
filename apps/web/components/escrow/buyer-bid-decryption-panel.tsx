@@ -20,16 +20,26 @@ import { cn } from '@/lib/utils';
  * Buyer-side bid comparison + selection panel. Lives inside `AwardSection`.
  *
  * Click "Decrypt all bids" → batch-call `open_reveal_window` for any bid that
- * the buyer doesn't yet have PER read access to (1 popup), then derive buyer's
- * X25519 key (1 popup) + TEE auth (1 popup), fetch + decrypt every envelope.
- * After the first decryption pass, the panel renders a sortable comparison
- * row per bid: price, timeline, scope, milestones, payout address.
+ * the buyer doesn't yet have PER read access to, derive buyer's X25519 key,
+ * fetch + decrypt every envelope. After the first decryption pass, the panel
+ * renders a sortable comparison row per bid: price, timeline, scope,
+ * milestones, payout address.
+ *
+ * Two signing modes:
+ *  - PUBLIC buyer: 2–3 wallet popups (open_reveal_window tx + X25519
+ *    derivation + TEE auth). Cached after first run.
+ *  - HD-PRIVATE buyer: zero popups — `rfp.buyer` is an HD ephemeral, so
+ *    PER + TEE + open_reveal_window all sign locally with the ephemeral
+ *    keypair derived from the keychain. The X25519 derive seed signs
+ *    locally too.
  *
  * "Pick this bid" calls back to the AwardSection with everything it needs to
  * fire `select_bid + fund_project` - no manual paste required.
  */
 import {
   type TendrAccount,
+  useKeychainContext,
+  useMyActivity,
   useTendrAccount,
   useTendrSignMessage,
   useTendrSignTransactions,
@@ -48,15 +58,16 @@ import { toast } from 'sonner';
 
 export interface BidPicked {
   bidPda: string;
-  /** For public bids: bid.provider == main wallet. For private: decrypted from
-   *  `_bidBinding.mainWallet`. */
+  /** v2 claim-based: equals `bidSignerWallet` (main wallet in public mode,
+   *  bidder ephemeral in private mode). The program records this on
+   *  `rfp.winner_provider`; every settlement-path ix sends payouts to its
+   *  ATA. In private mode the provider's main wallet stays unlinked until
+   *  they run attest_win as a separate post-completion claim. */
   winnerProviderWallet: string;
-  /** The on-chain bid signer (== bid.provider). Differs from winnerProvider in
-   *  private mode (ephemeral wallet). */
+  /** The on-chain bid signer (== bid.provider). Same as winnerProviderWallet
+   *  in v2 claim-based mode — kept as a distinct field for callers that
+   *  want to highlight "who signed" vs "who got selected" in UI copy. */
   bidSignerWallet: string;
-  /** Required when bidSignerWallet != winnerProviderWallet - base64 ed25519
-   *  signature over the canonical binding message. */
-  bidBindingSignatureBase64?: string;
   contractValueUsdc: string;
   /** Per-milestone USDC amounts in bid-defined order. Sum equals contractValueUsdc. */
   milestoneAmounts: string[];
@@ -122,6 +133,16 @@ function Connected({
 }: { account: TendrAccount } & BuyerBidDecryptionPanelProps) {
   const signMessage = useTendrSignMessage(account);
   const signTransactions = useTendrSignTransactions(account);
+  // HD-buyer detection. For private-buyer RFPs the on-chain `rfp.buyer`
+  // is the HD ephemeral, NOT this wallet — and the PER permission set
+  // / TEE auth / open_reveal_window all key off `rfp.buyer`. So in that
+  // mode we have to drive the entire decrypt flow as the HD ephemeral
+  // (local sigs, no popups). Detect via MyActivity.
+  const activity = useMyActivity();
+  const keychain = useKeychainContext();
+  const hdBuyerEntry = activity.ownedRfps.find((r) => r.pda === String(rfpPda) && r.via === 'hd');
+  const hdIndex = hdBuyerEntry?.hdIndex;
+
   const [decrypting, setDecrypting] = useState(false);
   const [stage, setStage] = useState<BuyerRevealStage | null>(null);
   const [bids, setBids] = useState<DecryptedBid[]>([]);
@@ -139,15 +160,50 @@ function Connected({
     setDecrypting(true);
     setStage(null);
     try {
+      // For HD-buyer mode, build local-signing closures backed by the
+      // ephemeral keypair. PER + TEE + open_reveal_window all need to
+      // see rfp.buyer (= the ephemeral) as the actor.
+      let buyerWallet: Address;
+      let effectiveSignMessage = signMessage;
+      let effectiveSignTransactions = signTransactions;
+      if (hdIndex !== undefined && keychain) {
+        const eph = await keychain.buyerEphemeral(hdIndex);
+        buyerWallet = eph.publicKey.toBase58() as Address;
+        // Local signMessage with the ephemeral's ed25519 key — no popup.
+        // biome-ignore lint/suspicious/noExplicitAny: noble subpath types vary
+        const ed = (await import('@noble/curves/ed25519.js')) as any;
+        const ed25519 = ed.ed25519 ?? ed.default?.ed25519 ?? ed;
+        const seed32 = eph.secretKey.slice(0, 32);
+        effectiveSignMessage = (async ({ message }: { message: Uint8Array }) => {
+          const sig = ed25519.sign(message, seed32);
+          return { signature: new Uint8Array(sig) };
+          // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
+        }) as any;
+        // Local signTransactions — deserialize, sign with ephemeral, reserialize.
+        const { VersionedTransaction } = await import('@solana/web3.js');
+        effectiveSignTransactions = (async (
+          ...inputs: ReadonlyArray<{ transaction: Uint8Array }>
+        ) => {
+          return inputs.map(({ transaction }) => {
+            const tx = VersionedTransaction.deserialize(transaction);
+            tx.sign([eph]);
+            return { signedTransaction: tx.serialize() };
+          });
+          // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
+        }) as any;
+      } else {
+        buyerWallet = account.address as Address;
+      }
+
       const result = await revealAllBidsForBuyer({
-        buyerWallet: account.address as Address,
+        buyerWallet,
         rfpPda,
         rfpNonceHex,
         bidPdas,
         // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
-        signMessage: signMessage as any,
+        signMessage: effectiveSignMessage as any,
         // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook return shape
-        signTransactions: signTransactions as any,
+        signTransactions: effectiveSignTransactions as any,
         cachedBuyerKp: cachedBuyerKp ?? undefined,
         // We intentionally drop the `detail` (e.g., "3 bid(s)") here - the
         // panel keeps a fixed-width button, so any text that grows mid-flow
@@ -214,7 +270,9 @@ function Connected({
                 : `Decrypt ${bidPdas.length} bid${bidPdas.length === 1 ? '' : 's'}`}
             </Button>
             <p className="text-[10px] text-muted-foreground">
-              2–3 wallet popups; instant on subsequent runs.
+              {hdIndex !== undefined
+                ? 'Signed locally with your HD ephemeral — no wallet popups.'
+                : '2–3 wallet popups; instant on subsequent runs.'}
             </p>
           </div>
         </CardContent>
@@ -262,9 +320,14 @@ function Connected({
               if (!b.plaintext) return;
               const picked: BidPicked = {
                 bidPda: b.bidPda,
-                winnerProviderWallet: b.mainWallet ?? b.bidSignerWallet,
+                // v2 claim-based: in private bidder mode `winner_provider`
+                // on chain stays as the bid signer (eph). The provider's
+                // main wallet is NOT recorded at award time — they claim
+                // the win later via attest_win after project completion.
+                // For public bidder mode, mainWallet === bidSignerWallet
+                // anyway. So always pass the bid signer.
+                winnerProviderWallet: b.bidSignerWallet,
                 bidSignerWallet: b.bidSignerWallet,
-                bidBindingSignatureBase64: b.bindingSignatureBase64,
                 contractValueUsdc: b.plaintext.priceUsdc,
                 milestoneAmounts: b.plaintext.milestones.map((m) => m.amountUsdc),
                 milestoneDurationsDays: b.plaintext.milestones.map((m) => m.durationDays),
@@ -282,6 +345,10 @@ function Connected({
                   bidSignerWallet: b.bidSignerWallet,
                   isPrivate: b.isPrivate,
                   feeBps,
+                  // HD-buyer mode flips the award flow to the Cloak-routed
+                  // path; the dialog renders a shielded-pool hint so the
+                  // user knows what to expect.
+                  isPrivateBuyer: hdIndex !== undefined,
                 },
               });
             }}
@@ -459,26 +526,29 @@ function BidRow({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
         <div className="flex items-center gap-3">
-          {/* SNS rules per surface — keep the privacy invariant intact:
-              - payout: this is the bid plaintext's `payoutPreference.address`
-                which defaults to `account.address` (the connected MAIN
-                wallet) at form submit time, regardless of privacy mode.
-                The "payoutDestination" that gets set to ephemeral in
-                private mode is a SEPARATE on-chain field — not what we
-                render here. So always-resolve SNS is correct.
-              - main: only present in private mode after decrypt; this IS
-                the verified main wallet, resolve OK.
-              - signer: in public mode signer == main (resolve OK).
-                In private mode signer == ephemeral (NEVER resolve). */}
+          {/* SNS rules per surface — keep the v2 claim-based privacy
+              invariant intact:
+              - payout: bid plaintext's `payoutPreference.address`. New
+                bids (post the submit-flow per-recipient envelope split)
+                bake the bidder ephemeral here in private mode, so SNS
+                resolution returns null safely. Legacy bids may still
+                carry the main wallet — that's a one-time on-chain
+                immutable artifact and we don't paper over it.
+              - signer: public mode signer == main (resolve OK). Private
+                mode signer == bidder eph rendered as "Anon Provider".
+              - main wallet: deliberately NOT rendered. The new buyer
+                envelope no longer carries any main-wallet hint — see
+                the per-recipient envelope split in submit-flow.ts. */}
           <span>
             payout ·{' '}
-            <HashLink hash={pt.payoutPreference.address} kind="account" visibleChars={4} withSns />
+            <HashLink
+              hash={pt.payoutPreference.address}
+              kind="account"
+              visibleChars={4}
+              withSns={!bid.isPrivate}
+              ephemeralRole={bid.isPrivate ? 'provider' : undefined}
+            />
           </span>
-          {bid.isPrivate && bid.mainWallet && (
-            <span>
-              main · <HashLink hash={bid.mainWallet} kind="account" visibleChars={4} withSns />
-            </span>
-          )}
           <span>
             signer ·{' '}
             <HashLink
@@ -486,6 +556,7 @@ function BidRow({
               kind="account"
               visibleChars={4}
               withSns={!bid.isPrivate}
+              ephemeralRole={bid.isPrivate ? 'provider' : undefined}
             />
           </span>
         </div>

@@ -42,6 +42,22 @@ export const sealedBidPlaintextSchema = z.object({
     address: z.string().min(32).max(44),
   }),
   notes: z.string().max(2000).optional(),
+  // Cosmetic flag set by submit-flow on the buyer envelope when the bid
+  // was submitted in anonymous-bidder mode. Lets reveal-flow renderers
+  // tag the row as "private" without reading any main-wallet hint
+  // (there is none — symmetric with anonymous-buyer mode where the main
+  // wallet never appears anywhere on chain in any form).
+  _private: z.literal(true).optional(),
+  // Legacy field kept in the schema only so old (pre-v2-claim-based) bids
+  // still parse. New bids never write this. NEVER read this from the
+  // buyer envelope at runtime — it would re-leak the bidder's main
+  // wallet, which is the exact privacy property v2 claim-based fixes.
+  _bidBinding: z
+    .object({
+      mainWallet: z.string().min(32).max(44),
+      signatureBase64: z.string().min(1).max(200),
+    })
+    .optional(),
 });
 
 export type SealedBidPlaintext = z.infer<typeof sealedBidPlaintextSchema>;

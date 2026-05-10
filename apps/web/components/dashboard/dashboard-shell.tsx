@@ -6,7 +6,9 @@ import { cn } from '@/lib/utils';
 export interface DashboardTab {
   href: string;
   label: string;
-  count?: number;
+  /** A static number from server-side enumerate OR a client component
+   *  that reads from MyActivity (so HD entries surface in the count). */
+  count?: number | ReactNode;
 }
 
 export function DashboardShell({
@@ -15,6 +17,8 @@ export function DashboardShell({
   tabs,
   activeHref,
   actions,
+  titleExtra,
+  headerStats,
   children,
 }: {
   title: string;
@@ -22,21 +26,35 @@ export function DashboardShell({
   tabs?: DashboardTab[];
   activeHref?: string;
   actions?: ReactNode;
+  /** Optional slot rendered next to the page title — used for the
+   *  "syncing" indicator that signals MyActivity is still loading. */
+  titleExtra?: ReactNode;
+  /** Compact stat chips rendered inside the header block (between
+   *  description and the actions/tabs). Lets the dashboard surface
+   *  RFPs-posted / bids-committed counts up top instead of as a full
+   *  section below. */
+  headerStats?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
-      <header className="flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
-            Workspace
-          </span>
-          <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-            {title}
-          </h1>
-          {description && <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>}
+      <header className="flex flex-col gap-4 border-b border-border/60 pb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+              Workspace
+            </span>
+            <h1 className="flex flex-wrap items-center gap-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+              {title}
+              {titleExtra}
+            </h1>
+            {description && (
+              <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
+            )}
+          </div>
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+        {headerStats && <div className="flex flex-wrap items-center gap-3">{headerStats}</div>}
       </header>
 
       {tabs && tabs.length > 0 && (
@@ -58,7 +76,7 @@ export function DashboardShell({
                 )}
               >
                 {tab.label}
-                {typeof tab.count === 'number' && (
+                {tab.count !== undefined && (
                   <span
                     className={cn(
                       'rounded-full px-1.5 py-0.5 text-[10px] tabular-nums',

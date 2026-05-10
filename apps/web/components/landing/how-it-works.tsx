@@ -26,13 +26,13 @@ const STEPS = [
   {
     n: '01',
     title: 'Post an RFP',
-    body: 'Buyer creates a request with scope, budget range, and a reveal window. Picks public or private bidder list per RFP. The RFP-specific X25519 pubkey is derived from a single wallet signature.',
+    body: "Buyer creates a request with scope, budget range, and a reveal window. Picks bidder + buyer privacy axes independently — anonymous-buyer mode signs the RFP itself with an HD-derived ephemeral funded via Cloak's shielded pool.",
     chain: 'rfp_create',
   },
   {
     n: '02',
     title: 'Providers commit',
-    body: "Each bid is XChaCha20-Poly1305 encrypted to buyer + provider, then chunked onto a delegated BidCommit account on MagicBlock's Private Ephemeral Rollup. Even the buyer can't read it yet.",
+    body: "Each bid is XChaCha20-Poly1305 encrypted to buyer + bidder, then chunked onto a delegated BidCommit account on MagicBlock's Private Ephemeral Rollup. Anonymous-bidder mode signs with an HD-derived bidder ephemeral funded via Cloak — both ephemerals derive from one master signature per session.",
     chain: 'commit_bid_init → delegate_bid → write_bid_chunk → finalize_bid',
   },
   {
@@ -44,8 +44,14 @@ const STEPS = [
   {
     n: '04',
     title: 'Select & pay',
-    body: 'Buyer decrypts every bid in-browser, picks a winner, and locks USDC into per-milestone escrow. Each release fires on-chain when the buyer accepts the deliverable, with a 14-day dispute cool-off.',
+    body: 'Buyer decrypts every bid in-browser, picks a winner, and locks USDC into per-milestone escrow. Each release fires on-chain when the buyer accepts the deliverable, with a built-in dispute cool-off + matching-split flow.',
     chain: 'select_bid → fund_project → accept_milestone',
+  },
+  {
+    n: '05',
+    title: 'Claim reputation',
+    body: "Activity in private modes accrues to the ephemeral's rep PDA. After the project completes, one ix merges every counter — wins, completed projects, USDC totals — into your main wallet's public rep. Idempotent, gated to status Completed, surfaced as inline CTAs on the dashboard.",
+    chain: 'attest_buyer_history · attest_win',
   },
 ] as const;
 
@@ -69,12 +75,12 @@ export function HowItWorks() {
             Privacy is the mechanism, not a feature.
           </h2>
           <p className="max-w-2xl text-base text-muted-foreground">
-            Four steps, every one cryptographically enforced. Every claim below maps to a real
-            on-chain instruction shipping on devnet today.
+            Five steps, every one cryptographically enforced. Every claim below maps to a real
+            on-chain instruction running on devnet.
           </p>
         </motion.div>
 
-        <ol className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border/60 bg-border/60 sm:grid-cols-2 lg:grid-cols-4">
+        <ol className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border/60 bg-border/60 sm:grid-cols-2 lg:grid-cols-5">
           {STEPS.map((step, i) => (
             <motion.li
               key={step.n}

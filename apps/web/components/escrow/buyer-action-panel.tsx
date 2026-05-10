@@ -11,11 +11,20 @@
  * UX bar: every action has its consequence (amount, recipient, irreversibility,
  * reputation impact) shown BEFORE the wallet popup.
  */
-import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
+import {
+  type KeychainHandle,
+  type TendrAccount,
+  buildCloakSignTransactionAdapter,
+  useKeychainContext,
+  useMyActivity,
+  useTendrAccount,
+  useTendrSignMessage,
+  useTendrSignTransactions,
+} from '@/lib/wallet';
 import type { Address } from '@solana/kit';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -23,6 +32,8 @@ import {
   BuyerBidDecryptionPanel,
 } from '@/components/escrow/buyer-bid-decryption-panel';
 import {
+  AwardConfirmDialog,
+  type AwardConfirmPayload,
   CancelMilestoneDialog,
   type CancelMilestonePayload,
 } from '@/components/escrow/confirm-dialogs';
@@ -38,7 +49,12 @@ import { Label } from '@/components/ui/label';
 import { type CloseBiddingStage, closeBidding } from '@/lib/bids/close-bidding-flow';
 import { friendlyBidError, humanizeStage } from '@/lib/bids/error-utils';
 import type { SealedBidPlaintext } from '@/lib/bids/schema';
-import { type AwardStage, awardAndFund } from '@/lib/escrow/award-fund-flow';
+import {
+  type AwardStage,
+  type PrivateFundStage,
+  awardAndFund,
+  awardAndFundAsHdBuyer,
+} from '@/lib/escrow/award-fund-flow';
 import {
   acceptMilestone,
   cancelLateMilestone,
@@ -54,17 +70,32 @@ import { postMilestoneNote } from '@/lib/milestones/notes';
 import { rpc } from '@/lib/solana/client';
 import type { MilestoneNoteRow } from '@tender/shared';
 
+const PRIVATE_FUND_STAGE_LABEL: Record<PrivateFundStage, string> = {
+  preparing: 'Preparing the private fund flow…',
+  signing_auth: 'Sign the fund-authorization message…',
+  cloak_funding_ata: 'Creating the funding ephemeral USDC ATA…',
+  cloak_alt_setup: 'Building the address-lookup table for Cloak…',
+  cloak_deposit: "Depositing USDC into Cloak's shielded pool…",
+  cloak_withdraw: 'Routing through the shielded pool…',
+  sending_fund: 'Sending fund_project from the ephemeral…',
+  done: 'Done',
+};
+
 const AWARD_STAGE_LABEL: Record<AwardStage, string> = {
   building_txs: 'Building transactions…',
-  awaiting_signature: 'Approve all transactions in your wallet (single popup)…',
+  signing_fund_auth: 'Sign #1 of 2 — fund-authorization message…',
+  awaiting_signature: 'Sign #2 of 2 — approve transaction(s) in your wallet…',
   sending_reveal: 'Revealing the sealed reserve price on-chain…',
   sending_select: 'Recording the winner on-chain…',
   sending_fund: 'Locking USDC into escrow + initializing milestones…',
+  topping_up_signer: 'Topping up your private signer via Cloak (one-time)…',
   done: 'Done.',
 };
 
 /** Circle's devnet USDC mint. */
-const DEVNET_MOCK_USDC_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU' as Address;
+// Cloak's mock USDC mint on devnet — required for the v2 private-funding
+// flow. Faucet: https://devnet.cloak.ag/privacy/faucet
+const DEVNET_MOCK_USDC_MINT = '61ro7AExqfk4dZYoCyRzTahahCC2TdUUZ4M5epMPunJf' as Address;
 
 export interface MilestoneSummary {
   index: number;
@@ -121,6 +152,16 @@ export interface BuyerActionPanelProps {
    *  needs the original scope to evaluate how well each bid covers it. */
   rfpScope?: string;
   rfpTitle?: string;
+  /** v2: 'public' (rfp.buyer == main wallet) or 'private' (rfp.buyer ==
+   *  HD ephemeral). Controls whether the Cloak shielded-fund option
+   *  surfaces — it only adds privacy value for private buyers; public
+   *  buyers are already on-chain as rfp.buyer, so routing through
+   *  Cloak just adds popups + fees + ~75s for no benefit. */
+  buyerVisibility?: 'public' | 'private';
+  /** RFP's `bidder_visibility` — propagates to BuyerWinningBidPanel so
+   *  the winning bid's payout field renders as "Anon Provider · trunc"
+   *  in private bidder mode. */
+  bidderVisibility?: 'public' | 'buyer_only';
 }
 
 export function BuyerActionPanel(props: BuyerActionPanelProps) {
@@ -152,8 +193,15 @@ function ConnectedBuyerPanel({
   // title. Keeping the prop in the interface so callers can pass both
   // without churn if we ever want to surface the title.
   rfpTitle: _rfpTitle,
+  buyerVisibility,
+  bidderVisibility,
 }: BuyerActionPanelProps & { account: TendrAccount }) {
   const signTransactions = useTendrSignTransactions(account);
+  const signMessage = useTendrSignMessage(account);
+  // Shared keychain — one master sign covers private fund + private
+  // create + private cancel + attest across the whole session, instead
+  // of one popup per panel mount.
+  const keychain = useKeychainContext();
   const wallet = account.address as Address;
 
   /* ----- CLOSE BIDDING (Open + past bid_close_at) ------------------------ */
@@ -166,6 +214,8 @@ function ConnectedBuyerPanel({
         bidCount={bids.length}
         // biome-ignore lint/suspicious/noExplicitAny: wallet-standard
         signTransactions={signTransactions as any}
+        buyerVisibility={buyerVisibility}
+        keychain={keychain}
       />
     );
   }
@@ -182,7 +232,10 @@ function ConnectedBuyerPanel({
         bids={bids}
         // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook type drift
         signTransactions={signTransactions as any}
+        signMessage={signMessage}
         rfpScope={rfpScope}
+        buyerVisibility={buyerVisibility}
+        keychain={keychain}
       />
     );
   }
@@ -217,10 +270,14 @@ function ConnectedBuyerPanel({
         winnerProvider={winnerProvider}
         contractValueRaw={contractValueRaw}
         contractValueUsdc={contractValueUsdc}
+        feeBps={feeBps}
         milestoneAmounts={milestoneAmounts}
         milestoneDurationsSecs={milestoneDurationsSecs}
         // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook
         signTransactions={signTransactions as any}
+        signMessage={signMessage}
+        keychain={keychain}
+        buyerVisibility={buyerVisibility}
       />
     );
   }
@@ -240,6 +297,9 @@ function ConnectedBuyerPanel({
         notesByMilestoneIndex={notesByMilestoneIndex}
         // biome-ignore lint/suspicious/noExplicitAny: hook type drift
         signTransactions={signTransactions as any}
+        buyerVisibility={buyerVisibility}
+        bidderVisibility={bidderVisibility}
+        keychain={keychain}
       />
     );
   }
@@ -309,7 +369,10 @@ function AwardSection({
   feeBps,
   bids,
   signTransactions,
+  signMessage,
   rfpScope,
+  buyerVisibility,
+  keychain,
 }: {
   wallet: Address;
   rfpPda: Address;
@@ -318,8 +381,20 @@ function AwardSection({
   bids: { address: string; commitHashHex: string; submittedAtIso: string }[];
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard
   signTransactions: any;
+  signMessage: (input: { message: Uint8Array }) => Promise<{ signature: Uint8Array }>;
   rfpScope?: string;
+  /** When 'private' the award flow routes through the HD-buyer
+   *  ephemeral + Cloak-funded fund_project. */
+  buyerVisibility?: 'public' | 'private';
+  /** Required when buyerVisibility === 'private' — used to derive the
+   *  HD buyer + funding ephemerals. */
+  keychain: KeychainHandle | null;
 }) {
+  // HD-buyer detection — needed to drive the alternative one-click flow.
+  const activity = useMyActivity();
+  const hdBuyerEntry = activity.ownedRfps.find((r) => r.pda === String(rfpPda) && r.via === 'hd');
+  const hdIndex = hdBuyerEntry?.hdIndex;
+  const isHdBuyer = buyerVisibility === 'private' && hdIndex !== undefined && !!keychain;
   const [stage, setStage] = useState<AwardStage | null>(null);
   const [awarding, setAwarding] = useState(false);
   const [awardingBidPda, setAwardingBidPda] = useState<string | null>(null);
@@ -355,24 +430,76 @@ function AwardSection({
         throw new Error('Decrypted milestone amounts include a non-positive value.');
       }
       const milestoneDurationsSecs = picked.milestoneDurationsDays.map((d) => BigInt(d * 86400));
+      const contractValue = usdcToBaseUnits(picked.contractValueUsdc);
+      const reserveRevealArg = reserveReveal?.amount
+        ? { amount: BigInt(reserveReveal.amount), nonceHex: reserveReveal.nonceHex }
+        : undefined;
+      // v2 claim-based: no bid-binding signature needed at award time.
+      // The program's public-mode branch fires when args.winner_provider
+      // == bid.provider (which is true here — both are the bidder eph in
+      // private mode), so no Ed25519SigVerify ix is required.
 
+      // HD-buyer one-click path: select_bid signed locally by HD buyer
+      // ephemeral, fund_project routed through Cloak (1 popup for the
+      // shielded deposit), funder ephemeral signs locally. Same UX shape
+      // as the public path — one click → done — just slower (~90s) and
+      // privacy-preserving end to end.
+      if (isHdBuyer) {
+        const buyerEphemeral = await keychain!.buyerEphemeral(hdIndex!);
+        const cloakSignTransaction = await buildCloakSignTransactionAdapter(signTransactions);
+        const result = await awardAndFundAsHdBuyer({
+          buyer: buyerEphemeral.publicKey.toBase58() as Address,
+          buyerEphemeralKeypair: buyerEphemeral,
+          rfpPda,
+          winnerBidPda: picked.bidPda as Address,
+          winnerProviderWallet: picked.winnerProviderWallet as Address,
+          bidSignerWallet: picked.bidSignerWallet as Address,
+          contractValue,
+          mint: DEVNET_MOCK_USDC_MINT,
+          reserveReveal: reserveRevealArg,
+          milestoneAmounts,
+          milestoneDurationsSecs,
+          buyerWallet: wallet,
+          signMessage,
+          signTransaction: cloakSignTransaction,
+          rpc,
+          connection: new (await import('@solana/web3.js')).Connection(
+            process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com',
+            'confirmed',
+          ),
+          // The HD orchestrator's onProgress emits AwardStage OR
+          // PrivateFundStage. Cast to keep the existing setStage signature
+          // happy — the private-fund stage labels are absent from
+          // AWARD_STAGE_LABEL but render through humanizeStage as a
+          // fallback in the meantime.
+          // biome-ignore lint/suspicious/noExplicitAny: cross-stage union
+          onProgress: setStage as any,
+        });
+        setDone({
+          select: result.selectTxSignature,
+          fund: result.fundTxSignature,
+          reveal: result.revealTxSignature,
+        });
+        toast.success('Project awarded + funded privately', {
+          description: `Locked $${Number(picked.contractValueUsdc).toLocaleString()} USDC into escrow via Cloak's shielded pool.`,
+        });
+        return;
+      }
+
+      // Public-buyer path: original two-tx flow (select+fund batched).
       const result = await awardAndFund({
         buyer: wallet,
         rfpPda,
         winnerBidPda: picked.bidPda as Address,
         winnerProviderWallet: picked.winnerProviderWallet as Address,
         bidSignerWallet: picked.bidSignerWallet as Address,
-        bidBindingSignature: picked.bidBindingSignatureBase64
-          ? Uint8Array.from(atob(picked.bidBindingSignatureBase64), (c) => c.charCodeAt(0))
-          : undefined,
-        contractValue: usdcToBaseUnits(picked.contractValueUsdc),
+        contractValue,
         mint: DEVNET_MOCK_USDC_MINT,
-        reserveReveal: reserveReveal?.amount
-          ? { amount: BigInt(reserveReveal.amount), nonceHex: reserveReveal.nonceHex }
-          : undefined,
+        reserveReveal: reserveRevealArg,
         milestoneAmounts,
         milestoneDurationsSecs,
         signTransactions,
+        signMessage,
         rpc,
         onProgress: setStage,
       });
@@ -487,31 +614,66 @@ function CloseBiddingSection({
   rfpPda,
   bidCount,
   signTransactions,
+  buyerVisibility,
+  keychain,
 }: {
   wallet: Address;
   rfpPda: Address;
   bidCount: number;
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard
   signTransactions: any;
+  buyerVisibility?: 'public' | 'private';
+  keychain: KeychainHandle | null;
 }) {
   const router = useRouter();
+  const activity = useMyActivity();
+  const hdBuyerEntry = activity.ownedRfps.find((r) => r.pda === String(rfpPda) && r.via === 'hd');
+  const hdIndex = hdBuyerEntry?.hdIndex;
+  const isHdBuyer = buyerVisibility === 'private' && hdIndex !== undefined && !!keychain;
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<CloseBiddingStage | null>(null);
 
   async function handleClose() {
     setBusy(true);
     try {
+      // For HD-private buyers, sign close-bidding locally with the HD
+      // buyer ephemeral so the on-chain "Recent By" column shows the
+      // ephemeral (consistent with create_rfp + select_bid + reveal),
+      // not the main wallet — preserves the privacy property end-to-end.
+      // The ix is permissionless (`anyone: Signer`), so any signer works.
+      let effectiveBuyer: Address = wallet;
+      let effectiveSignTransactions = signTransactions;
+      if (isHdBuyer) {
+        const eph = await keychain!.buyerEphemeral(hdIndex!);
+        effectiveBuyer = eph.publicKey.toBase58() as Address;
+        const { VersionedTransaction } = await import('@solana/web3.js');
+        effectiveSignTransactions = (async (
+          ...inputs: ReadonlyArray<{ transaction: Uint8Array }>
+        ) => {
+          return inputs.map(({ transaction }) => {
+            const tx = VersionedTransaction.deserialize(transaction);
+            tx.sign([eph]);
+            return { signedTransaction: tx.serialize() };
+          });
+          // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
+        }) as any;
+      }
       const result = await closeBidding({
-        buyer: wallet,
+        buyer: effectiveBuyer,
         rfpPda,
-        signTransactions,
+        signTransactions: effectiveSignTransactions,
         rpc,
         onProgress: setStage,
       });
-      toast.success('Bid window closed · status flipped to Reveal', {
-        description: <TxToastDescription hash={result.txSignature} prefix="Tx" />,
-        duration: 8000,
-      });
+      toast.success(
+        isHdBuyer
+          ? 'Bid window closed · signed by HD buyer ephemeral'
+          : 'Bid window closed · status flipped to Reveal',
+        {
+          description: <TxToastDescription hash={result.txSignature} prefix="Tx" />,
+          duration: 8000,
+        },
+      );
       // Soft refresh re-fetches the server-rendered page (so status flips
       // from `open` → `reveal` and AwardSection mounts) WITHOUT remounting
       // the wallet adapter. A hard `window.location.reload()` here was
@@ -580,9 +742,13 @@ function ResumeFundingSection({
   winnerProvider,
   contractValueRaw,
   contractValueUsdc,
+  feeBps,
   milestoneAmounts,
   milestoneDurationsSecs,
   signTransactions,
+  signMessage,
+  keychain,
+  buyerVisibility,
 }: {
   wallet: Address;
   rfpPda: Address;
@@ -590,50 +756,131 @@ function ResumeFundingSection({
   winnerProvider: string | null;
   contractValueRaw: bigint;
   contractValueUsdc: string;
+  feeBps: number;
   milestoneAmounts: bigint[];
   milestoneDurationsSecs: bigint[];
   // biome-ignore lint/suspicious/noExplicitAny: wallet-standard hook
   signTransactions: any;
+  signMessage: (input: { message: Uint8Array }) => Promise<{ signature: Uint8Array }>;
+  /** Shared keychain handle from KeychainProvider. Null when wallet
+   *  is disconnected — required for HD-private resume to derive the
+   *  buyer ephemeral. Public path doesn't need it. */
+  keychain: KeychainHandle | null;
+  /** Determines which fund orchestrator runs on confirm: 'private'
+   *  routes through Cloak via the HD buyer ephemeral, 'public' funds
+   *  directly with the main wallet. The dialog adapts copy + the
+   *  Cloak banner accordingly. */
+  buyerVisibility?: 'public' | 'private';
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<AwardStage | null>(null);
+  const [privateStage, setPrivateStage] = useState<PrivateFundStage | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  async function handleResume() {
+  // HD-private detection — same source of truth the AwardSection uses
+  // so we can swap the orchestrator at confirm time.
+  const activity = useMyActivity();
+  const hdBuyerEntry = activity.ownedRfps.find((r) => r.pda === String(rfpPda) && r.via === 'hd');
+  const hdIndex = hdBuyerEntry?.hdIndex;
+  const isHdBuyer = buyerVisibility === 'private' && hdIndex !== undefined && !!keychain;
+
+  // Build the same payload shape the award flow uses, with mode='fund'
+  // so the dialog re-skins as "Resume funding" instead of "Award + lock
+  // funds" but keeps every other section (Cloak banner + powered-by for
+  // private, money summary, milestones, payout identity).
+  const confirmPayload: AwardConfirmPayload | null = winnerProvider
+    ? {
+        bidPda: winnerBidPda ?? '',
+        contractValueUsdc,
+        milestones: milestoneAmounts.map((amt, i) => ({
+          name: `Milestone ${i + 1}`,
+          amountUsdc: (Number(amt) / 1_000_000).toFixed(2),
+        })),
+        payoutWallet: winnerProvider,
+        // Bid signer info isn't critical at fund time (winner is locked);
+        // collapse into the simpler "no signer row" view.
+        bidSignerWallet: winnerProvider,
+        isPrivate: false,
+        feeBps,
+        isPrivateBuyer: isHdBuyer,
+        mode: 'fund',
+      }
+    : null;
+
+  async function handleConfirm() {
     if (!winnerBidPda || !winnerProvider) {
       toast.error('Cannot resume - winner missing on-chain');
       return;
     }
     setBusy(true);
     try {
-      const result = await awardAndFund({
-        buyer: wallet,
-        rfpPda,
-        winnerBidPda: winnerBidPda as Address,
-        // For resume we don't have the bid signer separately; the flow needs
-        // it to detect private mode (winnerProvider != bidSigner). Since
-        // select_bid is already past its gate, the flow's pre-flight skips
-        // it and the bid-binding signature is never used. Pass winnerProvider
-        // for both so isPrivateMode === false avoids the binding-sig check.
-        winnerProviderWallet: winnerProvider as Address,
-        bidSignerWallet: winnerProvider as Address,
-        contractValue: contractValueRaw,
-        mint: DEVNET_MOCK_USDC_MINT,
-        // Reserve already revealed (or never set) by the prior award attempt
-        // - re-revealing would hit InvalidRfpStatus.
-        reserveReveal: undefined,
-        milestoneAmounts,
-        milestoneDurationsSecs,
-        signTransactions,
-        rpc,
-        onProgress: setStage,
-      });
-      toast.success('Project funded', {
-        description: <TxToastDescription hash={result.fundTxSignature} prefix="Tx" />,
-        duration: 8000,
-      });
-      // Soft refresh — see CloseBiddingSection for why hard reload was
-      // logging users out via the wallet-account-change handler race.
+      if (isHdBuyer) {
+        // HD-private path: re-uses the same orchestrator as the award
+        // flow — it pre-flights `currentStatus === 'awarded'` and skips
+        // both reveal_reserve + select_bid, going straight to the Cloak
+        // fund_project. No new code path; one source of truth for
+        // "fund this RFP privately".
+        const buyerEphemeral = await keychain!.buyerEphemeral(hdIndex!);
+        const cloakSignTransaction = await buildCloakSignTransactionAdapter(signTransactions);
+        const result = await awardAndFundAsHdBuyer({
+          buyer: buyerEphemeral.publicKey.toBase58() as Address,
+          buyerEphemeralKeypair: buyerEphemeral,
+          rfpPda,
+          winnerBidPda: winnerBidPda as Address,
+          winnerProviderWallet: winnerProvider as Address,
+          // For resume the bid signer is irrelevant — select_bid is
+          // already past, no bid-binding sig will be checked. Passing
+          // winnerProvider for both fields keeps the orchestrator's
+          // private-bidder branch dormant.
+          bidSignerWallet: winnerProvider as Address,
+          contractValue: contractValueRaw,
+          mint: DEVNET_MOCK_USDC_MINT,
+          reserveReveal: undefined,
+          milestoneAmounts,
+          milestoneDurationsSecs,
+          buyerWallet: wallet,
+          signMessage,
+          signTransaction: cloakSignTransaction,
+          rpc,
+          connection: new (await import('@solana/web3.js')).Connection(
+            process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com',
+            'confirmed',
+          ),
+          onProgress: (s) => {
+            if (s in AWARD_STAGE_LABEL) setStage(s as AwardStage);
+            else setPrivateStage(s as PrivateFundStage);
+          },
+        });
+        toast.success('Project funded privately via Cloak', {
+          description: <TxToastDescription hash={result.fundTxSignature} prefix="fund tx" />,
+          duration: 8000,
+        });
+      } else {
+        // Public path — main wallet is rfp.buyer + funder; awardAndFund
+        // pre-flights status=awarded and only runs fund_project.
+        const result = await awardAndFund({
+          buyer: wallet,
+          rfpPda,
+          winnerBidPda: winnerBidPda as Address,
+          winnerProviderWallet: winnerProvider as Address,
+          bidSignerWallet: winnerProvider as Address,
+          contractValue: contractValueRaw,
+          mint: DEVNET_MOCK_USDC_MINT,
+          reserveReveal: undefined,
+          milestoneAmounts,
+          milestoneDurationsSecs,
+          signTransactions,
+          signMessage,
+          rpc,
+          onProgress: setStage,
+        });
+        toast.success('Project funded', {
+          description: <TxToastDescription hash={result.fundTxSignature} prefix="Tx" />,
+          duration: 8000,
+        });
+      }
+      setConfirmOpen(false);
       router.refresh();
     } catch (e) {
       toast.error('Resume funding failed', {
@@ -643,6 +890,7 @@ function ResumeFundingSection({
     } finally {
       setBusy(false);
       setStage(null);
+      setPrivateStage(null);
     }
   }
 
@@ -669,17 +917,39 @@ function ResumeFundingSection({
             {AWARD_STAGE_LABEL[stage]}
           </span>
         )}
-        <div className="flex justify-end">
+        {privateStage && (
+          <span className="flex items-center gap-2 pt-1 text-xs text-foreground">
+            <span className="size-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_8px] shadow-primary/60" />
+            {PRIVATE_FUND_STAGE_LABEL[privateStage]}
+          </span>
+        )}
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             type="button"
-            disabled={busy}
-            onClick={handleResume}
+            disabled={busy || !winnerProvider}
+            onClick={() => setConfirmOpen(true)}
             className="min-w-[16rem] rounded-full px-6"
           >
-            {busy ? humanizeStage(stage, 'Funding') : `Lock $${contractValueUsdc} USDC into escrow`}
+            {busy
+              ? isHdBuyer
+                ? 'Funding via Cloak…'
+                : 'Funding…'
+              : isHdBuyer
+                ? `🔒 Fund $${contractValueUsdc} USDC privately`
+                : `Lock $${contractValueUsdc} USDC into escrow`}
           </Button>
         </div>
       </CardContent>
+
+      <AwardConfirmDialog
+        open={confirmOpen}
+        onOpenChange={(o) => {
+          if (!busy) setConfirmOpen(o);
+        }}
+        pending={confirmPayload}
+        onConfirm={handleConfirm}
+        busy={busy}
+      />
     </Card>
   );
 }
@@ -700,6 +970,9 @@ function BuyerMilestoneManagement({
   milestones,
   notesByMilestoneIndex,
   signTransactions,
+  buyerVisibility,
+  bidderVisibility,
+  keychain,
 }: {
   wallet: Address;
   rfpPda: Address;
@@ -711,12 +984,30 @@ function BuyerMilestoneManagement({
   notesByMilestoneIndex: Record<number, MilestoneNoteRow[]>;
   // biome-ignore lint/suspicious/noExplicitAny: hook type drift
   signTransactions: any;
+  /** v2 — when 'private' all milestone-management actions sign locally
+   *  with the HD buyer ephemeral instead of the main wallet. */
+  buyerVisibility?: 'public' | 'private';
+  /** RFP's bidder_visibility — propagates to BuyerWinningBidPanel so
+   *  the winning bid's payout field renders as "Anon Provider · trunc"
+   *  in private bidder mode. */
+  bidderVisibility?: 'public' | 'buyer_only';
+  /** Required when buyerVisibility === 'private' to derive the buyer
+   *  ephemeral. */
+  keychain: KeychainHandle | null;
 }) {
   // Lazily-decrypted winning-bid plaintext. Once populated, every milestone
   // row gets its `successCriteria` prop wired from this object. State lives
   // here (not in each row) so a single decrypt unlocks all rows + the dispute
   // UI together.
   const [plaintext, setPlaintext] = useState<SealedBidPlaintext | null>(null);
+
+  // HD-buyer detection — every milestone action in private mode must sign
+  // with the HD ephemeral, not the main wallet. Lookup once at this level
+  // so each row doesn't duplicate the activity scan.
+  const activity = useMyActivity();
+  const hdBuyerEntry = activity.ownedRfps.find((r) => r.pda === String(rfpPda) && r.via === 'hd');
+  const hdIndex = hdBuyerEntry?.hdIndex;
+  const isHdBuyer = buyerVisibility === 'private' && hdIndex !== undefined && !!keychain;
 
   const successByIndex: Record<number, string | undefined> = {};
   if (plaintext) {
@@ -739,6 +1030,7 @@ function BuyerMilestoneManagement({
             rfpPda={rfpPda}
             rfpNonceHex={rfpNonceHex}
             winnerBidPda={winnerBidPda as Address}
+            isPrivateBidder={bidderVisibility === 'buyer_only'}
             plaintext={plaintext}
             onDecrypted={setPlaintext}
           />
@@ -753,6 +1045,9 @@ function BuyerMilestoneManagement({
             notes={notesByMilestoneIndex[ms.index] ?? []}
             winnerProvider={winnerProvider as Address | null}
             signTransactions={signTransactions}
+            isHdBuyer={isHdBuyer}
+            hdIndex={hdIndex}
+            keychain={keychain}
           />
         ))}
       </CardContent>
@@ -772,6 +1067,9 @@ function BuyerMilestoneRow({
   notes,
   winnerProvider,
   signTransactions,
+  isHdBuyer,
+  hdIndex,
+  keychain,
 }: {
   wallet: Address;
   rfpPda: Address;
@@ -787,14 +1085,54 @@ function BuyerMilestoneRow({
   winnerProvider: Address | null;
   // biome-ignore lint/suspicious/noExplicitAny: hook type drift
   signTransactions: any;
+  /** v2 — when true, every milestone-management action signs locally with
+   *  the HD buyer ephemeral. The on-chain rfp.buyer is the ephemeral, so
+   *  signing with main wallet would fail with NotBuyer AND leak the link
+   *  between main wallet and this RFP via the tx fee payer. */
+  isHdBuyer: boolean;
+  hdIndex: number | undefined;
+  keychain: KeychainHandle | null;
 }) {
   const [busy, setBusy] = useState(false);
-  const [splitInput, setSplitInput] = useState('5000');
+  // Hydrate from chain so a page refresh after the buyer already proposed
+  // (e.g. 3000 bps) doesn't reset the input back to 5000 and trick them
+  // into re-submitting the wrong split. SPLIT_NOT_PROPOSED sentinel =
+  // 0xFFFF (65535) — anything below 10000 is a real prior proposal.
+  const SPLIT_NOT_PROPOSED = 0xffff;
+  const [splitInput, setSplitInput] = useState(() => {
+    const prior = milestone.buyerProposedSplitBps;
+    return prior !== undefined && prior !== SPLIT_NOT_PROPOSED ? String(prior) : '5000';
+  });
   const [pendingCancel, setPendingCancel] = useState<CancelMilestonePayload | null>(null);
   /** Inline note that ships with the next Request Changes click. Cleared
    *  after a successful post. Optional - empty body skips the note. */
   const [changeNote, setChangeNote] = useState('');
   const router = useRouter();
+
+  // Lazily derive the HD buyer ephemeral on first action click. Cached for
+  // subsequent actions in the same row so we don't re-derive on every
+  // accept/request-changes/etc. The keychain seed is in tab memory; this
+  // call is HKDF-only (no popup, no async I/O after the first access).
+  const ephemeralRef = useRef<import('@solana/web3.js').Keypair | null>(null);
+  async function getEphemeralBuyer(): Promise<import('@solana/web3.js').Keypair> {
+    if (ephemeralRef.current) return ephemeralRef.current;
+    if (!keychain || hdIndex === undefined) {
+      throw new Error('HD buyer ephemeral unavailable — keychain locked or RFP not HD-owned.');
+    }
+    const eph = await keychain.buyerEphemeral(hdIndex);
+    ephemeralRef.current = eph;
+    return eph;
+  }
+  /** The on-chain rfp.buyer pubkey we must pass as `signer` for any
+   *  buyer-side ix. In public mode it's the connected wallet; in HD mode
+   *  it's the ephemeral pubkey. We resolve at call time so the row's
+   *  effective buyer matches what the program will check (`has_one =
+   *  buyer`). */
+  async function getBuyerAddress(): Promise<Address> {
+    if (!isHdBuyer) return wallet;
+    const eph = await getEphemeralBuyer();
+    return eph.publicKey.toBase58() as Address;
+  }
 
   async function run(
     action: () => Promise<string>,
@@ -899,19 +1237,20 @@ function BuyerMilestoneRow({
               size="sm"
               disabled={busy || !winnerProvider}
               onClick={() =>
-                run(
-                  () =>
-                    acceptMilestone({
-                      signer: wallet,
-                      rfpPda,
-                      milestoneIndex: milestone.index,
-                      mint: DEVNET_MOCK_USDC_MINT,
-                      providerPayoutWallet: winnerProvider!,
-                      signTransactions,
-                      rpc,
-                    }),
-                  'Accept milestone',
-                )
+                run(async () => {
+                  const buyer = await getBuyerAddress();
+                  const eph = isHdBuyer ? await getEphemeralBuyer() : undefined;
+                  return acceptMilestone({
+                    signer: buyer,
+                    rfpPda,
+                    milestoneIndex: milestone.index,
+                    mint: DEVNET_MOCK_USDC_MINT,
+                    providerPayoutWallet: winnerProvider!,
+                    signTransactions,
+                    rpc,
+                    ephemeralBuyerKeypair: eph,
+                  });
+                }, 'Accept milestone')
               }
             >
               Accept ({amountUsdc} USDC → provider, 2.5% fee)
@@ -923,14 +1262,18 @@ function BuyerMilestoneRow({
               disabled={busy}
               onClick={() =>
                 run(
-                  () =>
-                    requestChanges({
-                      signer: wallet,
+                  async () => {
+                    const buyer = await getBuyerAddress();
+                    const eph = isHdBuyer ? await getEphemeralBuyer() : undefined;
+                    return requestChanges({
+                      signer: buyer,
                       rfpPda,
                       milestoneIndex: milestone.index,
                       signTransactions,
                       rpc,
-                    }),
+                      ephemeralBuyerKeypair: eph,
+                    });
+                  },
                   'Request changes',
                   {
                     note: {
@@ -950,18 +1293,19 @@ function BuyerMilestoneRow({
               variant="destructive"
               disabled={busy || !winnerProvider}
               onClick={() =>
-                run(
-                  () =>
-                    rejectMilestone({
-                      signer: wallet,
-                      rfpPda,
-                      milestoneIndex: milestone.index,
-                      providerPayoutWallet: winnerProvider!,
-                      signTransactions,
-                      rpc,
-                    }),
-                  'Reject milestone',
-                )
+                run(async () => {
+                  const buyer = await getBuyerAddress();
+                  const eph = isHdBuyer ? await getEphemeralBuyer() : undefined;
+                  return rejectMilestone({
+                    signer: buyer,
+                    rfpPda,
+                    milestoneIndex: milestone.index,
+                    providerPayoutWallet: winnerProvider!,
+                    signTransactions,
+                    rpc,
+                    ephemeralBuyerKeypair: eph,
+                  });
+                }, 'Reject milestone')
               }
             >
               Reject (escalates to dispute)
@@ -1043,6 +1387,27 @@ function BuyerMilestoneRow({
         </div>
       )}
 
+      {/* Settled-via-dispute panel — shows the actual matched split AFTER
+          resolution. Both `buyer_proposed_split_bps` and
+          `provider_proposed_split_bps` are equal at this point because the
+          on-chain `resolve_dispute` requires them to match before
+          executing. For `disputedefault` (50/50 fallback ix) the proposed
+          values can differ — we hard-show 50/50 in that case. */}
+      {(milestone.status === 'disputeresolved' || milestone.status === 'disputedefault') && (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs">
+          <p className="font-medium text-emerald-700 dark:text-emerald-400">
+            Settled via dispute —{' '}
+            {milestone.status === 'disputedefault'
+              ? '50% to provider, 50% refunded (default fallback applied)'
+              : `${(milestone.buyerProposedSplitBps / 100).toFixed(milestone.buyerProposedSplitBps % 100 === 0 ? 0 : 2)}% to provider, ${((10000 - milestone.buyerProposedSplitBps) / 100).toFixed(milestone.buyerProposedSplitBps % 100 === 0 ? 0 : 2)}% refunded to you`}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Settlement is on-chain — escrow distributed, reputation counters updated. No further
+            action needed for this milestone.
+          </p>
+        </div>
+      )}
+
       {/* Disputed: propose split / wait */}
       {milestone.status === 'disputed' && winnerProvider && (
         <div className="flex flex-col gap-2">
@@ -1087,21 +1452,22 @@ function BuyerMilestoneRow({
               size="sm"
               disabled={busy}
               onClick={() =>
-                run(
-                  () =>
-                    proposeDisputeSplit({
-                      signer: wallet,
-                      rfpPda,
-                      milestoneIndex: milestone.index,
-                      splitToProviderBps: Number(splitInput),
-                      mint: DEVNET_MOCK_USDC_MINT,
-                      buyerWallet: wallet,
-                      providerPayoutWallet: winnerProvider,
-                      signTransactions,
-                      rpc,
-                    }),
-                  'Propose split',
-                )
+                run(async () => {
+                  const buyer = await getBuyerAddress();
+                  const eph = isHdBuyer ? await getEphemeralBuyer() : undefined;
+                  return proposeDisputeSplit({
+                    signer: buyer,
+                    rfpPda,
+                    milestoneIndex: milestone.index,
+                    splitToProviderBps: Number(splitInput),
+                    mint: DEVNET_MOCK_USDC_MINT,
+                    buyerWallet: buyer,
+                    providerPayoutWallet: winnerProvider,
+                    signTransactions,
+                    rpc,
+                    ephemeralBuyerKeypair: eph,
+                  });
+                }, 'Propose split')
               }
             >
               Propose split
@@ -1112,20 +1478,21 @@ function BuyerMilestoneRow({
               variant="outline"
               disabled={busy}
               onClick={() =>
-                run(
-                  () =>
-                    disputeDefaultSplit({
-                      signer: wallet,
-                      rfpPda,
-                      milestoneIndex: milestone.index,
-                      mint: DEVNET_MOCK_USDC_MINT,
-                      buyerWallet: wallet,
-                      providerPayoutWallet: winnerProvider,
-                      signTransactions,
-                      rpc,
-                    }),
-                  'Default 50/50',
-                )
+                run(async () => {
+                  const buyer = await getBuyerAddress();
+                  const eph = isHdBuyer ? await getEphemeralBuyer() : undefined;
+                  return disputeDefaultSplit({
+                    signer: buyer,
+                    rfpPda,
+                    milestoneIndex: milestone.index,
+                    mint: DEVNET_MOCK_USDC_MINT,
+                    buyerWallet: buyer,
+                    providerPayoutWallet: winnerProvider,
+                    signTransactions,
+                    rpc,
+                    ephemeralBuyerKeypair: eph,
+                  });
+                }, 'Default 50/50')
               }
             >
               Apply default 50/50 (cool-off must have expired)
@@ -1146,37 +1513,48 @@ function BuyerMilestoneRow({
         onConfirm={async () => {
           if (!pendingCancel) return;
           const kind = pendingCancel.kind;
+          // Resolve the buyer pubkey + ephemeral keypair once so all three
+          // cancel variants close over the same values. In private mode
+          // signer must be the ephemeral pubkey (rfp.buyer on chain) and
+          // ephemeralBuyerKeypair carries the matching secret for local
+          // signing — main wallet would fail with NotBuyer AND leak the
+          // RFP↔main-wallet linkage via the tx fee payer.
+          const buyer = await getBuyerAddress();
+          const eph = isHdBuyer ? await getEphemeralBuyer() : undefined;
           const action =
             kind === 'notice'
               ? () =>
                   cancelWithNotice({
-                    signer: wallet,
+                    signer: buyer,
                     rfpPda,
                     milestoneIndex: pendingCancel.index,
                     mint: DEVNET_MOCK_USDC_MINT,
                     signTransactions,
                     rpc,
+                    ephemeralBuyerKeypair: eph,
                   })
               : kind === 'late'
                 ? () =>
                     cancelLateMilestone({
-                      signer: wallet,
+                      signer: buyer,
                       rfpPda,
                       milestoneIndex: pendingCancel.index,
                       mint: DEVNET_MOCK_USDC_MINT,
                       providerPayoutWallet: winnerProvider!,
                       signTransactions,
                       rpc,
+                      ephemeralBuyerKeypair: eph,
                     })
                 : () =>
                     cancelWithPenalty({
-                      signer: wallet,
+                      signer: buyer,
                       rfpPda,
                       milestoneIndex: pendingCancel.index,
                       mint: DEVNET_MOCK_USDC_MINT,
                       providerPayoutWallet: winnerProvider!,
                       signTransactions,
                       rpc,
+                      ephemeralBuyerKeypair: eph,
                     });
           const label =
             kind === 'notice'

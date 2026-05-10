@@ -1,4 +1,8 @@
-import { type BidCommitWithAddress, unixSecondsToIso } from '@/lib/solana/chain-reads';
+import {
+  type BidCommitWithAddress,
+  bidStatusToString,
+  unixSecondsToIso,
+} from '@/lib/solana/chain-reads';
 import { serverSupabase } from '@/lib/supabase/server';
 
 import { type YourBidRow, YourBidsListClient } from './your-bids-list-client';
@@ -49,6 +53,7 @@ export async function YourBidsList({
       rfpPda,
       rfpTitle: titlesByPda.get(rfpPda) ?? null,
       submittedAtIso: unixSecondsToIso(b.data.submittedAt),
+      bidStatus: bidStatusToString(b.data.status),
     };
   });
 

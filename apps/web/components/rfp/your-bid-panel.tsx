@@ -51,6 +51,7 @@ import { RevealGlow, UnlockField } from '@/components/motion/reveal-glow';
 import { DataField } from '@/components/primitives/data-field';
 import { HashLink } from '@/components/primitives/hash-link';
 import { StatusPill } from '@/components/primitives/status-pill';
+import { TxToastDescription } from '@/components/primitives/tx-toast';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { InlineMarkdown } from '@/components/ui/markdown';
@@ -58,10 +59,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { friendlyBidError, humanizeStage } from '@/lib/bids/error-utils';
 import { type SealedBidPlaintext, sealedBidPlaintextSchema } from '@/lib/bids/schema';
 import { withdrawBid } from '@/lib/bids/withdraw-flow';
-import {
-  deriveEphemeralBidKeypair,
-  deriveEphemeralBidWalletMessage,
-} from '@/lib/crypto/derive-ephemeral-bid-wallet';
 import {
   deriveProviderKeypair,
   deriveProviderSeedMessage,
@@ -75,6 +72,7 @@ import {
 import { listBids } from '@/lib/solana/chain-reads';
 import { rpc } from '@/lib/solana/client';
 import { cn } from '@/lib/utils';
+import { useKeychainContext } from '@/lib/wallet';
 
 export interface YourBidPanelProps {
   rfpId: string;
@@ -102,8 +100,14 @@ type Resolved =
 
 export function YourBidPanel(props: YourBidPanelProps) {
   const account = useTendrAccount();
+  const keychain = useKeychainContext();
+  const isHdBuyer = useIsHdBuyer(props.rfpPda, account?.address, keychain);
 
-  if (props.isBuyer) return null;
+  // Server-resolved (public-buyer match) OR client-resolved (HD-buyer
+  // for a private RFP). Either way, the buyer should never see the
+  // bidder panel — they can't bid on their own RFP, and the "checking
+  // my bid" spinner is misleading.
+  if (props.isBuyer || isHdBuyer) return null;
 
   if (!account) {
     if (!props.isOpenForBids) return null;
@@ -134,6 +138,7 @@ function Connected({
 }: { account: TendrAccount } & YourBidPanelProps) {
   const signMessage = useTendrSignMessage(account);
   const signTransactions = useTendrSignTransactions(account);
+  const keychain = useKeychainContext();
   const router = useRouter();
 
   // Initial resolution - public mode is server-driven; private mode reads
@@ -153,40 +158,180 @@ function Connected({
     return { kind: 'loading' };
   });
 
-  // Private mode cache lookup runs after mount (localStorage isn't safe
-  // during SSR/initial render).
+  // v2 private-mode resolution. Three phases, ordered cheapest-first:
+  //   1. localStorage HD-index cache (`tender:bidder-index:...`)
+  //      written by bid-composer at submit time. Hit = derive ephemeral
+  //      via keychain (silent if unlocked) + query chain for the bid.
+  //      Cost: 1 RPC call.
+  //   2. Cache miss + keychain available: call `findOwnBidForRfp` —
+  //      one batched getMultipleAccounts across 32 deterministic bid
+  //      PDAs. Silent if keychain is already unlocked (typical post
+  //      SIWS pre-warm); otherwise triggers ONE master sign popup.
+  //      A "no bid found" result is a valid resolution (→ no_bid;
+  //      surfaces the "Submit a sealed bid" UI), NOT an error.
+  //      Cost: ~50-150ms.
+  //   3. No keychain handle (mid-render disconnect) or sign rejected:
+  //      surface the manual "Check on chain" CTA as a fallback.
   useEffect(() => {
     if (bidderVisibility !== 'buyer_only') return;
     let cancelled = false;
-    try {
-      const key = `tender:bid:${rfpPda}:${account.address}`;
-      const cached = localStorage.getItem(key);
-      if (cached) {
-        const j = JSON.parse(cached) as {
-          ephemeralPubkey?: string;
-          bidPda?: string;
-          submittedAt?: string;
-        };
-        if (j.ephemeralPubkey && j.bidPda) {
-          if (!cancelled) {
+
+    void (async () => {
+      const indexCacheKey = `tender:bidder-index:${rfpPda}:${account.address}`;
+      const metaCacheKey = `tender:bid:${rfpPda}:${account.address}`;
+
+      // Phase 1a: full-metadata cache (ephemeralPubkey + bidPda + submittedAt).
+      // Written by bid-composer on submit and by handleVerifyPrivate /
+      // findOwnBidForRfp recoveries. Lets us render without any wallet
+      // popup — we only need the master seed when the user actually
+      // takes an action (reveal/withdraw), which derives lazily.
+      try {
+        const rawMeta = localStorage.getItem(metaCacheKey);
+        if (rawMeta) {
+          const parsed = JSON.parse(rawMeta) as {
+            ephemeralPubkey?: string;
+            bidPda?: string;
+            submittedAt?: string;
+            withdrawnAt?: string;
+          };
+          // The withdraw path leaves a stub `{ephemeralPubkey, withdrawnAt}`
+          // for the sweep panel — no bidPda means no bid to surface.
+          if (parsed.bidPda && parsed.ephemeralPubkey) {
             setResolved({
               kind: 'has_bid',
-              bidPda: j.bidPda,
-              ephemeralPubkey: j.ephemeralPubkey,
-              submittedAt: j.submittedAt,
+              bidPda: parsed.bidPda,
+              ephemeralPubkey: parsed.ephemeralPubkey,
+              submittedAt: parsed.submittedAt,
             });
+            return;
           }
-          return;
+        }
+      } catch {
+        /* JSON parse / localStorage failure — fall through */
+      }
+
+      let cachedIdx: number | null = null;
+      try {
+        const raw = localStorage.getItem(indexCacheKey);
+        if (raw !== null) {
+          const parsed = Number(raw);
+          if (Number.isFinite(parsed)) cachedIdx = parsed;
+        }
+      } catch {
+        /* localStorage disabled — fall through */
+      }
+
+      // Phase 1b: index-only cache. Derive ephemeral (needs master sign)
+      // + chain-check the bid. Triggered when bid-composer wrote the
+      // index but the metadata cache was cleared (or this device
+      // received the index from DiscoverPrivateBids enumeration which
+      // doesn't currently write metadata — see TODO there).
+      if (cachedIdx !== null && keychain) {
+        try {
+          const eph = await keychain.bidderEphemeral(cachedIdx);
+          const ephPubkey = eph.publicKey.toBase58();
+          const matches = await listBids({
+            rfpPda: rfpPda as Address,
+            providerWallet: ephPubkey as Address,
+          });
+          const found = matches[0];
+          if (cancelled) return;
+          if (found) {
+            const submitted = new Date(Number(found.data.submittedAt) * 1000).toISOString();
+            // Upgrade the cache: write the full metadata so the next
+            // visit hits Phase 1a and skips the sign entirely.
+            try {
+              localStorage.setItem(
+                metaCacheKey,
+                JSON.stringify({
+                  ephemeralPubkey: ephPubkey,
+                  bidPda: String(found.address),
+                  submittedAt: submitted,
+                }),
+              );
+            } catch {
+              /* quota — non-fatal */
+            }
+            setResolved({
+              kind: 'has_bid',
+              bidPda: String(found.address),
+              ephemeralPubkey: ephPubkey,
+              submittedAt: submitted,
+            });
+          } else {
+            // Index was allocated but bid never landed (abandoned
+            // submission). Fall through to enumerate so we don't get
+            // stuck on a stale cache.
+            cachedIdx = null;
+          }
+          if (cachedIdx !== null) return;
+        } catch {
+          /* derivation failed; fall through */
         }
       }
+
+      // Phase 2: resolve via the keychain. If it's already unlocked
+      // (typical after the SIWS pre-warm), this is silent. If it's
+      // locked but a keychain handle exists, this triggers ONE master
+      // sign popup — user is on a private-bidder RFP detail page, so
+      // they're clearly engaged and a popup is acceptable. Either way
+      // we use `findOwnBidForRfp` (one batched getMultipleAccounts
+      // over 32 deterministic bid PDAs) instead of the global
+      // `enumerateOwnBids` (32 getProgramAccounts memcmp scans).
+      // Typically ~50-150ms vs ~600ms.
+      //
+      // Important: a "no bid found" result is a valid resolution
+      // (user hasn't bid yet — surface the "Submit a sealed bid" UI).
+      // Only fall through to need_check if the keychain itself is
+      // unavailable or the user dismissed the sign.
+      if (keychain) {
+        try {
+          const masterSeed = await keychain.getMasterSeed();
+          const { findOwnBidForRfp } = await import('@/lib/keychain/enumerate');
+          const hit = await findOwnBidForRfp(masterSeed, rfpPda as Address);
+          if (cancelled) return;
+          if (hit) {
+            const submitted = new Date(Number(hit.bid.data.submittedAt) * 1000).toISOString();
+            try {
+              localStorage.setItem(indexCacheKey, String(hit.index));
+              // Also seed full metadata so next hard refresh skips
+              // the master sign entirely (Phase 1a hits).
+              localStorage.setItem(
+                metaCacheKey,
+                JSON.stringify({
+                  ephemeralPubkey: hit.ephemeralPubkey,
+                  bidPda: String(hit.bid.address),
+                  submittedAt: submitted,
+                }),
+              );
+            } catch {
+              /* quota — non-fatal */
+            }
+            setResolved({
+              kind: 'has_bid',
+              bidPda: String(hit.bid.address),
+              ephemeralPubkey: hit.ephemeralPubkey,
+              submittedAt: submitted,
+            });
+            return;
+          }
+          setResolved({ kind: 'no_bid' });
+          return;
+        } catch {
+          /* sign rejected / lookup failed — fall through to manual CTA */
+        }
+      }
+
+      // Phase 3: no keychain or master sign rejected. Surface the
+      // manual "Check on-chain" CTA. Clicking it re-runs the same
+      // findOwnBidForRfp via handleVerifyPrivate.
       if (!cancelled) setResolved({ kind: 'need_check' });
-    } catch {
-      if (!cancelled) setResolved({ kind: 'need_check' });
-    }
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [bidderVisibility, rfpPda, account.address]);
+  }, [bidderVisibility, rfpPda, account.address, keychain?.isUnlocked, keychain]);
 
   // ---- Cached crypto state across the session ------------------------------
   // X25519 provider keypair (used for ECIES decryption) - same for all RFPs.
@@ -199,9 +344,17 @@ function Connected({
   >(null);
 
   /**
-   * Derive (or return cached) ephemeral keypair for this RFP. Throws if the
-   * derived pubkey doesn't match `expected` - guards against stale localStorage
-   * cache or a wallet swap.
+   * Derive (or return cached) ephemeral keypair for this RFP via the
+   * v2 HD keychain. Resolution order:
+   *   1. In-memory cache (no work).
+   *   2. localStorage `tender:bidder-index:<rfpPda>:<wallet>` — written
+   *      at bid submit time. Hit = derive instantly via keychain.
+   *   3. On-chain enumeration — fresh device or cleared storage.
+   *      Scans HD bidder ephemerals 0..63 to find the one whose bid
+   *      lives on THIS RFP. Caches the index for next time.
+   *   4. Throws if no bid found under this main wallet's keychain.
+   *
+   * `expected` guards against stale state (wallet swap, etc).
    */
   const ensureEphemeralKeypair = useCallback(
     async (expected?: string): Promise<import('@solana/web3.js').Keypair> => {
@@ -211,53 +364,84 @@ function Connected({
         }
         return cachedEphemeralKp;
       }
-      const seedMsg = deriveEphemeralBidWalletMessage(rfpPda);
-      // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
-      const seedSig = await (signMessage as any)({ message: seedMsg });
-      const eph = await deriveEphemeralBidKeypair(seedSig.signature);
+      if (!keychain) {
+        throw new Error('Keychain not unlocked. Reconnect your wallet and try again.');
+      }
+      const indexCacheKey = `tender:bidder-index:${rfpPda}:${account.address}`;
+      let idx: number | null = null;
+      if (typeof window !== 'undefined') {
+        const raw = window.localStorage.getItem(indexCacheKey);
+        if (raw !== null) {
+          const parsed = Number(raw);
+          if (Number.isFinite(parsed)) idx = parsed;
+        }
+      }
+      if (idx === null) {
+        // Fresh device / cleared storage — scan HD bidder ephemerals
+        // for one with a bid on this RFP. ~600ms over a good RPC.
+        const masterSeed = await keychain.getMasterSeed();
+        const { enumerateOwnBids } = await import('@/lib/keychain/enumerate');
+        const hits = await enumerateOwnBids(masterSeed);
+        const hit = hits.find((h) => String(h.bid.data.rfp) === rfpPda);
+        if (!hit) {
+          throw new Error('No bid found for this RFP under your HD keychain');
+        }
+        idx = hit.index;
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(indexCacheKey, String(idx));
+        }
+      }
+      const eph = await keychain.bidderEphemeral(idx);
       if (expected && eph.publicKey.toBase58() !== expected) {
         throw new Error(
-          'Derived ephemeral pubkey mismatch - your localStorage cache may be from a different wallet.',
+          'Derived ephemeral pubkey mismatch — your HD index cache may be stale or from a different wallet.',
         );
       }
       setCachedEphemeralKp(eph);
       return eph;
     },
-    [cachedEphemeralKp, rfpPda, signMessage],
+    [cachedEphemeralKp, rfpPda, account.address, keychain],
   );
 
   // ---- Private mode: derive ephemeral + query chain on demand --------------
+  // Uses `findOwnBidForRfp` directly (one batched getMultipleAccounts call
+  // across 32 deterministic bid PDAs). Distinguishes three outcomes:
+  //   - hit found       → has_bid + seed cache
+  //   - confirmed empty → no_bid (NOT an error — user just hasn't bid yet,
+  //                       surfaces the "Submit a sealed bid" UI)
+  //   - sign / RPC fail → revert to need_check + toast
   async function handleVerifyPrivate() {
+    if (!keychain) {
+      toast.error('Keychain unavailable — reconnect your wallet and try again.');
+      return;
+    }
     setResolved({ kind: 'loading' });
     try {
-      const eph = await ensureEphemeralKeypair();
-      const ephPubkey = eph.publicKey.toBase58();
-      const matches = await listBids({
-        rfpPda: rfpPda as Address,
-        providerWallet: ephPubkey as Address,
-      });
-      if (matches.length === 0) {
+      const masterSeed = await keychain.getMasterSeed();
+      const { findOwnBidForRfp } = await import('@/lib/keychain/enumerate');
+      const hit = await findOwnBidForRfp(masterSeed, rfpPda as Address);
+      if (!hit) {
         setResolved({ kind: 'no_bid' });
         return;
       }
-      const found = matches[0]!;
-      const submitted = new Date(Number(found.data.submittedAt) * 1000).toISOString();
+      const submitted = new Date(Number(hit.bid.data.submittedAt) * 1000).toISOString();
       try {
+        localStorage.setItem(`tender:bidder-index:${rfpPda}:${account.address}`, String(hit.index));
         localStorage.setItem(
           `tender:bid:${rfpPda}:${account.address}`,
           JSON.stringify({
-            ephemeralPubkey: ephPubkey,
-            bidPda: found.address,
+            ephemeralPubkey: hit.ephemeralPubkey,
+            bidPda: String(hit.bid.address),
             submittedAt: submitted,
           }),
         );
       } catch {
-        /* quota */
+        /* quota — non-fatal */
       }
       setResolved({
         kind: 'has_bid',
-        bidPda: found.address,
-        ephemeralPubkey: ephPubkey,
+        bidPda: String(hit.bid.address),
+        ephemeralPubkey: hit.ephemeralPubkey,
         submittedAt: submitted,
       });
     } catch (e) {
@@ -389,7 +573,7 @@ function Connected({
         onProgress: (s) => setWithdrawStage(s),
       });
       toast.success('Bid withdrawn', {
-        description: `er ${result.txSignature.slice(0, 8)}…`,
+        description: <TxToastDescription hash={result.txSignature} prefix="withdraw tx" />,
         duration: 8000,
       });
       // Local state: collapse the panel to the no-bid CTA.
@@ -717,4 +901,66 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
       {children}
     </div>
   );
+}
+
+/**
+ * Detect whether the connected main wallet owns this RFP via an HD
+ * buyer ephemeral. Mirrors the marketplace grid's resolution order:
+ *   1. localStorage `tender:buyer-index:<rfpPda>:<wallet>` (sync, no RPC).
+ *      Seeded by create-flow at create-time + by marketplace grid +
+ *      DiscoverPrivateRfps when they enumerate.
+ *   2. If the keychain is already unlocked this session, silently call
+ *      `enumerateOwnedRfps` and look for a hit on this RFP. Seeds the
+ *      cache for next visit.
+ * We deliberately do NOT auto-prompt master sign here — too aggressive
+ * for an RFP detail page someone might just be browsing.
+ */
+function useIsHdBuyer(
+  rfpPda: string,
+  walletAddress: string | undefined,
+  keychain: ReturnType<typeof useKeychainContext>,
+): boolean {
+  const [isHdBuyer, setIsHdBuyer] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || !walletAddress) return false;
+    const key = `tender:buyer-index:${rfpPda}:${walletAddress}`;
+    return window.localStorage.getItem(key) !== null;
+  });
+
+  useEffect(() => {
+    if (isHdBuyer) return;
+    if (typeof window === 'undefined' || !walletAddress) return;
+    // Re-check synchronously in case another surface populated the cache
+    // between mount and this effect (e.g. marketplace grid's enumerate
+    // completing while we render).
+    const key = `tender:buyer-index:${rfpPda}:${walletAddress}`;
+    if (window.localStorage.getItem(key) !== null) {
+      setIsHdBuyer(true);
+      return;
+    }
+    if (!keychain?.isUnlocked) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const masterSeed = await keychain.getMasterSeed();
+        const { enumerateOwnedRfps } = await import('@/lib/keychain/enumerate');
+        const hits = await enumerateOwnedRfps(masterSeed);
+        if (cancelled) return;
+        const hit = hits.find((h) => String(h.rfp.address) === rfpPda);
+        if (!hit) return;
+        try {
+          window.localStorage.setItem(key, String(hit.index));
+        } catch {
+          /* quota — non-fatal */
+        }
+        setIsHdBuyer(true);
+      } catch {
+        /* enumerate failed — leave isHdBuyer false */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rfpPda, walletAddress, keychain, isHdBuyer]);
+
+  return isHdBuyer;
 }

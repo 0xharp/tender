@@ -1,13 +1,13 @@
 import type { Address } from '@solana/kit';
-import { ScrollTextIcon, TrendingUpIcon } from 'lucide-react';
+import { TrendingUpIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { DataField } from '@/components/primitives/data-field';
 import { HashLink } from '@/components/primitives/hash-link';
 import { SectionHeader } from '@/components/primitives/section-header';
+import { BuyerRfpsByStatus } from '@/components/profile/buyer-rfps-by-status';
 import { ShareCard } from '@/components/profile/share-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getCurrentWallet } from '@/lib/auth/session';
 import { ProfileOgCard } from '@/lib/og/profile-card';
 import { preferredProfileSlug, resolveWalletParam } from '@/lib/sns/resolve-server';
 import {
@@ -68,8 +68,9 @@ export default async function Page({ params }: PageProps) {
   // if pubkey). Page renders with the canonical pubkey internally.
   const wallet = await resolveWalletParam(rawWallet);
   const walletAddr = wallet as Address;
-  const sessionWallet = await getCurrentWallet();
-  const isOwnProfile = sessionWallet === wallet;
+  // Profile pages are pure-public — own-profile == visitor view. Owner-
+  // only surfaces (claim CTAs, sweep) live on /dashboard. Server-side
+  // session lookup dropped on this surface.
   // Slug used in the share/copy URL — .sol when this wallet has a primary
   // domain, otherwise pubkey. Same readability win as the leaderboard links.
   const shareSlug = await preferredProfileSlug(wallet);
@@ -88,6 +89,7 @@ export default async function Page({ params }: PageProps) {
       .order('created_at', { ascending: false })
       .limit(100),
   ]);
+
   const titleByPda = new Map((titleRows ?? []).map((r) => [r.on_chain_pda, r]));
 
   const totalCreated = allRfps.length;
@@ -121,18 +123,16 @@ export default async function Page({ params }: PageProps) {
     'cancelled',
     'ghostedbybuyer',
   ];
-  const orderedStatuses = statusDisplayOrder.filter((s) => rfpsByStatus.has(s));
-
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
       <SectionHeader
         eyebrow="Public buyer profile"
-        // Use the wallet's tendr identity (e.g. `0xharp.tendr.sol`) as the
-        // heading when it has one claimed. Falls back to "Pseudonymous
-        // buyer" only when the wallet has no SNS claim — preferredProfileSlug
-        // returns the raw pubkey in that case, which we detect via the
-        // .sol suffix and map to the legacy fallback.
-        title={shareSlug.endsWith('.sol') ? shareSlug : 'Pseudonymous buyer'}
+        // Title: SNS-claimed wallet renders the .tendr.sol handle;
+        // otherwise a generic "Anon Buyer" fallback. No eph detection —
+        // the page treats every URL as a main wallet (legacy private-
+        // buyer ephs surface as their raw pubkey, accepted as a quirk of
+        // pre-v2 envelope data).
+        title={shareSlug.endsWith('.sol') ? shareSlug : 'Anon Buyer'}
         description={
           <span className="inline-flex flex-col gap-1.5 text-muted-foreground">
             <HashLink hash={wallet} kind="account" visibleChars={22} withSns />
@@ -144,6 +144,19 @@ export default async function Page({ params }: PageProps) {
         }
         size="md"
       />
+
+      {/* Header callout — explains what this surface is + how anon
+          activity surfaces here. */}
+      <div className="rounded-xl border border-dashed border-primary/25 bg-primary/[0.03] px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+        <strong className="text-foreground">Public profile.</strong> Reputation here counts only
+        RFPs where this wallet participated as a public buyer, plus anonymous RFPs the buyer has
+        explicitly merged via <strong>Claim reputation</strong>. Anonymous activity is managed from{' '}
+        <Link href="/dashboard/buying" className="text-primary underline-offset-2 hover:underline">
+          your dashboard
+        </Link>
+        . Claim merges reputation counters only — the underlying anonymous RFPs stay off this page
+        and remain anonymous on chain.
+      </div>
 
       <ShareCard
         shareHref={`/buyers/${shareSlug}`}
@@ -192,7 +205,7 @@ export default async function Page({ params }: PageProps) {
             {totalCreated === 1 ? 'RFP' : 'RFPs'} created on tendr.bid.
           </p>
           {buyerRep ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               <RepStat
                 label="Awarded"
                 value={String(buyerRep.totalRfps ?? 0)}
@@ -209,10 +222,16 @@ export default async function Page({ params }: PageProps) {
                 hint={`$${microUsdcToDecimal(buyerRep.totalReleasedUsdc)} released`}
               />
               <RepStat
+                label="Cancelled"
+                value={String(buyerRep.cancelledMilestones ?? 0)}
+                hint="mid-flight cancellations"
+                tone={buyerRep.cancelledMilestones > 0 ? 'warn' : 'normal'}
+              />
+              <RepStat
                 label="Disputed"
                 value={String(buyerRep.disputedMilestones ?? 0)}
-                hint={`${buyerRep.cancelledMilestones} cancelled mid-flight`}
-                tone="warn"
+                hint="escalations"
+                tone={buyerRep.disputedMilestones > 0 ? 'warn' : 'normal'}
               />
               <RepStat
                 label="Ghosted"
@@ -247,52 +266,14 @@ export default async function Page({ params }: PageProps) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-baseline justify-between gap-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ScrollTextIcon className="size-4 text-muted-foreground" />
-            RFPs by status
-          </CardTitle>
-          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-            {totalCreated} total
-          </span>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {orderedStatuses.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-border/60 bg-card/40 p-3 text-xs leading-relaxed text-muted-foreground">
-              {isOwnProfile
-                ? 'You haven’t created an RFP yet. Post one to see it here.'
-                : 'This buyer hasn’t created any RFPs yet.'}
-            </p>
-          ) : (
-            orderedStatuses.map((status) => {
-              const entries = rfpsByStatus.get(status)!;
-              return (
-                <div key={status} className="flex flex-col gap-2">
-                  <div className="flex items-baseline justify-between">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {status} · {entries.length}
-                    </span>
-                  </div>
-                  <ul className="flex flex-col divide-y divide-border/40 rounded-xl border border-border/60">
-                    {entries.map((e) => (
-                      <li key={e.pda}>
-                        <Link
-                          href={`/rfps/${e.pda}`}
-                          className="flex items-center justify-between gap-3 px-4 py-3 text-sm transition-colors hover:bg-card/60"
-                        >
-                          <span className="truncate font-medium">{e.title}</span>
-                          <HashLink hash={e.pda} kind="account" visibleChars={6} linkable={false} />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })
-          )}
-        </CardContent>
-      </Card>
+      <BuyerRfpsByStatus
+        walletAddress={wallet}
+        statusOrder={statusDisplayOrder}
+        serverEntriesByStatus={Object.fromEntries(rfpsByStatus.entries())}
+      />
+
+      {/* v2: EphemeralBalancePanel moved to /me/projects (single canonical
+          home for sweeps, role-agnostic). Wallet popover links there too. */}
 
       <Card>
         <CardHeader>

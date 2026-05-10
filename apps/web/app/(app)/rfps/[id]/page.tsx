@@ -8,13 +8,13 @@ import { ExpireRfpPanel } from '@/components/escrow/expire-rfp-panel';
 import { ProviderActionPanel } from '@/components/escrow/provider-action-panel';
 import { DataField } from '@/components/primitives/data-field';
 import { HashLink } from '@/components/primitives/hash-link';
-import { PrivacyTag } from '@/components/primitives/privacy-tag';
+import { PrivacyBadges } from '@/components/primitives/privacy-tag';
 import { ReserveTag } from '@/components/primitives/reserve-tag';
 import { SectionHeader } from '@/components/primitives/section-header';
 import { StatusPill, type StatusTone } from '@/components/primitives/status-pill';
 import { ShareCard } from '@/components/profile/share-card';
+import { HdRoleSwitch } from '@/components/rfp/hd-role-switch';
 import { RfpLifecycleBar } from '@/components/rfp/rfp-lifecycle-bar';
-import { SweepEphemeralPanel } from '@/components/rfp/sweep-ephemeral-panel';
 import { YourBidPanel } from '@/components/rfp/your-bid-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { InlineMarkdown } from '@/components/ui/markdown';
@@ -26,6 +26,7 @@ import { buildRfpOgProps } from '@/lib/og/rfp-props';
 import { preferredProfileSlug } from '@/lib/sns/resolve-server';
 import {
   bidderVisibilityToString,
+  buyerVisibilityToString,
   bytesToHex as bytesToHexNoble,
   fetchBuyerReputation,
   fetchMilestones,
@@ -135,6 +136,8 @@ export default async function Page({ params }: PageProps) {
 
   const status = rfpStatusToString(chainRfp.status);
   const visibility = bidderVisibilityToString(chainRfp.bidderVisibility);
+  const buyerVisibility = buyerVisibilityToString(chainRfp.buyerVisibility);
+  const isPrivateBuyer = buyerVisibility === 'private';
   const buyerWallet = chainRfp.buyer;
   // Buyer rep is fetched lazily here (not bundled in the initial Promise.all
   // above) because it's only needed for the inline trust badge in the Scope
@@ -153,9 +156,9 @@ export default async function Page({ params }: PageProps) {
   const revealCloseAtIso = unixSecondsToIso(chainRfp.revealCloseAt);
   const bidCount = chainRfp.bidCount;
   const contractValueUsdc = microUsdcToDecimal(chainRfp.contractValue);
-  const reserveRevealedUsdc = chainRfp.reservePriceRevealed
-    ? microUsdcToDecimal(chainRfp.reservePriceRevealed)
-    : '0';
+  // v2 — reserve_price_revealed is read on chain by select_bid to enforce
+  // the cap, but we deliberately don't surface the revealed amount in the
+  // UI. ReserveTag stays in the "Reserve set" state regardless.
   const hasReserve = !chainRfp.reservePriceCommitment.every((b: number) => b === 0);
 
   const isBuyer = wallet === buyerWallet;
@@ -173,13 +176,21 @@ export default async function Page({ params }: PageProps) {
   // Pull milestones (after funding) + bid list (for buyer's close-bidding +
   // award picker). The buyer needs the bid list as soon as bidding is past
   // its close time (to flip status), and throughout the reveal+award phases.
+  //
+  // We fetch bids unconditionally — server-side `isBuyer` only matches
+  // the main wallet, so for HD-private buyers (where `chainRfp.buyer`
+  // is an HD ephemeral) the previous `isBuyer ? listBids : []` gate
+  // resolved to an empty array and the BuyerActionPanel rendered
+  // "Decrypt 0 bids". Bid PDAs + commit hashes are public chain data
+  // anyway; only the encrypted envelope contents need the buyer's
+  // X25519 key to decrypt, which happens client-side. The HdRoleSwitch
+  // wrapper handles whether to actually mount BuyerActionPanel for
+  // HD-buyer viewers.
   const [milestonesRaw, bidsForAward, milestoneNotes] = await Promise.all([
     chainRfp.milestoneCount > 0
       ? fetchMilestones(id as Address, chainRfp.milestoneCount)
       : Promise.resolve([]),
-    isBuyer
-      ? listBids({ rfpPda: id as Address })
-      : Promise.resolve([] as Awaited<ReturnType<typeof listBids>>),
+    listBids({ rfpPda: id as Address }),
     listMilestoneNotes(id),
   ]);
 
@@ -250,7 +261,7 @@ export default async function Page({ params }: PageProps) {
             <StatusPill tone={statusTone(displayStatus(status, bidCloseAtIso))}>
               {displayStatus(status, bidCloseAtIso)}
             </StatusPill>
-            <PrivacyTag mode={visibility} />
+            <PrivacyBadges bidderVisibility={visibility} buyerVisibility={buyerVisibility} />
             <ReserveTag hasReserve={hasReserve} revealedMicroUsdc={chainRfp.reservePriceRevealed} />
           </div>
         }
@@ -273,6 +284,7 @@ export default async function Page({ params }: PageProps) {
             bidCloseAtIso,
             onChainStatus: status,
             privacyMode: visibility,
+            buyerVisibility,
           })}
         />
       </ShareCard>
@@ -283,17 +295,36 @@ export default async function Page({ params }: PageProps) {
             <CardTitle className="text-base">Scope</CardTitle>
             <span className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
               buyer ·{' '}
-              <HashLink
-                hash={buyerWallet}
-                kind="account"
-                visibleChars={4}
-                withSns
-                // Wrapper span sets `uppercase tracking-[0.16em]` for the
-                // label style; cancel both on the address itself so a `.sol`
-                // name renders as `sharpre.sol`, not `SHARPRE.SOL`, and the
-                // hash keeps its base58 case + spacing intact.
-                className="normal-case tracking-normal"
-              />
+              {isPrivateBuyer ? (
+                // v2 private-buyer mode: render via HashLink with
+                // ephemeralRole='buyer' so the surface reads
+                // "Anon Buyer · {trunc}" — consistent with every other
+                // ephemeral surface on the app. The ephemeral pubkey is
+                // technically public (it signed the RFP), but the
+                // "Anon" prefix tells observers this is a per-RFP
+                // identity not a clusterable persona. SNS resolution is
+                // unconditionally suppressed by ephemeralRole.
+                <HashLink
+                  hash={buyerWallet}
+                  kind="account"
+                  visibleChars={4}
+                  ephemeralRole="buyer"
+                  copyable={false}
+                  className="normal-case tracking-normal"
+                />
+              ) : (
+                <HashLink
+                  hash={buyerWallet}
+                  kind="account"
+                  visibleChars={4}
+                  withSns
+                  // Wrapper span sets `uppercase tracking-[0.16em]` for the
+                  // label style; cancel both on the address itself so a `.sol`
+                  // name renders as `sharpre.sol`, not `SHARPRE.SOL`, and the
+                  // hash keeps its base58 case + spacing intact.
+                  className="normal-case tracking-normal"
+                />
+              )}
               {/* Inline trust badge: signals to bidders whether the buyer
                   has a track record of funding + completing past RFPs.
                   Reads tone:
@@ -301,25 +332,36 @@ export default async function Page({ params }: PageProps) {
                   - amber: any ghosted_rfps > 0 (red flag for bidders)
                   - hidden: no rep account or zero-everything (don't pollute
                     a fresh wallet's profile with negative-by-default signals)
+                  - hidden in private buyer mode: rep PDA is keyed on the
+                    ephemeral, never read by anyone, so any number we
+                    surfaced would be misleading. Buyer can opt-in to
+                    public credit later via attest_buyer_history.
                   Click-through goes to the buyer's full profile. */}
-              {buyerRep && (buyerRep.fundedRfps > 0 || buyerRep.ghostedRfps > 0) && (
-                <Link
-                  href={`/buyers/${buyerWallet}`}
-                  className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card/40 px-2 py-0.5 normal-case tracking-normal text-muted-foreground transition-colors hover:border-border hover:text-foreground"
-                  title="Buyer's on-chain track record"
-                >
-                  <span className="text-foreground">{buyerRep.completedRfps}</span> completed ·{' '}
-                  <span className="text-foreground">{buyerRep.fundedRfps}</span> funded
-                  {buyerRep.ghostedRfps > 0 && (
-                    <>
-                      {' '}
-                      ·{' '}
-                      <span className="text-amber-600 dark:text-amber-400">
-                        {buyerRep.ghostedRfps} ghosted
-                      </span>
-                    </>
-                  )}
-                </Link>
+              {!isPrivateBuyer &&
+                buyerRep &&
+                (buyerRep.fundedRfps > 0 || buyerRep.ghostedRfps > 0) && (
+                  <Link
+                    href={`/buyers/${buyerWallet}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card/40 px-2 py-0.5 normal-case tracking-normal text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                    title="Buyer's on-chain track record"
+                  >
+                    <span className="text-foreground">{buyerRep.completedRfps}</span> completed ·{' '}
+                    <span className="text-foreground">{buyerRep.fundedRfps}</span> funded
+                    {buyerRep.ghostedRfps > 0 && (
+                      <>
+                        {' '}
+                        ·{' '}
+                        <span className="text-amber-600 dark:text-amber-400">
+                          {buyerRep.ghostedRfps} ghosted
+                        </span>
+                      </>
+                    )}
+                  </Link>
+                )}
+              {isPrivateBuyer && (
+                <span className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 normal-case tracking-normal text-primary">
+                  no public rep · privacy-first
+                </span>
               )}
             </span>
           </CardHeader>
@@ -353,9 +395,6 @@ export default async function Page({ params }: PageProps) {
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {bidCount} {bidCount === 1 ? 'sealed bid' : 'sealed bids'} committed
-                {chainRfp.reservePriceRevealed > 0n ? (
-                  <> · reserve revealed: ${reserveRevealedUsdc} USDC</>
-                ) : null}
               </p>
             </CardContent>
           </Card>
@@ -391,16 +430,24 @@ export default async function Page({ params }: PageProps) {
       </section>
 
       {/* ---- Provider's bid on this RFP (canonical management surface) --- */}
-      {!isBuyer && (
-        <YourBidPanel
-          rfpId={id}
-          rfpPda={id}
-          bidderVisibility={visibility}
-          isBuyer={isBuyer}
-          isOpenForBids={isOpenForBids}
-          existingBid={viewerExistingBid}
-        />
-      )}
+      {/* Wrapped in HdRoleSwitch so HD buyers never see the bidder panel
+          for their own RFP (the panel itself also has its own
+          useIsHdBuyer guard, but this avoids even mounting it). */}
+      <HdRoleSwitch
+        rfpPda={id}
+        serverIsBuyer={isBuyer}
+        buyerSlot={null}
+        notBuyerSlot={
+          <YourBidPanel
+            rfpId={id}
+            rfpPda={id}
+            bidderVisibility={visibility}
+            isBuyer={isBuyer}
+            isOpenForBids={isOpenForBids}
+            existingBid={viewerExistingBid}
+          />
+        }
+      />
 
       {/* ---- Reveal-window-expired escape hatch (permissionless) ------------ */}
       {/* Also surfaces a "no bids received — wait for reveal close" info card
@@ -415,51 +462,62 @@ export default async function Page({ params }: PageProps) {
         bidCount={Number(bidCount)}
       />
 
-      {/* ---- Provider-side ephemeral sweep - surfaces only when there's a
-              cached ephemeral with > 0.015 SOL ------------------------------ */}
-      {!isBuyer && <SweepEphemeralPanel rfpPda={id} bidderVisibility={visibility} />}
+      {/* v2: per-RFP sweep removed — global EphemeralBalancePanel on
+          /me/projects covers all stranded ephemerals (buyer + bidder)
+          across every private RFP/bid the keychain knows about. */}
 
       {/* ---- Role-aware action panels (escrow + milestones) ----------------- */}
-      {isBuyer && (
-        <BuyerActionPanel
-          rfpPda={id}
-          rfpStatus={status}
-          rfpNonceHex={meta.rfp_nonce_hex}
-          feeBps={chainRfp.feeBps}
-          contractValueUsdc={contractValueUsdc}
-          contractValueRaw={chainRfp.contractValue}
-          milestoneCount={chainRfp.milestoneCount}
-          milestoneAmounts={chainRfp.milestoneAmounts
-            .slice(0, chainRfp.milestoneCount)
-            .map((v) => BigInt(v))}
-          milestoneDurationsSecs={chainRfp.milestoneDurationsSecs
-            .slice(0, chainRfp.milestoneCount)
-            .map((v) => BigInt(v))}
-          winnerBidPda={winnerBidPda}
-          fundingDeadlineIso={fundingDeadlineIso}
-          milestones={milestoneSummaries}
-          winnerProvider={winnerProvider}
-          bids={bidsForAwardPanel}
-          isPastBidClose={isPastBidClose}
-          notesByMilestoneIndex={notesByMilestoneIndex}
-          rfpScope={meta.scope_summary ?? undefined}
-          rfpTitle={meta.title}
-        />
-      )}
-
-      {!isBuyer && winnerProvider && (
-        <ProviderActionPanel
-          rfpPda={id}
-          rfpStatus={status}
-          buyerWallet={buyerWallet}
-          winnerBidPda={winnerBidPda}
-          winnerProvider={winnerProvider}
-          milestoneCount={chainRfp.milestoneCount}
-          milestones={milestoneSummaries}
-          activeMilestoneIndex={chainRfp.activeMilestoneIndex}
-          notesByMilestoneIndex={notesByMilestoneIndex}
-        />
-      )}
+      {/* Single client switch picks buyer vs provider panels based on
+          merged main + HD buyer detection. HD buyers see BuyerActionPanel
+          even though server-side `isBuyer` is false (chainRfp.buyer is
+          their HD ephemeral, not their main wallet). */}
+      <HdRoleSwitch
+        rfpPda={id}
+        serverIsBuyer={isBuyer}
+        buyerSlot={
+          <BuyerActionPanel
+            rfpPda={id}
+            rfpStatus={status}
+            rfpNonceHex={meta.rfp_nonce_hex}
+            feeBps={chainRfp.feeBps}
+            contractValueUsdc={contractValueUsdc}
+            contractValueRaw={chainRfp.contractValue}
+            milestoneCount={chainRfp.milestoneCount}
+            milestoneAmounts={chainRfp.milestoneAmounts
+              .slice(0, chainRfp.milestoneCount)
+              .map((v) => BigInt(v))}
+            milestoneDurationsSecs={chainRfp.milestoneDurationsSecs
+              .slice(0, chainRfp.milestoneCount)
+              .map((v) => BigInt(v))}
+            winnerBidPda={winnerBidPda}
+            fundingDeadlineIso={fundingDeadlineIso}
+            milestones={milestoneSummaries}
+            winnerProvider={winnerProvider}
+            bids={bidsForAwardPanel}
+            isPastBidClose={isPastBidClose}
+            notesByMilestoneIndex={notesByMilestoneIndex}
+            rfpScope={meta.scope_summary ?? undefined}
+            rfpTitle={meta.title}
+            buyerVisibility={buyerVisibility}
+            bidderVisibility={visibility}
+          />
+        }
+        notBuyerSlot={
+          winnerProvider ? (
+            <ProviderActionPanel
+              rfpPda={id}
+              rfpStatus={status}
+              buyerWallet={buyerWallet}
+              winnerBidPda={winnerBidPda}
+              winnerProvider={winnerProvider}
+              milestoneCount={chainRfp.milestoneCount}
+              milestones={milestoneSummaries}
+              activeMilestoneIndex={chainRfp.activeMilestoneIndex}
+              notesByMilestoneIndex={notesByMilestoneIndex}
+            />
+          ) : null
+        }
+      />
 
       <Card>
         <CardHeader>

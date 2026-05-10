@@ -19,6 +19,8 @@ import {
   fixEncoderSize,
   getAddressDecoder,
   getAddressEncoder,
+  getBooleanDecoder,
+  getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
   getI64Decoder,
@@ -89,6 +91,15 @@ export type BidCommit = {
   payoutDestination: Address;
   /** Payout currency + chain. V1 = `Solana { mint: USDC }` only. */
   payoutChain: PayoutChain;
+  /**
+   * v2 — idempotency flag for `attest_win`. Default false. Flips to true
+   * when the provider's main wallet runs `attest_win` to claim this bid's
+   * rep into their public ProviderReputation. Mirrors `Rfp.buyer_attested`
+   * on the buyer side. Only meaningful in private bidder mode where
+   * `provider` is an ephemeral; in public mode this stays false forever
+   * (the provider's main is already credited at win time).
+   */
+  winnerAttested: boolean;
 };
 
 export type BidCommitArgs = {
@@ -118,6 +129,15 @@ export type BidCommitArgs = {
   payoutDestination: Address;
   /** Payout currency + chain. V1 = `Solana { mint: USDC }` only. */
   payoutChain: PayoutChainArgs;
+  /**
+   * v2 — idempotency flag for `attest_win`. Default false. Flips to true
+   * when the provider's main wallet runs `attest_win` to claim this bid's
+   * rep into their public ProviderReputation. Mirrors `Rfp.buyer_attested`
+   * on the buyer side. Only meaningful in private bidder mode where
+   * `provider` is an ephemeral; in public mode this stays false forever
+   * (the provider's main is already credited at win time).
+   */
+  winnerAttested: boolean;
 };
 
 /** Gets the encoder for {@link BidCommitArgs} account data. */
@@ -145,6 +165,7 @@ export function getBidCommitEncoder(): Encoder<BidCommitArgs> {
       ["bump", getU8Encoder()],
       ["payoutDestination", getAddressEncoder()],
       ["payoutChain", getPayoutChainEncoder()],
+      ["winnerAttested", getBooleanEncoder()],
     ]),
     (value) => ({ ...value, discriminator: BID_COMMIT_DISCRIMINATOR }),
   );
@@ -171,6 +192,7 @@ export function getBidCommitDecoder(): Decoder<BidCommit> {
     ["bump", getU8Decoder()],
     ["payoutDestination", getAddressDecoder()],
     ["payoutChain", getPayoutChainDecoder()],
+    ["winnerAttested", getBooleanDecoder()],
   ]);
 }
 

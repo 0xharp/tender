@@ -93,10 +93,16 @@ export interface ListRfpsFilter {
  *  these offsets if the on-chain struct changes shape (and update the lite-svm
  *  tests that exercise getProgramAccounts). */
 const RFP_OFFSET_BUYER = 8; // 0..8 disc, then 32 bytes
-const RFP_OFFSET_WINNER_PROVIDER = 165; // disc(8) + buyer(32) + buyer_enc(32)
+const RFP_OFFSET_WINNER_PROVIDER = 167; // disc(8) + buyer(32) + buyer_enc(32)
 //   + title_hash(32) + category(1) + bid_open_at(8) + bid_close_at(8)
 //   + reveal_close_at(8) + milestone_count(1) + bidder_visibility(1)
-//   + status(1) + winner Option<Pubkey>(33) = 165
+//   + buyer_visibility(1) + buyer_attested(1) + status(1)
+//   + winner Option<Pubkey>(33) = 167
+//
+// v2: bumped from 165 → 167 when buyer_visibility + buyer_attested
+// were inserted between bidder_visibility and status. If the Rfp
+// struct ever shifts again, recompute by walking the field list in
+// `programs/tender/src/state/rfp.rs::Rfp`.
 
 /** List all Rfp accounts owned by Tender, optionally filtered by buyer or
  *  by the main wallet that won the RFP. */
@@ -226,7 +232,24 @@ export async function listBids(filter: ListBidsFilter = {}): Promise<BidCommitWi
       // in place but defensive).
     }
   }
-  return Array.from(out.values());
+
+  // v1/v2 leak guard: the BidCommit discriminator is identical between
+  // program versions (same Anchor account name), and `DELEGATION_PROGRAM_ID`
+  // is shared across all programs that delegate to MagicBlock PER. So a
+  // memcmp scan over the delegation program returns BOTH v1 and v2
+  // delegated bids. Filter to bids whose `rfp` field references an Rfp
+  // account currently owned by the v2 tender program — v1 bids point to
+  // v1 RFPs which are owned by the v1 program and therefore drop out.
+  const candidates = Array.from(out.values());
+  if (candidates.length === 0) return candidates;
+  const rfpPdas = Array.from(new Set(candidates.map((c) => String(c.data.rfp))));
+  const owners = await rpc.getMultipleAccounts(rfpPdas as Address[], { encoding: 'base64' }).send();
+  const v2Rfps = new Set<string>();
+  for (let i = 0; i < owners.value.length; i++) {
+    const info = owners.value[i];
+    if (info && info.owner === tenderProgramId) v2Rfps.add(rfpPdas[i]);
+  }
+  return candidates.filter((c) => v2Rfps.has(String(c.data.rfp)));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -268,6 +291,30 @@ export function rfpStatusToString(status: RfpChain['status']): string {
 
 export function bidderVisibilityToString(v: RfpChain['bidderVisibility']): 'public' | 'buyer_only' {
   return (v as unknown as number) === 0 ? 'public' : 'buyer_only';
+}
+
+/** On-chain bid status string. Order MUST mirror
+ *  `programs/tender/src/state/bid.rs::BidStatus` exactly. The codama
+ *  decoder yields the variant index as a number — we name them here so
+ *  consumers can branch on a stable string instead of memorizing the
+ *  enum order. */
+export type BidStatusString = 'initializing' | 'committed' | 'selected' | 'withdrawn' | 'expired';
+
+export function bidStatusToString(s: BidCommitChain['status']): BidStatusString {
+  const names: BidStatusString[] = [
+    'initializing', // 0
+    'committed', // 1
+    'selected', // 2 — the only "winner" state; gates provider-side post-award actions
+    'withdrawn', // 3
+    'expired', // 4
+  ];
+  return names[s as unknown as number] ?? 'committed';
+}
+
+/** v2: BuyerVisibility decoder. Public=0, Private=1 — mirrors the on-chain
+ *  enum order in `programs/tender/src/state/rfp.rs::BuyerVisibility`. */
+export function buyerVisibilityToString(v: RfpChain['buyerVisibility']): 'public' | 'private' {
+  return (v as unknown as number) === 0 ? 'public' : 'private';
 }
 
 /** Hex-encode a byte array (for commit_hash display and the like). */
@@ -339,13 +386,22 @@ export async function fetchMilestones(
   rfp: Address,
   count: number,
 ): Promise<(MilestoneStateChain | null)[]> {
+  if (count === 0) return [];
+  // Derive every milestone PDA in parallel (no RPC), then fetch all of
+  // them in ONE `getMultipleAccounts` call instead of N parallel
+  // `getAccountInfo` calls. Solana RPC accepts up to 100 accounts per
+  // batch — a milestone count of 8 (the program's max) fits trivially.
+  // Cuts dashboard RPC volume by ~7N for any project with milestones.
   const pdas = await Promise.all(Array.from({ length: count }, (_, i) => findMilestonePda(rfp, i)));
-  const infos = await Promise.all(
-    pdas.map(([pda]) => rpc.getAccountInfo(pda, { encoding: 'base64' }).send()),
-  );
-  return infos.map(({ value }) => {
-    if (!value) return null;
-    const dataField = value.data;
+  const { value } = await rpc
+    .getMultipleAccounts(
+      pdas.map(([pda]) => pda),
+      { encoding: 'base64' },
+    )
+    .send();
+  return value.map((info) => {
+    if (!info) return null;
+    const dataField = info.data;
     const b64 = Array.isArray(dataField) ? (dataField[0] as string) : (dataField as string);
     return accounts.getMilestoneStateDecoder().decode(new Uint8Array(b64ToBytes.encode(b64)));
   });

@@ -66,16 +66,13 @@ export type BuyerRevealStage =
 export interface DecryptedBid {
   bidPda: string;
   /** The on-chain bid signer. Public mode: provider's main wallet. Private
-   *  mode: ephemeral wallet (deterministic from main wallet sig). */
+   *  mode: bidder ephemeral (HD-derived; never linked to a main wallet on
+   *  chain until the provider runs attest_win as a separate post-completion
+   *  claim). The buyer never learns the main wallet at decrypt time — see
+   *  `submit-flow.ts` for the buyer/provider envelope split. */
   bidSignerWallet: string;
   isPrivate: boolean;
   plaintext?: SealedBidPlaintext;
-  /** Private-mode only: the provider's main wallet, decrypted from
-   *  `_bidBinding.mainWallet`. Same as `bidSignerWallet` for public bids. */
-  mainWallet?: string;
-  /** Private-mode only: base64 ed25519 signature over the binding message,
-   *  required by `select_bid`'s Ed25519SigVerify check. */
-  bindingSignatureBase64?: string;
   error?: string;
 }
 
@@ -241,19 +238,21 @@ export async function revealAllBidsForBuyer(input: BuyerRevealInput): Promise<Bu
           error: 'Plaintext failed schema validation.',
         };
       }
-      // Detect private mode + extract binding fields. The submit flow embeds
-      // _bidBinding inside the encrypted plaintext only for private RFPs.
-      const binding = (
-        parsedRaw as { _bidBinding?: { mainWallet?: string; signatureBase64?: string } }
-      )._bidBinding;
-      const isPrivate = !!binding;
+      // Detect private mode. New bids carry a cosmetic `_private: true`
+      // flag in the buyer envelope (the buyer envelope never carries
+      // `_bidBinding` anymore — that lives only in the provider
+      // envelope, per submit-flow's per-recipient split). Legacy bids
+      // (pre per-recipient split) had `_bidBinding` baked into the
+      // buyer envelope; recognising it here keeps the "Anon Provider"
+      // label correct on those rows even though their main-wallet hint
+      // is now ignored downstream.
+      const raw = parsedRaw as { _private?: unknown; _bidBinding?: unknown };
+      const isPrivate = raw._private === true || !!raw._bidBinding;
       return {
         bidPda: r.pda,
         bidSignerWallet: String(decoded.provider),
         isPrivate,
         plaintext: parsed.data,
-        mainWallet: isPrivate ? binding?.mainWallet : String(decoded.provider),
-        bindingSignatureBase64: isPrivate ? binding?.signatureBase64 : undefined,
       };
     } catch (e) {
       return {

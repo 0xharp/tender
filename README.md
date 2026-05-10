@@ -1,8 +1,10 @@
 # tendr.bid
 
-> **Sealed-bid procurement marketplace on Solana.** Buyers post RFPs, providers commit cryptographically-sealed bids, the buyer picks a winner, escrow settles by milestone. Bid contents are sealed from everyone — including the buyer who posted the RFP — until the bid window closes. Sealing is enforced cryptographically (MagicBlock Private Ephemeral Rollup + Cloak), not by policy.
+> **End-to-end private RFP procurement on Solana.** Buyers post RFPs, providers commit cryptographically-sealed bids, the buyer picks a winner, escrow settles by milestone. Bid contents are sealed from everyone — including the buyer who posted the RFP — until the bid window closes. Both buyer and bidder identities are optionally hidden behind HD-derived ephemeral wallets funded through Cloak's shielded UTXO pool, with reputation merging into your main wallet only when you explicitly claim it.
 
-[**Live on devnet: tendr.bid**](https://tendr.bid) · [@tendrdotbid](https://x.com/tendrdotbid) · [FAQ](docs/faq.md) · [Privacy model](docs/privacy-model.md) · [Lifecycle](docs/lifecycle.md) · [Reputation model](docs/reputation-model.md) · [Anchor program](programs/tender/src)
+**Live on Solana devnet — End-to-End Privacy Enabled RFP Procurement.** Mainnet post Colosseum Frontier & audit review.
+
+[**tendr.bid**](https://tendr.bid) · [@tendrdotbid](https://x.com/tendrdotbid) · [FAQ](docs/faq.md) · [Privacy model](docs/privacy-model.md) · [Lifecycle](docs/lifecycle.md) · [Reputation model](docs/reputation-model.md) · [Anchor program](programs/tender/src)
 
 ---
 
@@ -12,7 +14,7 @@ A four-piece system, all in this monorepo:
 
 | Path | What it is |
 |---|---|
-| `programs/tender/` | Anchor v0.32.1 program (Solana devnet, deployed at `4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ`). RFPs, sealed-bid commitments, escrow, milestone state machine, on-chain reputation, dispute resolution. |
+| `programs/tender/` | Anchor v0.32.1 program (Solana devnet, deployed at `GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z`). RFPs, sealed-bid commitments, escrow, milestone state machine, on-chain reputation (with claim-based merge from anonymous-mode ephemerals via `attest_buyer_history` + `attest_win`), dispute resolution. |
 | `apps/web/` | Next.js 16 + Tailwind 4 web app. Buyer + provider UI for the full lifecycle: create RFP, decrypt-and-bid, award, fund, milestone management, dispute, leaderboard, on-chain rep cards. |
 | `apps/ai-sidecar/` | Tiny FastAPI sidecar for AI-assisted RFP scope drafting (optional). |
 | `packages/shared/` | Shared TS types (RFP categories, reputation rows, supabase schema). |
@@ -25,9 +27,9 @@ Source of truth always favors the chain. Supabase only stores text the chain doe
 
 ## The privacy stack (one paragraph)
 
-Each bid is encrypted into two ECIES envelopes (X25519 + XChaCha20-Poly1305) — one to the buyer's per-RFP key, one to the provider's per-wallet key. The encrypted account is **delegated to MagicBlock's Private Ephemeral Rollup**, where reads are gated by a permission account inside an Intel TDX TEE-backed validator. The only way to decrypt before `bid_close_at` is to compromise the buyer's wallet — there is no buyer-side "peek" path because the on-chain `open_reveal_window` instruction, which adds the buyer to the permission set, reverts if `clock.unix_timestamp < rfp.bid_close_at`. For RFPs that toggle private bidder identity, the bid is signed by a per-RFP ephemeral wallet (deterministically derived from the provider's main wallet via signature + HKDF) and funded via **Cloak's shielded UTXO pool** for cryptographic unlinkability between main and ephemeral. On win, an Ed25519SigVerify ix at index 0 of `select_bid` proves the main wallet, so reputation auto-binds. **Losing private bidders' main wallets stay sealed forever.**
+Each bid is encrypted into two ECIES envelopes (X25519 + XChaCha20-Poly1305) — one to the buyer's per-RFP key, one to the bidder's per-wallet key. The encrypted account is **delegated to MagicBlock's Private Ephemeral Rollup**, where reads are gated by a permission account inside an Intel TDX TEE-backed validator. The only way to decrypt before `bid_close_at` is to compromise the buyer's wallet — there is no buyer-side "peek" path because the on-chain `open_reveal_window` instruction, which adds the buyer to the permission set, reverts if `clock.unix_timestamp < rfp.bid_close_at`. Privacy is configurable on two orthogonal axes per RFP: **bidder identity** (each bid signed by an HD-derived ephemeral, funded via **Cloak's shielded UTXO pool**) and **buyer identity** (the RFP itself signed by an HD-derived ephemeral, also Cloak-funded). One master signature per session derives every ephemeral you'll need across both roles via HKDF — buyers, bidders, funding sub-wallets, refund/payout sub-wallets — no encrypted-file storage, no per-action wallet popup spam. Activity on these ephemerals accrues to per-eph reputation PDAs; a separate **claim ix** (`attest_buyer_history` for buyers, `attest_win` for providers) merges that history into the main wallet's public reputation in one transaction, on the user's terms, after the project completes. **Losing private bidders' main wallets stay sealed forever, even after their winning peer claims.**
 
-Full detail in [docs/privacy-model.md](docs/privacy-model.md). Lifecycle map in [docs/lifecycle.md](docs/lifecycle.md). Reputation in [docs/reputation-model.md](docs/reputation-model.md).
+Full detail in [docs/privacy-model.md](docs/privacy-model.md). Lifecycle map in [docs/lifecycle.md](docs/lifecycle.md). Reputation + claim flow in [docs/reputation-model.md](docs/reputation-model.md).
 
 ---
 
@@ -78,36 +80,29 @@ psql "$DATABASE_URL" -f supabase/migrations/0008_milestone_notes.sql
 
 ---
 
-## What works end-to-end on devnet today
+## What works end-to-end on devnet
 
-- ✅ Create RFP (public OR private bidder identity)
-- ✅ Submit sealed bid, including from a per-RFP Cloak-funded ephemeral wallet for private-bidder-mode RFPs
+- ✅ Create RFP — public OR anonymous (HD-derived ephemeral buyer, funded via Cloak's shielded pool)
+- ✅ Submit sealed bid — public OR anonymous (HD-derived bidder ephemeral, funded via Cloak's shielded pool)
+- ✅ Four orthogonal privacy combinations: public buyer + public bidder, public buyer + private bidder, private buyer + public bidder, fully sealed (private buyer + private bidder)
+- ✅ HD-keychain unified derivation — one master signature per session derives every ephemeral role (buyers, bidders, funding sub-wallets, refund/payout sub-wallets) via HKDF. Cross-tab sync via BroadcastChannel; sessionStorage cache for hard-reload survival.
 - ✅ Close bidding (permissionless, after `bid_close_at`)
 - ✅ Decrypt bids client-side, optionally reveal sealed reserve, award winner with binding-sig
-- ✅ Fund project (USDC into escrow ATA)
-- ✅ Per-milestone start / submit / accept / request-changes / reject
+- ✅ Fund project (USDC into escrow ATA) — buyer ephemeral funds via Cloak's shielded pool when in anonymous-buyer mode
+- ✅ Per-milestone start / submit / accept / request-changes / reject — every post-award action signs with the matching ephemeral when the RFP is in private-bidder or private-buyer mode (no main-wallet leak via tx fee payer)
 - ✅ Dispute path: propose split (both sides), default 50/50 after cool-off
 - ✅ Cancel-with-notice / cancel-with-penalty / cancel-late paths
 - ✅ Auto-release after review window
 - ✅ Buyer-ghosted (permissionless after funding deadline)
 - ✅ Expire-RFP (permissionless after reveal deadline if buyer never awarded)
 - ✅ On-chain BuyerReputation + ProviderReputation, leaderboard + per-wallet profile pages
+- ✅ Claim-based reputation merge — `attest_buyer_history` (private-buyer) and `attest_win` (private-bidder) merge an ephemeral's accrued reputation into the user's main wallet rep in a single ix. Idempotent per RFP/bid, gated to `Completed` status, surfaced as inline "Claim reputation" CTAs on the dashboard
 - ✅ Distinct terminal states — `Completed` (work delivered) vs `Cancelled` (all milestones refunded, no work) — so buyer reputation can't be inflated by serial cancellation
 - ✅ "Your projects" workbench with next-action surfacing per RFP, including time-gated escape hatches (auto-release, mark-ghosted, default-50/50, cancel-late)
 - ✅ Off-chain milestone notes (deliverable links, change requests) attached to on-chain transitions
-- ✅ Identity layer via SNS — `.sol` names render across every wallet display surface (profiles, leaderboard, RFP cards, milestone notes, wallet popover). Privacy-safe: never resolves ephemeral bid signers; expands zero new public-identity surface. See `docs/identity.md`.
+- ✅ Identity layer via SNS — `.sol` names render across every wallet display surface (profiles, leaderboard, RFP cards, milestone notes, wallet popover). Privacy-safe: never resolves ephemeral signers; expands zero new public-identity surface. See `docs/identity.md`.
 - ✅ In-app docs at `/docs/[slug]` rendering the same `.md` files GitHub serves — single source of truth
 - ✅ QVAC Private AI surfaces — RFP scope drafting, structured bid drafting (price + timeline + milestones populated end-to-end), and post-decrypt bid comparison — running on a [QVAC](https://qvac.tether.io/) sidecar deployed to a dedicated [Nosana](https://nosana.com/) GPU. Browser hits the sidecar directly via env var; Tendr's app servers never see prompts or bid plaintexts, and no closed AI provider (OpenAI, Anthropic, etc.) is in the pipeline. Open-weight model (Qwen3 4B Q4_K_M). See `docs/ai.md`.
-
-## What's intentionally not here yet
-
-- KYC / KYB. Reputation is pseudonymous tier 0 today; the on-chain registry IS the trust signal. An opt-in verified tier is on the mainnet roadmap.
-- Encrypted RFP scope. Schema-prepared, UI not wired (future).
-- Fully blind bidding (buyer can't see bidders even at reveal). Tradeoff with vetting; future toggle.
-- Cross-program reputation portability. Lives on tendr.bid's program today; v2 attestation primitive can mirror it to a generic on-chain registry.
-- Mainnet. Devnet today; mainnet planned post-Colosseum Frontier review.
-
-See `docs/privacy-model.md` § "Out of scope" for the full list.
 
 ---
 
@@ -129,11 +124,11 @@ See `docs/privacy-model.md` § "Out of scope" for the full list.
             ▼                                              │
 ┌──────────────────────────┐                              │
 │  Cloak shielded pool     │                              │
-│  (mainnet — devnet stub) │── ZK-shielded transfer ──────┘
-│                          │   for ephemeral funding
-│  - Per-RFP ephemeral     │   in private-mode bids
-│    wallet (deterministic │
-│    from main + rfp_pda)  │
+│                          │── ZK-shielded transfer ──────┘
+│                          │   funds buyer + bidder
+│  - HD-derived ephemerals │   ephemerals in private mode
+│    (HKDF from main wallet│
+│    via @noble/hashes)    │
 └──────────────────────────┘
 
          Browser

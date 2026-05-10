@@ -12,20 +12,23 @@ import type { ReactElement } from 'react';
 
 export type RfpOgStatus = 'open' | 'sealed' | 'reveal' | 'awarded' | 'completed' | 'closed';
 
-/** Same enum the in-app `PrivacyTag` consumes - source of truth for the
- *  bid privacy distinction. RFPs themselves are always public; this is
- *  about whether *bid contents* and *bidder identity* are sealed. */
+/** Bidder visibility — same enum the in-app `PrivacyBadges` consumes.
+ *  Buyer visibility is its own dimension (see `buyerVisibility` below). */
 export type RfpOgPrivacyMode = 'public' | 'buyer_only';
+/** Buyer visibility — independent of bidder visibility in v2. */
+export type RfpOgBuyerVisibility = 'public' | 'private';
 
 export interface RfpOgCardProps {
   /** Hero - the RFP's human-readable title from supabase. */
   title: string;
   /** Sub-line - buyer's `.sol` if resolved, else truncated wallet. */
   buyerHandle: string;
-  /** Bid privacy mode - rendered with the same labels + tints as the
-   *  in-app `PrivacyTag` so the OG card and the marketplace cards
+  /** Bidder privacy mode - rendered with the same labels + tints as the
+   *  in-app `PrivacyBadges` so the OG card and the marketplace cards
    *  describe privacy in the same words. */
   privacyMode: RfpOgPrivacyMode;
+  /** Buyer privacy mode - drives the third "Buyer Private" badge. */
+  buyerVisibility?: RfpOgBuyerVisibility;
   /** Status pill text + tone. */
   status: RfpOgStatus;
   /** Three bottom-rail stat cells. */
@@ -43,25 +46,25 @@ const COLORS = {
   primaryRing: 'rgba(169, 120, 235, 0.40)',
 } as const;
 
-// Mirrors `PrivacyTag` in components/primitives/privacy-tag.tsx - same
-// titles, same tints (emerald for public-bidders, primary for fully
-// sealed). Keep these in sync if the in-app component changes.
-const PRIVACY_TONE: Record<
-  RfpOgPrivacyMode,
-  { label: string; fg: string; bg: string; border: string }
-> = {
-  public: {
-    label: 'BID CONTENT PRIVATE',
-    fg: '#6EE7A8',
-    bg: 'rgba(110, 231, 168, 0.10)',
-    border: 'rgba(110, 231, 168, 0.30)',
-  },
-  buyer_only: {
-    label: 'BID CONTENT + IDENTITY PRIVATE',
-    fg: COLORS.primary,
-    bg: COLORS.primarySoft,
-    border: COLORS.primaryRing,
-  },
+// Mirrors `PrivacyBadges` in components/primitives/privacy-tag.tsx —
+// three independent badges that stack: bid-content (always),
+// bidder (when buyer_only), buyer (when private). Keep tones in sync
+// with the in-app component.
+type BadgeTone = { fg: string; bg: string; border: string };
+const TONE_CONTENT: BadgeTone = {
+  fg: '#6EE7A8',
+  bg: 'rgba(110, 231, 168, 0.10)',
+  border: 'rgba(110, 231, 168, 0.30)',
+};
+const TONE_BIDDER: BadgeTone = {
+  fg: COLORS.primary,
+  bg: COLORS.primarySoft,
+  border: COLORS.primaryRing,
+};
+const TONE_BUYER: BadgeTone = {
+  fg: '#E879F9',
+  bg: 'rgba(232, 121, 249, 0.12)',
+  border: 'rgba(232, 121, 249, 0.40)',
 };
 
 // Tone the status pill so a glance distinguishes "open for bids" (live)
@@ -111,11 +114,13 @@ export function RfpOgCard({
   title,
   buyerHandle,
   privacyMode,
+  buyerVisibility = 'public',
   status,
   stats,
 }: RfpOgCardProps): ReactElement {
   const tone = STATUS_TONE[status];
-  const privacy = PRIVACY_TONE[privacyMode];
+  const showBidderBadge = privacyMode === 'buyer_only';
+  const showBuyerBadge = buyerVisibility === 'private';
   // Cap the title length so a runaway-long RFP name doesn't blow out
   // the layout. Satori has no `text-overflow: ellipsis` semantics worth
   // relying on here, so we trim manually.
@@ -206,7 +211,11 @@ export function RfpOgCard({
             fontSize: titleSize,
             fontWeight: 600,
             letterSpacing: '-0.025em',
-            lineHeight: 1.05,
+            // 1.05 was too tight for descenders (g, j, p, q, y) on
+            // titles whose last line ends in those letters. 1.15 gives
+            // the baseline room without visibly shifting the layout.
+            lineHeight: 1.15,
+            paddingBottom: Math.round(titleSize * 0.05),
             color: COLORS.fg,
             // Cap the title to two visual lines worth of width.
             maxWidth: '95%',
@@ -214,7 +223,7 @@ export function RfpOgCard({
         >
           {safeTitle}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <div
             style={{
               display: 'flex',
@@ -222,25 +231,14 @@ export function RfpOgCard({
               color: COLORS.fgMuted,
               fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
               letterSpacing: '0.02em',
+              marginRight: 4,
             }}
           >
             buyer · {buyerHandle}
           </div>
-          <div
-            style={{
-              display: 'flex',
-              padding: '4px 12px',
-              borderRadius: 999,
-              border: `1px solid ${privacy.border}`,
-              backgroundColor: privacy.bg,
-              fontSize: 14,
-              fontWeight: 500,
-              color: privacy.fg,
-              letterSpacing: '0.14em',
-            }}
-          >
-            {privacy.label}
-          </div>
+          <PrivacyChip tone={TONE_CONTENT} label="BID CONTENT PRIVATE" />
+          {showBidderBadge && <PrivacyChip tone={TONE_BIDDER} label="BIDDER PRIVATE" />}
+          {showBuyerBadge && <PrivacyChip tone={TONE_BUYER} label="BUYER PRIVATE" />}
         </div>
       </div>
 
@@ -294,6 +292,26 @@ export function RfpOgCard({
           sealed-bid procurement · solana
         </div>
       </div>
+    </div>
+  );
+}
+
+function PrivacyChip({ tone, label }: { tone: BadgeTone; label: string }): ReactElement {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        padding: '4px 12px',
+        borderRadius: 999,
+        border: `1px solid ${tone.border}`,
+        backgroundColor: tone.bg,
+        fontSize: 14,
+        fontWeight: 500,
+        color: tone.fg,
+        letterSpacing: '0.14em',
+      }}
+    >
+      {label}
     </div>
   );
 }

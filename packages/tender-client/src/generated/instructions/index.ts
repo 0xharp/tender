@@ -7,6 +7,8 @@
  */
 
 export * from "./acceptMilestone";
+export * from "./attestBuyerHistory";
+export * from "./attestWin";
 export * from "./autoReleaseMilestone";
 export * from "./cancelLateMilestone";
 export * from "./cancelWithNotice";

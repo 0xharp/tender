@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { ClientOnly } from '@/components/client-only';
 import { SectionHeader } from '@/components/primitives/section-header';
-import { SignInButton } from '@/components/wallet/sign-in-button';
+import { AutoSignIn } from '@/components/wallet/auto-sign-in';
 import { WalletPicker } from '@/components/wallet/wallet-picker';
 import { cn } from '@/lib/utils';
 import { useTendrAccount } from '@/lib/wallet';
@@ -57,7 +57,7 @@ function GateInner() {
 
       <Step n={2} title="Sign in with Solana" complete={false} dimmed={!account}>
         {account ? (
-          <SignInButton account={account} onSignedIn={() => router.refresh()} />
+          <AutoSignIn account={account} onSignedIn={() => router.refresh()} />
         ) : (
           <p className="text-xs text-muted-foreground">
             Pick a wallet above. The signature is local - no funds move.

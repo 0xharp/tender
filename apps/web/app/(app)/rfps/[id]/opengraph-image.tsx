@@ -4,7 +4,12 @@ import { ImageResponse } from 'next/og';
 import { RfpOgCard, type RfpOgCardProps } from '@/lib/og/rfp-card';
 import { buildRfpOgProps } from '@/lib/og/rfp-props';
 import { preferredProfileSlug } from '@/lib/sns/resolve-server';
-import { bidderVisibilityToString, fetchRfp, rfpStatusToString } from '@/lib/solana/chain-reads';
+import {
+  bidderVisibilityToString,
+  buyerVisibilityToString,
+  fetchRfp,
+  rfpStatusToString,
+} from '@/lib/solana/chain-reads';
 import { serverSupabase } from '@/lib/supabase/server';
 
 export const alt = 'RFP on tendr.bid';
@@ -53,6 +58,7 @@ export default async function Image({
         bidCloseAtIso: new Date(Number(chainRfp.bidCloseAt) * 1000).toISOString(),
         onChainStatus: rfpStatusToString(chainRfp.status),
         privacyMode: bidderVisibilityToString(chainRfp.bidderVisibility),
+        buyerVisibility: buyerVisibilityToString(chainRfp.buyerVisibility),
       });
     }
   } catch {

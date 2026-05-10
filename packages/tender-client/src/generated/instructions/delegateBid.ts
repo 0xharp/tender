@@ -78,7 +78,7 @@ export type DelegateBidInstruction<
     "11111111111111111111111111111111",
   TAccountValidator extends string | AccountMeta<string> = string,
   TAccountOwnerProgram extends string | AccountMeta<string> =
-    "4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ",
+    "GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z",
   TAccountDelegationProgram extends string | AccountMeta<string> =
     "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -389,7 +389,7 @@ export async function getDelegateBidInstructionAsync<
   }
   if (!accounts.ownerProgram.value) {
     accounts.ownerProgram.value =
-      "4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ" as Address<"4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ">;
+      "GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z" as Address<"GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z">;
   }
   if (!accounts.delegationProgram.value) {
     accounts.delegationProgram.value =
@@ -589,7 +589,7 @@ export function getDelegateBidInstruction<
   }
   if (!accounts.ownerProgram.value) {
     accounts.ownerProgram.value =
-      "4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ" as Address<"4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ">;
+      "GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z" as Address<"GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z">;
   }
   if (!accounts.delegationProgram.value) {
     accounts.delegationProgram.value =

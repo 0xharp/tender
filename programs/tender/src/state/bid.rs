@@ -47,6 +47,14 @@ pub struct BidCommit {
 
     /// Payout currency + chain. V1 = `Solana { mint: USDC }` only.
     pub payout_chain: PayoutChain,
+
+    /// v2 — idempotency flag for `attest_win`. Default false. Flips to true
+    /// when the provider's main wallet runs `attest_win` to claim this bid's
+    /// rep into their public ProviderReputation. Mirrors `Rfp.buyer_attested`
+    /// on the buyer side. Only meaningful in private bidder mode where
+    /// `provider` is an ephemeral; in public mode this stays false forever
+    /// (the provider's main is already credited at win time).
+    pub winner_attested: bool,
 }
 
 impl BidCommit {
@@ -55,8 +63,9 @@ impl BidCommit {
     /// + 4 + 4 vec lens + 8 submitted_at + 1 status + 1 bump
     /// + 32 payout_destination
     /// + 1 + 64 payout_chain (1 disc + max 64 for CrossChain variant)
+    /// + 1 winner_attested
     pub const FIXED_SPACE: usize =
-        8 + 32 + 32 + 8 + 32 + 32 + 4 + 4 + 4 + 4 + 8 + 1 + 1 + 32 + (1 + 64);
+        8 + 32 + 32 + 8 + 32 + 32 + 4 + 4 + 4 + 4 + 8 + 1 + 1 + 32 + (1 + 64) + 1;
 
     pub fn space(buyer_envelope_len: u32, provider_envelope_len: u32) -> usize {
         Self::FIXED_SPACE + buyer_envelope_len as usize + provider_envelope_len as usize

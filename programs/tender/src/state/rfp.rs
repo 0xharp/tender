@@ -33,6 +33,20 @@ pub struct Rfp {
     pub reveal_close_at: i64,
     pub milestone_count: u8,
     pub bidder_visibility: BidderVisibility,
+    /// v2: hides the buyer's main wallet by routing all RFP-side authority
+    /// through a per-RFP HD-derived ephemeral. When `Private`, `rfp.buyer`
+    /// is that ephemeral pubkey (not the main wallet) and the program
+    /// skips all buyer-reputation reads/writes for the lifecycle. The
+    /// buyer can optionally claim public credit later via
+    /// `attest_buyer_history` once the RFP completes.
+    pub buyer_visibility: BuyerVisibility,
+    /// v2: idempotency flag for `attest_buyer_history`. Default false.
+    /// Flips to true when the buyer's main wallet successfully merges
+    /// the stranded ephemeral rep into their main rep account. Prevents
+    /// double-credit if attest is called twice. Meaningless for Public
+    /// RFPs (rep updates land on main wallet directly during the
+    /// lifecycle, no merge step required).
+    pub buyer_attested: bool,
     pub status: RfpStatus,
     pub winner: Option<Pubkey>,                  // BidCommit PDA of winner
     pub winner_provider: Option<Pubkey>,         // payout_destination from winning bid
@@ -110,6 +124,20 @@ pub enum BidderVisibility {
     BuyerOnly,
 }
 
+/// v2: orthogonal to BidderVisibility. Controls whether the BUYER is
+/// observably linked to this RFP on chain.
+///   - Public:  rfp.buyer = the buyer's main wallet (today's behavior).
+///              Buyer reputation accumulates live as actions land.
+///   - Private: rfp.buyer = a per-RFP HD-derived ephemeral. The program
+///              never reads or writes a BuyerReputation PDA for this
+///              RFP. Buyer can optionally claim public credit
+///              post-completion via `attest_buyer_history`.
+#[derive(AnchorSerialize, AnchorDeserialize, InitSpace, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BuyerVisibility {
+    Public,
+    Private,
+}
+
 #[event]
 pub struct RfpCreated {
     pub rfp: Pubkey,
@@ -119,6 +147,7 @@ pub struct RfpCreated {
     pub reveal_close_at: i64,
     pub milestone_count: u8,
     pub bidder_visibility: BidderVisibility,
+    pub buyer_visibility: BuyerVisibility,
     pub has_reserve: bool,
 }
 
@@ -143,8 +172,27 @@ pub struct WinnerRecorded {
 pub struct RfpFunded {
     pub rfp: Pubkey,
     pub buyer: Pubkey,
+    /// v2: the wallet that actually signed the fund_project tx and held the
+    /// source ATA. Equals `buyer` in public mode + when buyer funds directly.
+    /// Differs in private-funding flow (Cloak shielded → ephemeral funder)
+    /// and in private-buyer mode (ephemeral funder routes through Cloak).
+    /// Useful for indexers; carries no privacy cost since the funder pubkey
+    /// is already public on the underlying token transfer.
+    pub funder: Pubkey,
     pub contract_value: u64,
     pub funded_at: i64,
+}
+
+/// v2: emitted when a buyer who ran a private RFP voluntarily binds it to
+/// their main wallet for public reputation credit. One-shot, post-completion.
+/// The `buyer_main` link is the only on-chain trail between the main wallet
+/// and the formerly-anonymous RFP — by design, only created when the buyer
+/// explicitly opts in.
+#[event]
+pub struct BuyerAttestation {
+    pub rfp: Pubkey,
+    pub buyer_main: Pubkey,
+    pub attested_at: i64,
 }
 
 #[event]

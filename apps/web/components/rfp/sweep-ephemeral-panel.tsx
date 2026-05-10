@@ -18,7 +18,7 @@
  *   3. There's a cached ephemeral pubkey for this (wallet, rfp)
  *   4. That ephemeral wallet holds > 0.005 SOL on chain
  */
-import { type TendrAccount, useTendrAccount, useTendrSignMessage } from '@/lib/wallet';
+import { type TendrAccount, useKeychainContext, useTendrAccount } from '@/lib/wallet';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -26,10 +26,6 @@ import { HashLink } from '@/components/primitives/hash-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { friendlyBidError, humanizeStage } from '@/lib/bids/error-utils';
-import {
-  deriveEphemeralBidKeypair,
-  deriveEphemeralBidWalletMessage,
-} from '@/lib/crypto/derive-ephemeral-bid-wallet';
 import { stripSolanaClientHeaderMiddleware } from '@/lib/solana/client';
 
 export interface SweepEphemeralPanelProps {
@@ -50,30 +46,46 @@ function Connected({
 }: {
   account: TendrAccount;
 } & SweepEphemeralPanelProps) {
-  const signMessage = useTendrSignMessage(account);
+  const keychain = useKeychainContext();
   const [ephemeralPubkey, setEphemeralPubkey] = useState<string | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [sweepProgress, setSweepProgress] = useState<string | null>(null);
   const [doneSig, setDoneSig] = useState<string | null>(null);
 
-  // Resolve ephemeral pubkey from localStorage cache. No wallet popup here -
-  // if the cache is empty (user never bid or never verified), we just don't
-  // show the panel.
+  // v2 HD-keychain resolution: read the bidder index assigned to this
+  // RFP from localStorage (written at bid submit time), then derive the
+  // ephemeral pubkey via the shared keychain. No wallet popup unless
+  // the keychain hasn't been unlocked yet — and even then, the unlock
+  // is shared across the whole session via KeychainProvider.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const cached = localStorage.getItem(`tender:bid:${rfpPda}:${account.address}`);
-    if (!cached) {
+    const indexCacheKey = `tender:bidder-index:${rfpPda}:${account.address}`;
+    const raw = window.localStorage.getItem(indexCacheKey);
+    if (raw === null) {
       setEphemeralPubkey(null);
       return;
     }
-    try {
-      const j = JSON.parse(cached) as { ephemeralPubkey: string };
-      setEphemeralPubkey(j.ephemeralPubkey);
-    } catch {
+    const idx = Number(raw);
+    if (!Number.isFinite(idx)) {
       setEphemeralPubkey(null);
+      return;
     }
-  }, [rfpPda, account.address]);
+    if (!keychain?.isUnlocked) {
+      // Don't auto-prompt — sweep is opportunistic, only relevant when
+      // user has SOL trapped in an ephemeral. They'll trigger the
+      // master sign elsewhere first.
+      setEphemeralPubkey(null);
+      return;
+    }
+    let cancelled = false;
+    void keychain.bidderEphemeral(idx).then((kp) => {
+      if (!cancelled) setEphemeralPubkey(kp.publicKey.toBase58());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rfpPda, account.address, keychain]);
 
   // Poll the ephemeral balance every 5s so the panel auto-shows when funds
   // arrive (e.g., post-withdraw refund) and auto-hides when swept.
@@ -108,12 +120,21 @@ function Connected({
 
   async function handleSweep() {
     if (!ephemeralPubkey) return;
+    if (!keychain) {
+      toast.error('Keychain not unlocked. Reconnect your wallet.');
+      return;
+    }
     setSweeping(true);
     try {
-      const seedMsg = deriveEphemeralBidWalletMessage(rfpPda);
-      // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
-      const seedSig = await (signMessage as any)({ message: seedMsg });
-      const eph = await deriveEphemeralBidKeypair(seedSig.signature);
+      // Re-derive the ephemeral via the HD keychain. The index is in
+      // localStorage (read once on mount); deriving the keypair from
+      // (master seed, index) is a pure HKDF + ed25519 op, no wallet
+      // popup needed if keychain is unlocked.
+      const indexCacheKey = `tender:bidder-index:${rfpPda}:${account.address}`;
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem(indexCacheKey) : null;
+      if (raw === null) throw new Error('No HD bidder index cached for this RFP');
+      const idx = Number(raw);
+      const eph = await keychain.bidderEphemeral(idx);
       if (eph.publicKey.toBase58() !== ephemeralPubkey) {
         throw new Error('Derived ephemeral pubkey mismatch');
       }

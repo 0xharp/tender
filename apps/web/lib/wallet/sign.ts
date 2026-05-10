@@ -23,6 +23,14 @@ import type { UiWalletAccount } from '@wallet-standard/react';
 
 import { TENDR_CHAIN } from './chain';
 
+/* -------------------------------------------------------------------------- */
+/* Cloak adapter — bridge wallet-standard's batched signTransactions hook     */
+/* into Cloak SDK's single-tx `signTransaction` shape. Same pattern as        */
+/* bid-composer.tsx:920 — extracted here so every caller (bid-composer,      */
+/* buyer-action-panel, future cloak-touching surfaces) uses one canonical    */
+/* implementation that's wallet-standard-portable, not Phantom-specific.     */
+/* -------------------------------------------------------------------------- */
+
 /** Return type of useTendrSignMessage — function that signs raw bytes and
  *  returns the signature (also raw bytes). Stable shape across wallet libs. */
 export type SignMessageFn = (input: { message: Uint8Array }) => Promise<{
@@ -76,5 +84,63 @@ export function useTendrSignTransactions(account: UiWalletAccount): SignTransact
     return (results as Array<{ signedTransaction: Uint8Array }>).map((r) => ({
       signedTransaction: r.signedTransaction,
     }));
+  };
+}
+
+/**
+ * Cloak SDK expects a single-tx signer of shape
+ *   `<T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>`
+ * (one Transaction in, the same Transaction with signatures attached out).
+ *
+ * The wallet-standard `signTransactions` feature instead works on raw bytes
+ * (one batch popup that may contain many txs). To reuse our single
+ * cross-wallet signing primitive for Cloak's single-tx contract, we
+ * serialize → run the bytes through `signTransactions` → deserialize back
+ * into the same Transaction shape.
+ *
+ * Why a factory rather than a hook: Cloak callers run inside event handlers
+ * (`async function handleFund() { … }`), where you can't call hooks. Pass
+ * the already-resolved `signTransactions` function in here once, and the
+ * returned adapter closes over it for as many Cloak calls as you need.
+ *
+ * Wallet portability: this helper holds NO Phantom-specific assumptions —
+ * it relies only on the wallet-standard `solana:signTransaction` feature,
+ * which Phantom, Backpack, Solflare, Nightly, Glow, et al. all support.
+ *
+ * The dynamic web3.js import is shared with the Cloak chunk (~1.6MB), so
+ * paying for it here doesn't add to the cold-start cost when the caller
+ * is already loading Cloak.
+ */
+export async function buildCloakSignTransactionAdapter(
+  signTransactions: SignTransactionsFn,
+): Promise<
+  <
+    T extends
+      | import('@solana/web3.js').Transaction
+      | import('@solana/web3.js').VersionedTransaction,
+  >(
+    tx: T,
+  ) => Promise<T>
+> {
+  const { Transaction, VersionedTransaction } = await import('@solana/web3.js');
+  return async <
+    T extends
+      | import('@solana/web3.js').Transaction
+      | import('@solana/web3.js').VersionedTransaction,
+  >(
+    tx: T,
+  ): Promise<T> => {
+    const isV0 = !(tx instanceof Transaction);
+    const serialized = isV0
+      ? (tx as import('@solana/web3.js').VersionedTransaction).serialize()
+      : (tx as import('@solana/web3.js').Transaction).serialize({
+          requireAllSignatures: false,
+        });
+    const [signed] = await signTransactions({ transaction: new Uint8Array(serialized) });
+    if (!signed) throw new Error('signTransactions returned no outputs');
+    if (isV0) {
+      return VersionedTransaction.deserialize(signed.signedTransaction) as unknown as T;
+    }
+    return Transaction.from(signed.signedTransaction) as unknown as T;
   };
 }

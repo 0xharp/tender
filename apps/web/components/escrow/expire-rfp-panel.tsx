@@ -1,6 +1,12 @@
 'use client';
 
-import { type TendrAccount, useTendrAccount, useTendrSignTransactions } from '@/lib/wallet';
+import {
+  type TendrAccount,
+  useKeychainContext,
+  useMyActivity,
+  useTendrAccount,
+  useTendrSignTransactions,
+} from '@/lib/wallet';
 /**
  * Permissionless "Mark RFP expired" action surface.
  *
@@ -72,18 +78,40 @@ function Body(props: ExpireRfpPanelProps) {
 function Connected({ account, ...props }: ExpireRfpPanelProps & { account: TendrAccount }) {
   const router = useRouter();
   const signTransactions = useTendrSignTransactions(account);
+  const keychain = useKeychainContext();
+  const activity = useMyActivity();
   const [busy, setBusy] = useState(false);
-  const isBuyer = account.address === props.buyerWallet;
+  // HD-buyer detection: if this RFP is in the user's HD-owned activity
+  // slice, the on-chain rfp.buyer is the HD ephemeral. Signing with main
+  // wallet here is permissionless and would still succeed, but it leaks
+  // the link between the main wallet and this private RFP via the tx fee
+  // payer. Sign locally with the ephemeral instead.
+  const hdBuyerEntry = activity.ownedRfps.find(
+    (r) => r.pda === String(props.rfpPda) && r.via === 'hd',
+  );
+  const hdIndex = hdBuyerEntry?.hdIndex;
+  const isHdBuyer = hdIndex !== undefined && !!keychain;
+  const isBuyer = isHdBuyer || account.address === props.buyerWallet;
 
   async function handleClick() {
     setBusy(true);
     try {
+      let signer: Address;
+      let ephemeralBuyerKeypair: import('@solana/web3.js').Keypair | undefined;
+      if (isHdBuyer) {
+        const eph = await keychain!.buyerEphemeral(hdIndex!);
+        signer = eph.publicKey.toBase58() as Address;
+        ephemeralBuyerKeypair = eph;
+      } else {
+        signer = account.address as Address;
+      }
       const sig = await expireRfp({
-        signer: account.address as Address,
+        signer,
         rfpPda: props.rfpPda as Address,
         // biome-ignore lint/suspicious/noExplicitAny: hook return shape
         signTransactions: signTransactions as any,
         rpc,
+        ephemeralBuyerKeypair,
       });
       toast.success('RFP marked expired', {
         description: <TxToastDescription hash={sig} prefix="Tx" />,

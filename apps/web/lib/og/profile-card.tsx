@@ -133,7 +133,12 @@ export function ProfileOgCard({ kind, display, stats }: ProfileOgCardProps): Rea
             fontSize: heroSize,
             fontWeight: 600,
             letterSpacing: '-0.035em',
-            lineHeight: 1,
+            // 1.0 clips descenders (g, j, p, q, y) — observed on names
+            // like "nightly.tendr.sol" where the "g" tail got cut.
+            // 1.15 gives the baseline enough room without changing the
+            // visual centering noticeably.
+            lineHeight: 1.15,
+            paddingBottom: Math.round(heroSize * 0.05),
             // Subtle white→violet gradient mirrors the "sealed." hero
             // treatment on the landing page so any tendr OG card
             // reads as one family at a glance.

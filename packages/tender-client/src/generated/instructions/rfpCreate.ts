@@ -44,8 +44,12 @@ import { TENDER_PROGRAM_ADDRESS } from "../programs";
 import {
   getBidderVisibilityDecoder,
   getBidderVisibilityEncoder,
+  getBuyerVisibilityDecoder,
+  getBuyerVisibilityEncoder,
   type BidderVisibility,
   type BidderVisibilityArgs,
+  type BuyerVisibility,
+  type BuyerVisibilityArgs,
 } from "../types";
 
 export const RFP_CREATE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -89,6 +93,15 @@ export type RfpCreateInstructionData = {
   bidCloseAt: bigint;
   revealCloseAt: bigint;
   bidderVisibility: BidderVisibility;
+  /**
+   * v2: hides the buyer's main wallet by routing through a per-RFP
+   * HD-derived ephemeral. When `Private`, the front-end signs this
+   * ix with the ephemeral, so `rfp.buyer = ephemeral_pubkey`.
+   * Buyer reputation accrues on a stranded per-RFP rep PDA that
+   * nobody reads; main wallet rep is unaffected unless the buyer
+   * later opts in via `attest_buyer_history`.
+   */
+  buyerVisibility: BuyerVisibility;
   /** SHA-256(reserve_amount_le_bytes || reserve_nonce). All zeros = no reserve. */
   reservePriceCommitment: ReadonlyUint8Array;
   /** Per-RFP windows. Pass 0 to use defaults. */
@@ -108,6 +121,15 @@ export type RfpCreateInstructionDataArgs = {
   bidCloseAt: number | bigint;
   revealCloseAt: number | bigint;
   bidderVisibility: BidderVisibilityArgs;
+  /**
+   * v2: hides the buyer's main wallet by routing through a per-RFP
+   * HD-derived ephemeral. When `Private`, the front-end signs this
+   * ix with the ephemeral, so `rfp.buyer = ephemeral_pubkey`.
+   * Buyer reputation accrues on a stranded per-RFP rep PDA that
+   * nobody reads; main wallet rep is unaffected unless the buyer
+   * later opts in via `attest_buyer_history`.
+   */
+  buyerVisibility: BuyerVisibilityArgs;
   /** SHA-256(reserve_amount_le_bytes || reserve_nonce). All zeros = no reserve. */
   reservePriceCommitment: ReadonlyUint8Array;
   /** Per-RFP windows. Pass 0 to use defaults. */
@@ -130,6 +152,7 @@ export function getRfpCreateInstructionDataEncoder(): FixedSizeEncoder<RfpCreate
       ["bidCloseAt", getI64Encoder()],
       ["revealCloseAt", getI64Encoder()],
       ["bidderVisibility", getBidderVisibilityEncoder()],
+      ["buyerVisibility", getBuyerVisibilityEncoder()],
       ["reservePriceCommitment", fixEncoderSize(getBytesEncoder(), 32)],
       ["fundingWindowSecs", getI64Encoder()],
       ["reviewWindowSecs", getI64Encoder()],
@@ -152,6 +175,7 @@ export function getRfpCreateInstructionDataDecoder(): FixedSizeDecoder<RfpCreate
     ["bidCloseAt", getI64Decoder()],
     ["revealCloseAt", getI64Decoder()],
     ["bidderVisibility", getBidderVisibilityDecoder()],
+    ["buyerVisibility", getBuyerVisibilityDecoder()],
     ["reservePriceCommitment", fixDecoderSize(getBytesDecoder(), 32)],
     ["fundingWindowSecs", getI64Decoder()],
     ["reviewWindowSecs", getI64Decoder()],
@@ -187,6 +211,7 @@ export type RfpCreateInput<
   bidCloseAt: RfpCreateInstructionDataArgs["bidCloseAt"];
   revealCloseAt: RfpCreateInstructionDataArgs["revealCloseAt"];
   bidderVisibility: RfpCreateInstructionDataArgs["bidderVisibility"];
+  buyerVisibility: RfpCreateInstructionDataArgs["buyerVisibility"];
   reservePriceCommitment: RfpCreateInstructionDataArgs["reservePriceCommitment"];
   fundingWindowSecs: RfpCreateInstructionDataArgs["fundingWindowSecs"];
   reviewWindowSecs: RfpCreateInstructionDataArgs["reviewWindowSecs"];

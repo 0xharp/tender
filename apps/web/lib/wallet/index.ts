@@ -41,6 +41,7 @@ export { useTendrAccount, useTendrSelectedAccount, type TendrAccount } from './a
 export {
   useTendrSignMessage,
   useTendrSignTransactions,
+  buildCloakSignTransactionAdapter,
   type SignMessageFn,
   type SignTransactionsFn,
   type SignedTransaction,
@@ -53,3 +54,15 @@ export {
 } from './discovery';
 export { performSiwsSignIn, performSignOut } from './siws';
 export { TendrWalletProvider } from './provider';
+export { useKeychain, clearKeychainSeed, type KeychainHandle } from './use-keychain';
+export { KeychainProvider, useKeychainContext } from './keychain-provider';
+export {
+  MyActivityProvider,
+  clearMyActivityCache,
+  triggerActivityRefresh,
+  useMyActivity,
+  type MyActivity,
+  type MyOwnedRfp,
+  type MyOwnBid,
+  type MyEphemeral,
+} from './my-activity-provider';

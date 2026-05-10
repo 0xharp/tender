@@ -49,7 +49,16 @@ Full detail: [privacy-model](/docs/privacy-model).
 Depends on the privacy mode the buyer chose when they created the RFP:
 
 - **Bid contents private** (default): Bid amounts and scopes stay sealed until the buyer awards, but provider wallets are visible. Anyone scanning the program can see "Provider X bid on RFP Y." Most procurement.
-- **Bid contents + bidder identity private**: Provider wallets ALSO stay hidden. Bids are signed by a per-RFP ephemeral wallet that's funded through Cloak's shielded pool, so no on-chain link to the provider's main wallet. Right for sensitive procurement (M&A advisory, security audits of unannounced products, journalism, etc.).
+- **Bid contents + bidder identity private**: Provider wallets ALSO stay hidden. Bids are signed by an HD-derived bidder ephemeral that's funded through Cloak's shielded pool, so no on-chain link to the provider's main wallet. Right for sensitive procurement (M&A advisory, security audits of unannounced products, journalism, etc.).
+
+### Can bidders see who the buyer is?
+
+Same toggle, on the buyer side. The RFP is created with a separate **buyer privacy** axis:
+
+- **Public buyer** (default): The RFP's `buyer` field on chain is your main wallet. Buyer reputation accrues directly. Bidders evaluating the RFP see your full track record.
+- **Anonymous buyer**: The RFP is created via an HD-derived buyer ephemeral, also funded through Cloak's shielded pool. Your main wallet leaves zero on-chain footprint during the RFP's lifecycle. Reputation accrues to the ephemeral's BuyerReputation PDA; you merge it into your main wallet's public rep later via **Claim reputation** (one ix, idempotent, available after the project completes).
+
+The two axes are orthogonal — you pick each independently. Four combinations: public/public, public/private, private/public, fully sealed (private/private).
 
 ### What happens to losing bids?
 
@@ -238,7 +247,7 @@ Two on-chain account types — `BuyerReputation` and `ProviderReputation`, one p
 
 ### Is my reputation portable?
 
-It's on the Tender program on Solana — anyone can read it via `getProgramAccounts` without our app being online. Other Solana programs can reference it freely. Reputation is also paired with your `<handle>.tendr.sol` SNS identity (see the [Identity](#identity) section), which means the *recognizable name* attached to your reputation travels with you across every Solana app that resolves SNS. Cross-program reputation portability (mirroring to a generic on-chain registry) is a future v2 feature.
+It's on the Tender program on Solana — anyone can read it via `getProgramAccounts` without our app being online. Other Solana programs can reference it freely. Reputation is also paired with your `<handle>.tendr.sol` SNS identity (see the [Identity](#identity) section), which means the *recognizable name* attached to your reputation travels with you across every Solana app that resolves SNS.
 
 ### Does losing a bid hurt my reputation?
 
@@ -246,7 +255,19 @@ No. Reputation only tracks wins, completed projects, disputes, and missed deadli
 
 ### What if I have a private-mode win?
 
-Reputation accrues to your main wallet identically to public-mode wins. The Ed25519 binding signature at award time proves your main wallet to the program, and every reputation update keys off the verified main wallet.
+Reputation accrues to your **bidder ephemeral's** ProviderReputation PDA during the project, not to your main wallet — that's the privacy property. The ephemeral signs every post-award action (start/submit/dispute/auto-release) so your main wallet never appears as a tx fee payer on chain. After the project completes, run **Claim reputation** from the Bidding tab on your dashboard. That ix (`attest_win`) merges the ephemeral's accrued counters (wins, completed projects, earnings, dispute history) into your main wallet's ProviderReputation in a single transaction. Your main wallet stays anonymous until you choose to claim.
+
+### What if I created an RFP as an anonymous buyer?
+
+Same shape on the buyer side. The RFP is signed by an HD-derived buyer ephemeral funded via Cloak's shielded pool; every buyer-side action through the lifecycle (close bidding, award, fund, accept milestone, release) signs with that ephemeral. BuyerReputation accrues to the ephemeral's PDA. After the project completes, run **Claim reputation** from the Buying tab on your dashboard. The `attest_buyer_history` ix merges the ephemeral's counters into your main wallet's BuyerReputation. Until then, the on-chain link between your main wallet and the anonymous RFP doesn't exist.
+
+### What does "Claim reputation" actually merge?
+
+For provider claims (`attest_win`): wins, completed projects, late milestones, abandoned projects, dispute counts, gross USDC won + net USDC earned + disputed USDC totals — all copied from the ephemeral's ProviderReputation into your main wallet's. Idempotent (a `winner_attested` flag on the BidCommit prevents double-claim) and gated to RFP status `Completed` so you can't claim until the project's actually done.
+
+For buyer claims (`attest_buyer_history`): RFPs awarded, funded, completed, ghosted, milestone counters, USDC locked + released + refunded — same shape, copied from the ephemeral BuyerReputation. Also idempotent (`buyer_attested` flag on the RFP) and `Completed`-gated.
+
+**What it doesn't do:** the claim doesn't move the RFP/bid into your main wallet's profile RFP list. The on-chain `rfp.buyer` and `bid.provider` fields stay as the ephemeral pubkey — surfacing the claimed RFP under your main wallet would re-link them and defeat the privacy property the project ran under. Only the reputation counters merge.
 
 ### Why don't I have a reputation account yet?
 
@@ -306,7 +327,7 @@ If a party walks away entirely, the on-chain reputation record captures it perma
 
 ### Is there an escalation path beyond the on-chain dispute?
 
-Not today. Dispute resolution is two-party — the cool-off + matching-split mechanism is designed to push settlement, not require an arbiter. A future arbiter / DAO-court layer could plug in.
+Dispute resolution is two-party by design. The cool-off + matching-split mechanism is built to push settlement; the deliberately-unattractive 50/50 default after the cool-off expires is the escape hatch that keeps a stuck dispute from blocking the escrow forever. There's no third-party arbiter — that's a deliberate scope decision, not a missing piece.
 
 ---
 
@@ -326,19 +347,11 @@ The app detects the mismatch and clears the session immediately, prompting you t
 
 ---
 
-## Where things stand + roadmap
+## Where things stand
 
 ### Is this live?
 
-Yes — tendr.bid is running end-to-end on Solana devnet today. Every flow described in these docs (sealed bidding, decrypt, award, fund, milestones, disputes, on-chain reputation) works against the deployed program. Production mainnet deployment is planned following the Colosseum Frontier review cycle, alongside an opt-in KYC layer for buyers and providers who want one and additional mobile-UI polish.
-
-### What's "intentionally not here yet"?
-
-- **KYC / KYB.** Pseudonymous tier 0 only today; an opt-in verified tier is on the mainnet roadmap.
-- **Encrypted RFP scope.** Schema-prepared but not wired through the UI yet.
-- **Fully blind bidding** (buyer can't see who bid even at reveal). Conflicts with vetting; future toggle.
-- **Cross-program reputation portability.** Reputation lives on tendr.bid's program today; a v2 attestation primitive can mirror it to a generic on-chain registry.
-- **Mainnet.** Devnet today; mainnet planned post-Colosseum Frontier review.
+Yes — tendr.bid runs end-to-end on Solana devnet. Every flow described in these docs — sealed bidding, anonymous-buyer RFP creation through Cloak, anonymous-bidder bidding through Cloak, HD-keychain unified ephemeral derivation, decrypt-and-award, milestone escrow, disputes, on-chain reputation, claim-based reputation merge — runs against the deployed program. Mainnet deployment is targeted post Colosseum Frontier & audit review.
 
 ### Where's the source code?
 

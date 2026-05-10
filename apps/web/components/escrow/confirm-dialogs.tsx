@@ -12,6 +12,7 @@
 import { CheckCircle2Icon, GavelIcon, KeyRoundIcon, ShieldAlertIcon } from 'lucide-react';
 import { useState } from 'react';
 
+import { CloakMark } from '@/components/nav/powered-by-logos';
 import { HashLink } from '@/components/primitives/hash-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,6 +39,17 @@ export interface AwardConfirmPayload {
   bidSignerWallet: string;
   isPrivate: boolean;
   feeBps: number;
+  /** v2: when true, the connected buyer is the HD-private buyer for this
+   *  RFP (rfp.buyer is an HD ephemeral). Drives the Cloak shielded-pool
+   *  hint banner so the user understands why this flow takes ~90s + the
+   *  one wallet popup is a Cloak deposit, not a normal transfer. */
+  isPrivateBuyer?: boolean;
+  /** 'award' (default): full award + fund flow. 'fund': resume-funding
+   *  flow where the winner is already on chain (status = Awarded) and
+   *  this confirm only triggers fund_project. Adjusts copy + button label
+   *  but keeps the identity / Cloak banner / cancellation policy
+   *  sections so the buyer sees the same level of detail. */
+  mode?: 'award' | 'fund';
 }
 
 export interface AwardConfirmDialogProps {
@@ -77,21 +89,81 @@ export function AwardConfirmDialog({
     }
   }
 
+  const mode = pending.mode ?? 'award';
+  const isFundOnly = mode === 'fund';
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <KeyRoundIcon className="size-4 text-primary" />
-            Award winner and lock funds
+            {isFundOnly ? 'Resume funding' : 'Award winner and lock funds'}
           </DialogTitle>
           <DialogDescription>
-            One transaction does the whole award atomically: reveal the reserve (if set), record the
-            winner on chain, and transfer the contract value into escrow.
+            {isFundOnly ? (
+              pending.isPrivateBuyer ? (
+                <>
+                  The winner is already recorded on chain. This step routes the contract value into
+                  escrow <strong className="text-foreground">via Cloak's shielded pool</strong> so
+                  your main wallet stays off-chain through funding.
+                </>
+              ) : (
+                <>
+                  The winner is already recorded on chain. This step transfers the contract value
+                  into per-milestone escrow.
+                </>
+              )
+            ) : pending.isPrivateBuyer ? (
+              <>
+                One click does the whole award: reveal reserve (if set), record the winner on chain,
+                and route the contract value into escrow{' '}
+                <strong className="text-foreground">via Cloak's shielded pool</strong> so your main
+                wallet stays off-chain through funding.
+              </>
+            ) : (
+              <>
+                One transaction does the whole award atomically: reveal the reserve (if set), record
+                the winner on chain, and transfer the contract value into escrow.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
+          {/* Cloak shielded-pool hint — private-buyer only. Sets expectations
+              that the funding step is async (~90s end-to-end) and that the
+              one wallet popup is a shielded deposit, not a vanilla transfer.
+              Powered-by attribution lives at the bottom. */}
+          {pending.isPrivateBuyer && (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-xs leading-relaxed">
+              <p className="flex items-center gap-1.5 font-medium text-fuchsia-700 dark:text-fuchsia-300">
+                🔒 Funded via Cloak's shielded UTXO pool
+              </p>
+              <p className="text-muted-foreground">
+                Your USDC moves{' '}
+                <strong className="text-foreground">
+                  main wallet → shielded pool → fresh HD funding ephemeral → escrow
+                </strong>
+                . The on-chain trail breaks inside the pool, so observers can't link the escrow's
+                funder to your main wallet. You'll see
+                <strong className="text-foreground"> one wallet popup</strong> (Cloak deposit);
+                everything after signs locally with HD ephemerals. Total time ~90s.
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Devnet uses Cloak Mock USDC (
+                <a
+                  href="https://devnet.cloak.ag/privacy/faucet"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-fuchsia-700 underline-offset-2 hover:underline dark:text-fuchsia-300"
+                >
+                  faucet ↗
+                </a>
+                ). Top up if your main wallet is short.
+              </p>
+            </div>
+          )}
+
           {/* Money summary */}
           <div className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-4">
             <div className="flex items-baseline justify-between">
@@ -140,10 +212,18 @@ export function AwardConfirmDialog({
             </div>
             {pending.isPrivate && (
               <div className="flex items-baseline justify-between gap-3">
-                <span className="text-muted-foreground">Bid signer (ephemeral)</span>
-                {/* INTENTIONALLY NO withSns - this is a per-RFP ephemeral
-                    wallet. Privacy invariant: never resolve SNS for ephemerals. */}
-                <HashLink hash={pending.bidSignerWallet} kind="account" visibleChars={6} />
+                <span className="text-muted-foreground">Bid signer</span>
+                {/* INTENTIONALLY NO withSns — this is a per-RFP ephemeral
+                    wallet. ephemeralRole='provider' surfaces it as
+                    "Anon Provider · {trunc}" instead of a bare hash so
+                    the buyer immediately recognizes this as a private
+                    bidder. */}
+                <HashLink
+                  hash={pending.bidSignerWallet}
+                  kind="account"
+                  visibleChars={6}
+                  ephemeralRole="provider"
+                />
               </div>
             )}
             <div className="flex items-baseline justify-between gap-3">
@@ -167,17 +247,43 @@ export function AwardConfirmDialog({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            disabled={confirming || busy}
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button disabled={confirming || busy} onClick={handleConfirm}>
-            {confirming || busy ? 'Awarding…' : 'Award winner and lock funds'}
-          </Button>
+        <DialogFooter className="flex flex-col gap-2 sm:flex-col sm:items-stretch">
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={confirming || busy}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button disabled={confirming || busy} onClick={handleConfirm}>
+              {confirming || busy
+                ? isFundOnly
+                  ? 'Funding…'
+                  : 'Awarding…'
+                : isFundOnly
+                  ? pending.isPrivateBuyer
+                    ? 'Fund via Cloak'
+                    : `Lock $${fmtUsdc(pending.contractValueUsdc)} USDC into escrow`
+                  : pending.isPrivateBuyer
+                    ? 'Award + fund via Cloak'
+                    : 'Award winner and lock funds'}
+            </Button>
+          </div>
+          {pending.isPrivateBuyer && (
+            <p className="flex items-center justify-end gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+              powered by
+              <a
+                href="https://cloak.ag"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Cloak"
+                className="inline-flex items-center text-foreground/80 transition-colors hover:text-foreground"
+              >
+                <CloakMark className="block h-3 w-auto" />
+              </a>
+            </p>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -9,7 +9,6 @@ import { StatusPill, type StatusTone } from '@/components/primitives/status-pill
 import { ShareCard } from '@/components/profile/share-card';
 import { YourBidsList } from '@/components/rfp/your-bids-list';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getCurrentWallet } from '@/lib/auth/session';
 import { ProfileOgCard } from '@/lib/og/profile-card';
 import { preferredProfileSlug, resolveWalletParam } from '@/lib/sns/resolve-server';
 import {
@@ -20,6 +19,7 @@ import {
   rfpStatusToString,
 } from '@/lib/solana/chain-reads';
 import { serverSupabase } from '@/lib/supabase/server';
+import { cn } from '@/lib/utils';
 import { TENDER_PROGRAM_ID } from '@tender/shared';
 
 export const dynamic = 'force-dynamic';
@@ -76,20 +76,27 @@ export default async function Page({ params }: PageProps) {
   const wallet = await resolveWalletParam(rawWallet);
   const supabase = await serverSupabase();
   const walletAddr = wallet as Address;
-  const sessionWallet = await getCurrentWallet();
-  const isOwnProfile = sessionWallet === wallet;
 
-  // Profile is off-chain. Bid count comes from on-chain (public-mode only).
-  // Private-mode bids are signed by per-RFP ephemeral wallets and stay
-  // unlinkable to the main wallet — losing private bids therefore don't
-  // surface here ever, on purpose.
+  // Profile pages are pure-public — own-profile == visitor view. Owner-
+  // only surfaces (Claim reputation CTA, ephemeral sweep) live on
+  // /dashboard/bidding. Mirror of the buyer profile after the v2 cleanup;
+  // dropping the `getCurrentWallet()` lookup keeps this surface free of
+  // session-coupled branches and ensures observers see exactly what the
+  // owner does.
   //
-  // Awarded RFPs DO surface (default mode AND private-bidder mode) via
-  // listRfps with memcmp on rfp.winner_provider. The Ed25519SigVerify
-  // binding-sig at select_bid time means winner_provider is the verified
-  // main wallet for both modes — so this card shows the provider's full
-  // track record of won + completed projects, even ones whose original
-  // bid was private.
+  // Bid count comes from on-chain (public-mode only). Private-mode bids
+  // are signed by per-RFP ephemeral wallets and stay unlinkable to the
+  // main wallet — losing private bids therefore don't surface here ever,
+  // on purpose.
+  //
+  // Awarded RFPs surface ONLY for public bidder mode. v2 select_bid
+  // writes `rfp.winner_provider = bid.provider`, which in private bidder
+  // mode is the per-RFP ephemeral pubkey (NOT the main wallet). The
+  // memcmp filter on `winner_provider` therefore matches public-mode
+  // wins exclusively. Reputation counters from anonymous wins reach this
+  // page only after the provider runs `attest_win` from Dashboard, which
+  // merges the eph's ProviderReputation into the main wallet's PDA but
+  // leaves `rfp.winner_provider` untouched.
   const [{ data: profile }, ownBids, providerRep, awardedRfps] = await Promise.all([
     supabase.from('providers').select('*').eq('wallet', wallet).maybeSingle(),
     listBids({ providerWallet: walletAddr }),
@@ -143,15 +150,12 @@ export default async function Page({ params }: PageProps) {
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
       <SectionHeader
         eyebrow="Public provider profile"
-        // Heading precedence: custom display_name from supabase (provider
-        // explicitly set it) → tendr identity (e.g. `0xharp.tendr.sol`) →
-        // legacy "Pseudonymous provider" fallback for wallets with neither.
-        // shareSlug returns either `<handle>.tendr.sol` or the raw pubkey;
-        // .sol suffix tells us we got a real identity.
-        title={
-          profile?.display_name ??
-          (shareSlug.endsWith('.sol') ? shareSlug : 'Pseudonymous provider')
-        }
+        // Title: custom display_name from supabase wins; then SNS handle;
+        // then a generic "Anon Provider" fallback. No eph detection — the
+        // page treats every URL as a main wallet (legacy private-bidder
+        // ephs surface as their raw pubkey, accepted as a quirk of pre-v2
+        // envelope data).
+        title={profile?.display_name ?? (shareSlug.endsWith('.sol') ? shareSlug : 'Anon Provider')}
         description={
           <span className="inline-flex flex-col gap-1.5 text-muted-foreground">
             <HashLink hash={wallet} kind="account" visibleChars={22} withSns />
@@ -163,6 +167,18 @@ export default async function Page({ params }: PageProps) {
         }
         size="md"
       />
+
+      {/* Header callout — symmetric with buyer profile. */}
+      <div className="rounded-xl border border-dashed border-primary/25 bg-primary/[0.03] px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+        <strong className="text-foreground">Public profile.</strong> Reputation here counts only
+        wins where this wallet participated as a public bidder, plus anonymous wins the provider has
+        explicitly merged via <strong>Claim reputation</strong>. Anonymous activity is managed from{' '}
+        <Link href="/dashboard/bidding" className="text-primary underline-offset-2 hover:underline">
+          your dashboard
+        </Link>
+        . Claim merges reputation counters only — the underlying anonymous wins stay off this page
+        and remain anonymous on chain.
+      </div>
 
       <ShareCard
         shareHref={`/providers/${shareSlug}`}
@@ -212,37 +228,32 @@ export default async function Page({ params }: PageProps) {
             <span className="font-mono font-semibold tabular-nums text-foreground">
               {count ?? 0}
             </span>{' '}
-            public {count === 1 ? 'sealed bid' : 'sealed bids'} committed on tendr.bid.
+            public bidder-mode {count === 1 ? 'bid' : 'bids'} committed on tendr.bid. Private bids
+            are signed by per-RFP ephemerals and are not visible from any main wallet.
           </p>
           {providerRep ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <RepStat
                 label="Wins"
                 value={String(providerRep.totalWins ?? 0)}
-                hint={`$${microUsdcToDecimal(providerRep.totalWonUsdc)} awarded`}
+                hint={`$${microUsdcToDecimal(providerRep.totalWonUsdc)} won`}
               />
               <RepStat
                 label="Completed"
                 value={String(providerRep.completedProjects ?? 0)}
-                hint={`$${microUsdcToDecimal(providerRep.totalEarnedUsdc)} earned (net of fee)`}
-              />
-              <RepStat
-                label="Disputed"
-                value={String(providerRep.disputedMilestones ?? 0)}
-                hint={`$${microUsdcToDecimal(providerRep.totalDisputedUsdc)} in dispute path`}
-                tone="warn"
+                hint={`$${microUsdcToDecimal(providerRep.totalEarnedUsdc)} earned`}
               />
               <RepStat
                 label="Late"
                 value={String(providerRep.lateMilestones ?? 0)}
-                hint="missed delivery deadline"
-                tone="warn"
+                hint="delivery deadlines missed"
+                tone={providerRep.lateMilestones > 0 ? 'warn' : 'normal'}
               />
               <RepStat
-                label="Abandoned"
-                value={String(providerRep.abandonedProjects ?? 0)}
-                hint="walked from project"
-                tone="warn"
+                label="Disputed"
+                value={String(providerRep.disputedMilestones ?? 0)}
+                hint="escalations"
+                tone={providerRep.disputedMilestones > 0 ? 'warn' : 'normal'}
               />
             </div>
           ) : (
@@ -259,17 +270,25 @@ export default async function Page({ params }: PageProps) {
           <CardHeader className="flex flex-row items-baseline justify-between gap-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <BriefcaseIcon className="size-4 text-muted-foreground" />
-              Awarded projects ({awardedRows.length})
+              Public awarded projects ({awardedRows.length})
             </CardTitle>
             <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-              public + private (post-award)
+              public bidder mode only
             </span>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
+            {/* Scope clarification — symmetric with the buyer profile's
+                "Public RFPs by status" note. v2 select_bid writes
+                `rfp.winner_provider = bid.provider` (the per-RFP eph) for
+                private bidder mode, so the memcmp filter on this page
+                only matches public-mode wins. attest_win merges the eph's
+                ProviderReputation into the main wallet's PDA but never
+                modifies `rfp.winner_provider` — claimed wins therefore
+                appear in the Reputation card above but never on this list. */}
             <p className="rounded-lg border border-dashed border-border/60 bg-card/40 p-3 text-xs leading-relaxed text-muted-foreground">
-              Every RFP this main wallet has won. Private-mode wins surface here too — the Ed25519
-              binding signature at award time records the verified main wallet on chain, so
-              reputation + project history apply uniformly across both privacy modes.
+              Lists only RFPs won in public bidder mode. Anonymous wins claimed via{' '}
+              <strong>Claim reputation</strong> contribute counters to the Reputation card above but
+              stay off this list — the wins themselves remain anonymous on chain.
             </p>
             <AwardedProjectGroup label="In progress" rows={inProgressRows} />
             <AwardedProjectGroup label="Completed" rows={completedRows} />
@@ -280,21 +299,20 @@ export default async function Page({ params }: PageProps) {
 
       <YourBidsList
         bids={ownBids}
-        emptyTitle={isOwnProfile ? 'No public bids yet' : 'No public bids on record'}
-        emptyBody={
-          isOwnProfile
-            ? 'Browse the marketplace and submit a sealed bid to see it here.'
-            : "This provider hasn't submitted any public-mode bids visible from on-chain yet."
-        }
+        emptyTitle="No public bids on record"
+        emptyBody="No public bidder-mode bids recorded for this wallet yet."
         notice={
           <>
-            Showing public-mode bids only. <strong>Losing</strong> private-mode bids stay anonymous
-            by design — each is signed by a per-RFP ephemeral wallet that isn't linkable to this
-            main wallet from the chain. Private-mode <strong>wins</strong> surface in "Awarded
-            projects" above.{' '}
-            {isOwnProfile
-              ? 'Open the relevant RFP page and click "Check on-chain" to manage in-flight private bids.'
-              : null}
+            Public bidder-mode bids only — private-mode bids are signed by per-RFP ephemerals and
+            stay anonymous on chain by design. Owners can manage their private bids (and Claim
+            reputation on completed wins) from{' '}
+            <Link
+              href="/dashboard/bidding"
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              Dashboard
+            </Link>
+            .
           </>
         }
       />
@@ -317,18 +335,18 @@ function RepStat({
   value,
   hint,
   tone = 'normal',
-}: { label: string; value: string; hint: string; tone?: 'normal' | 'warn' }) {
+}: { label: string; value: string; hint: string; tone?: 'normal' | 'warn' | 'bad' }) {
   return (
     <div className="flex flex-col gap-0.5 rounded-xl border border-border/60 bg-card/40 p-3">
       <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       <span
-        className={
-          tone === 'warn'
-            ? 'font-mono text-2xl font-semibold tabular-nums text-amber-600 dark:text-amber-400'
-            : 'font-mono text-2xl font-semibold tabular-nums'
-        }
+        className={cn(
+          'font-mono text-2xl font-semibold tabular-nums',
+          tone === 'warn' && 'text-amber-600 dark:text-amber-400',
+          tone === 'bad' && 'text-destructive',
+        )}
       >
         {value}
       </span>

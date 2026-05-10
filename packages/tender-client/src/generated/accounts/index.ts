@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./attestWinReceipt";
 export * from "./bidCommit";
 export * from "./buyerReputation";
 export * from "./escrow";

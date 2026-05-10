@@ -33,20 +33,23 @@ export function PoweredByLogos() {
   return (
     <div className="grid w-full grid-cols-1 gap-10 text-muted-foreground/80 sm:grid-cols-2 sm:gap-6 lg:grid-cols-5">
       <PartnerColumn
+        headline="Shielded UTXO Pool"
+        // Cloak comes first because the shielded-pool path is load-bearing
+        // for both privacy axes AND for milestone escrow funding — it's
+        // the busiest partner integration in the app. Tagline names both
+        // jobs (anonymity + escrow funding) so a first-time reader sees
+        // the dual surface.
+        tagline="HD-derived ephemerals + USDC milestone escrow funded through Cloak — anonymous end-to-end."
+        partnerName="Cloak"
+        href="https://cloak.ag/"
+        mark={<CloakMark />}
+      />
+      <PartnerColumn
         headline="Private Ephemeral Rollup"
         tagline="Bid contents stay sealed even from the buyer until the reveal window opens."
         partnerName="MagicBlock"
         href="https://www.magicblock.gg/"
         mark={<MagicBlockMark />}
-      />
-      <PartnerColumn
-        headline="Shielded UTXO Pool"
-        // Trimmed from "...to their main wallet on chain" to fit 3 lines
-        // of tagline (was 4) at the column width set by lg:grid-cols-5.
-        tagline="Per-RFP ephemeral wallet keeps bidders unlinkable from their main wallet."
-        partnerName="Cloak"
-        href="https://cloak.ag/"
-        mark={<CloakMark />}
       />
       <PartnerColumn
         // "Identity Layer" alone wraps to 1 line (other titles wrap to 2).
@@ -226,14 +229,16 @@ function QvacMark() {
 
 /** Inline Cloak SVG - every <path> uses currentColor so the wordmark adopts
  *  the parent text color in both themes. Path data lifted verbatim from
- *  `public/logos/cloak-logo.svg`. */
-function CloakMark() {
+ *  `public/logos/cloak-logo.svg`. Exported so other surfaces (e.g. the
+ *  award-fund dialog's "powered by" footer) can render the same mark
+ *  inline at any size via className. */
+export function CloakMark({ className = 'block h-6 w-auto' }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 1537.413 418.67"
       role="img"
       aria-hidden
-      className="block h-6 w-auto"
+      className={className}
       fill="currentColor"
     >
       <title>Cloak</title>

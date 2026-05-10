@@ -34,6 +34,7 @@ import {
   type SelfPlanAndSendFunctions,
 } from "@solana/program-client-core";
 import {
+  getAttestWinReceiptCodec,
   getBidCommitCodec,
   getBuyerReputationCodec,
   getEscrowCodec,
@@ -41,6 +42,8 @@ import {
   getProviderReputationCodec,
   getRfpCodec,
   getTreasuryCodec,
+  type AttestWinReceipt,
+  type AttestWinReceiptArgs,
   type BidCommit,
   type BidCommitArgs,
   type BuyerReputation,
@@ -58,6 +61,8 @@ import {
 } from "../accounts";
 import {
   getAcceptMilestoneInstructionAsync,
+  getAttestBuyerHistoryInstructionAsync,
+  getAttestWinInstructionAsync,
   getAutoReleaseMilestoneInstructionAsync,
   getCancelLateMilestoneInstructionAsync,
   getCancelWithNoticeInstructionAsync,
@@ -85,6 +90,8 @@ import {
   getWithdrawBidInstructionAsync,
   getWriteBidChunkInstruction,
   parseAcceptMilestoneInstruction,
+  parseAttestBuyerHistoryInstruction,
+  parseAttestWinInstruction,
   parseAutoReleaseMilestoneInstruction,
   parseCancelLateMilestoneInstruction,
   parseCancelWithNoticeInstruction,
@@ -112,6 +119,8 @@ import {
   parseWithdrawBidInstruction,
   parseWriteBidChunkInstruction,
   type AcceptMilestoneAsyncInput,
+  type AttestBuyerHistoryAsyncInput,
+  type AttestWinAsyncInput,
   type AutoReleaseMilestoneAsyncInput,
   type CancelLateMilestoneAsyncInput,
   type CancelWithNoticeAsyncInput,
@@ -127,6 +136,8 @@ import {
   type MarkBuyerGhostedInput,
   type OpenRevealWindowAsyncInput,
   type ParsedAcceptMilestoneInstruction,
+  type ParsedAttestBuyerHistoryInstruction,
+  type ParsedAttestWinInstruction,
   type ParsedAutoReleaseMilestoneInstruction,
   type ParsedCancelLateMilestoneInstruction,
   type ParsedCancelWithNoticeInstruction,
@@ -167,20 +178,24 @@ import {
   type WriteBidChunkInput,
 } from "../instructions";
 import {
+  findAttestWinMainRepPda,
   findBidPda,
   findBufferBidPda,
   findBuyerReputationPda,
+  findClaimReceiptPda,
   findDelegationMetadataBidPda,
   findDelegationRecordBidPda,
   findEscrowPda,
+  findMainRepPda,
   findPermissionPda,
   findTreasuryPda,
 } from "../pdas";
 
 export const TENDER_PROGRAM_ADDRESS =
-  "4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ" as Address<"4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ">;
+  "GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z" as Address<"GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z">;
 
 export enum TenderAccount {
+  AttestWinReceipt,
   BidCommit,
   BuyerReputation,
   Escrow,
@@ -194,6 +209,17 @@ export function identifyTenderAccount(
   account: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): TenderAccount {
   const data = "data" in account ? account.data : account;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([104, 133, 184, 177, 177, 242, 240, 241]),
+      ),
+      0,
+    )
+  ) {
+    return TenderAccount.AttestWinReceipt;
+  }
   if (
     containsBytes(
       data,
@@ -279,6 +305,8 @@ export function identifyTenderAccount(
 
 export enum TenderInstruction {
   AcceptMilestone,
+  AttestBuyerHistory,
+  AttestWin,
   AutoReleaseMilestone,
   CancelLateMilestone,
   CancelWithNotice,
@@ -321,6 +349,28 @@ export function identifyTenderInstruction(
     )
   ) {
     return TenderInstruction.AcceptMilestone;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([224, 93, 128, 184, 44, 219, 234, 223]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.AttestBuyerHistory;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([160, 212, 140, 90, 7, 203, 73, 177]),
+      ),
+      0,
+    )
+  ) {
+    return TenderInstruction.AttestWin;
   }
   if (
     containsBytes(
@@ -615,11 +665,17 @@ export function identifyTenderInstruction(
 }
 
 export type ParsedTenderInstruction<
-  TProgram extends string = "4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ",
+  TProgram extends string = "GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z",
 > =
   | ({
       instructionType: TenderInstruction.AcceptMilestone;
     } & ParsedAcceptMilestoneInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.AttestBuyerHistory;
+    } & ParsedAttestBuyerHistoryInstruction<TProgram>)
+  | ({
+      instructionType: TenderInstruction.AttestWin;
+    } & ParsedAttestWinInstruction<TProgram>)
   | ({
       instructionType: TenderInstruction.AutoReleaseMilestone;
     } & ParsedAutoReleaseMilestoneInstruction<TProgram>)
@@ -709,6 +765,20 @@ export function parseTenderInstruction<TProgram extends string>(
       return {
         instructionType: TenderInstruction.AcceptMilestone,
         ...parseAcceptMilestoneInstruction(instruction),
+      };
+    }
+    case TenderInstruction.AttestBuyerHistory: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.AttestBuyerHistory,
+        ...parseAttestBuyerHistoryInstruction(instruction),
+      };
+    }
+    case TenderInstruction.AttestWin: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: TenderInstruction.AttestWin,
+        ...parseAttestWinInstruction(instruction),
       };
     }
     case TenderInstruction.AutoReleaseMilestone: {
@@ -908,6 +978,8 @@ export type TenderPlugin = {
 };
 
 export type TenderPluginAccounts = {
+  attestWinReceipt: ReturnType<typeof getAttestWinReceiptCodec> &
+    SelfFetchFunctions<AttestWinReceiptArgs, AttestWinReceipt>;
   bidCommit: ReturnType<typeof getBidCommitCodec> &
     SelfFetchFunctions<BidCommitArgs, BidCommit>;
   buyerReputation: ReturnType<typeof getBuyerReputationCodec> &
@@ -927,6 +999,14 @@ export type TenderPluginInstructions = {
   acceptMilestone: (
     input: AcceptMilestoneAsyncInput,
   ) => ReturnType<typeof getAcceptMilestoneInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  attestBuyerHistory: (
+    input: AttestBuyerHistoryAsyncInput,
+  ) => ReturnType<typeof getAttestBuyerHistoryInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  attestWin: (
+    input: AttestWinAsyncInput,
+  ) => ReturnType<typeof getAttestWinInstructionAsync> &
     SelfPlanAndSendFunctions;
   autoReleaseMilestone: (
     input: MakeOptional<AutoReleaseMilestoneAsyncInput, "payer">,
@@ -1035,6 +1115,9 @@ export type TenderPluginPdas = {
   escrow: typeof findEscrowPda;
   treasury: typeof findTreasuryPda;
   buyerReputation: typeof findBuyerReputationPda;
+  mainRep: typeof findMainRepPda;
+  attestWinMainRep: typeof findAttestWinMainRepPda;
+  claimReceipt: typeof findClaimReceiptPda;
   permission: typeof findPermissionPda;
   bid: typeof findBidPda;
   bufferBid: typeof findBufferBidPda;
@@ -1056,6 +1139,10 @@ export function tenderProgram() {
     return extendClient(client, {
       tender: <TenderPlugin>{
         accounts: {
+          attestWinReceipt: addSelfFetchFunctions(
+            client,
+            getAttestWinReceiptCodec(),
+          ),
           bidCommit: addSelfFetchFunctions(client, getBidCommitCodec()),
           buyerReputation: addSelfFetchFunctions(
             client,
@@ -1078,6 +1165,16 @@ export function tenderProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getAcceptMilestoneInstructionAsync(input),
+            ),
+          attestBuyerHistory: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAttestBuyerHistoryInstructionAsync(input),
+            ),
+          attestWin: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAttestWinInstructionAsync(input),
             ),
           autoReleaseMilestone: (input) =>
             addSelfPlanAndSendFunctions(
@@ -1226,6 +1323,9 @@ export function tenderProgram() {
           escrow: findEscrowPda,
           treasury: findTreasuryPda,
           buyerReputation: findBuyerReputationPda,
+          mainRep: findMainRepPda,
+          attestWinMainRep: findAttestWinMainRepPda,
+          claimReceipt: findClaimReceiptPda,
           permission: findPermissionPda,
           bid: findBidPda,
           bufferBid: findBufferBidPda,

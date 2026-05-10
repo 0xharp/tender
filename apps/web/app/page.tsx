@@ -1,9 +1,11 @@
 import {
   ArrowUpRightIcon,
-  GitBranchIcon,
+  BadgeCheckIcon,
+  HandshakeIcon,
   KeyRoundIcon,
   LockKeyholeIcon,
   ShuffleIcon,
+  SparklesIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -36,7 +38,7 @@ function Hero() {
         <StaggerItem>
           <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground backdrop-blur-md">
             <span className="size-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px] shadow-emerald-500/60" />
-            Live on Solana devnet
+            Live on Solana devnet · End-to-end private RFP procurement
           </span>
         </StaggerItem>
 
@@ -52,14 +54,19 @@ function Hero() {
 
         <StaggerItem>
           <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-            Private sealed-bid procurement on Solana - built for humans today, ready for AI agents
-            tomorrow. Bids sit encrypted on a{' '}
-            <span className="text-foreground">MagicBlock&rsquo;s TEE-backed rollup</span> - sealed
-            from everyone, <span className="text-foreground">including the buyer</span>, until the
-            bid window closes. Switch on private bidding and a per-RFP{' '}
-            <span className="text-foreground">ephemeral wallet</span> commits your bid, funded
-            through <span className="text-foreground">Cloak&rsquo;s shielded UTXO pool</span>.
-            Winners surface on-chain at award reveal; losers stay anonymous forever.
+            End-to-end private RFP procurement on Solana. Bid contents sit encrypted on{' '}
+            <span className="font-medium text-foreground">MagicBlock</span>&rsquo;s TEE-backed
+            Private Ephemeral Rollup — sealed from everyone,{' '}
+            <span className="text-foreground">including the buyer</span>, until the bid window
+            closes. Anonymous-buyer + anonymous-bidder modes route through{' '}
+            <span className="font-medium text-foreground">Cloak</span>&rsquo;s shielded UTXO pool —
+            same shielded path also funds USDC into per-milestone escrow with on-chain unlock rules
+            (delivery + review windows, dispute cool-off, late-cancel refunds). One keychain
+            signature per session powers every ephemeral you&rsquo;ll need across both roles. Free{' '}
+            <span className="font-medium text-foreground">SNS</span>{' '}
+            <code className="font-mono text-[0.9em]">.tendr.sol</code> identity per user, and a
+            private <span className="font-medium text-foreground">QVAC</span> AI sidecar for
+            drafting + comparing bids without any closed AI provider in the loop.
           </p>
         </StaggerItem>
 
@@ -115,44 +122,75 @@ function Aurora() {
 
 function HeroDiagram() {
   return (
-    <div className="mx-auto mt-12 grid w-full max-w-4xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="mx-auto mt-12 grid w-full max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <DiagramCard
         icon={LockKeyholeIcon}
-        title="Sealed"
-        body="X25519 ECDH + XChaCha20-Poly1305 envelopes, encrypted to buyer AND provider. Plaintext never persists anywhere."
+        titleParts={[
+          { text: 'Sealed bids on ', strong: false },
+          { text: 'MagicBlock', strong: true },
+        ]}
+        body="X25519 ECDH + XChaCha20-Poly1305 envelopes encrypted to buyer + bidder, written to a TEE-backed Private Ephemeral Rollup. The on-chain time gate refuses to flip the read permission until bid_close_at."
         accent="violet"
       />
       <DiagramCard
-        icon={GitBranchIcon}
-        title="Time-locked"
-        body="Envelopes live on a MagicBlock Private Ephemeral Rollup. The TEE blocks buyer reads until bid_close_at flips the permission set."
-        accent="indigo"
-      />
-      <DiagramCard
         icon={ShuffleIcon}
-        title="Unlinkable"
-        body="Private mode uses a per-RFP ephemeral wallet, funded via Cloak&rsquo;s shielded UTXO pool. Losers&rsquo; main wallets stay forever private."
+        titleParts={[
+          { text: 'Anonymous wallets + escrow via ', strong: false },
+          { text: 'Cloak', strong: true },
+        ]}
+        body="Anonymous-buyer + anonymous-bidder modes fund HD-derived ephemerals through Cloak's shielded UTXO pool. Same shielded path funds USDC into per-milestone escrow — on-chain unlock rules (delivery + review windows, dispute cool-off, late-cancel refunds) gate every release."
         accent="fuchsia"
       />
       <DiagramCard
         icon={KeyRoundIcon}
-        title="Revealed"
-        body="Permission flips at close. Buyer fetches from the rollup, decrypts in-browser, picks a winner. Reveal proves the winner&rsquo;s main wallet without exposing losers&rsquo;."
+        titleParts={[{ text: 'Seamless keychain', strong: false }]}
+        body="One signature per session unlocks every ephemeral role you'll touch — buyer, bidder, funding, refund, payout. Cross-tab sync, instant per-action signing. Optimised for flow, not for re-prompting on every click."
+        accent="indigo"
+      />
+      <DiagramCard
+        icon={BadgeCheckIcon}
+        titleParts={[
+          { text: 'Recognizable identity via ', strong: false },
+          { text: 'SNS', strong: true },
+        ]}
+        body="Free <handle>.tendr.sol per user — surfaces everywhere a wallet appears (leaderboard, profiles, RFP cards, OG share-cards). Privacy-safe: never resolves ephemeral signers, never expands the public-identity surface."
         accent="violet"
+      />
+      <DiagramCard
+        icon={SparklesIcon}
+        titleParts={[
+          { text: 'Private AI on ', strong: false },
+          { text: 'QVAC', strong: true },
+        ]}
+        body="Draft RFPs, draft bids, compare decrypted bids — all on a self-hosted QVAC sidecar running an open-weight model. Browser → sidecar direct; no closed AI provider, no Tendr backend in the prompt path."
+        accent="fuchsia"
+      />
+      <DiagramCard
+        icon={HandshakeIcon}
+        titleParts={[{ text: 'Claim reputation when ready', strong: false }]}
+        body="Anonymous-mode activity accrues to the ephemeral's reputation PDA. After the project completes, one ix merges every counter — wins, completed projects, USDC totals — into your main wallet's public rep. Idempotent, on your terms."
+        accent="indigo"
       />
     </div>
   );
 }
 
+/** Title fragment with optional bolding — used to highlight partner
+ *  names ("…on **MagicBlock**", "…via **Cloak**") within a card title
+ *  so the partner is glanceable without dropping a separate logo wall
+ *  into the hero. The `strong` parts render at semibold + foreground
+ *  color while the rest stays at the title's regular weight. */
+type TitlePart = { text: string; strong: boolean };
+
 function DiagramCard({
   icon: Icon,
-  title,
+  titleParts,
   body,
   accent,
   elevated,
 }: {
   icon: typeof LockKeyholeIcon;
-  title: string;
+  titleParts: TitlePart[];
   body: string;
   accent: 'violet' | 'indigo' | 'fuchsia';
   elevated?: boolean;
@@ -181,7 +219,19 @@ function DiagramCard({
         <Icon className="size-4" />
       </div>
       <div className="flex flex-col gap-1">
-        <p className="font-medium text-foreground">{title}</p>
+        <p className="font-medium text-foreground">
+          {titleParts.map((part, i) =>
+            part.strong ? (
+              // biome-ignore lint/suspicious/noArrayIndexKey: title parts are static literals
+              <span key={i} className="font-semibold">
+                {part.text}
+              </span>
+            ) : (
+              // biome-ignore lint/suspicious/noArrayIndexKey: title parts are static literals
+              <span key={i}>{part.text}</span>
+            ),
+          )}
+        </p>
         <p className="text-xs leading-relaxed text-muted-foreground">{body}</p>
       </div>
     </div>

@@ -159,14 +159,20 @@ export function BidDetailDrawer({
             </h3>
             <div className="rounded-lg border border-border/60 bg-card/40 p-3 font-mono text-[11px]">
               {/* `plaintext.payoutPreference.address` is the bid form's
-                  `payout_address` field, defaulted to the connected MAIN
-                  wallet at submit time. Always safe to resolve SNS — the
-                  ephemeral payout target is a separate on-chain field. */}
+                  `payout_address` field. New bids (post the submit-flow
+                  per-recipient envelope split) bake the bidder ephemeral
+                  here in private mode; legacy bids may still carry the
+                  bidder's main wallet (immutable on chain). The
+                  `ephemeralRole='provider'` label flips the rendered
+                  hash to "Anon Provider · trunc" so the framing matches
+                  the privacy posture of the bid regardless of which
+                  address ended up in the envelope. */}
               <HashLink
                 hash={plaintext.payoutPreference.address}
                 kind="account"
                 visibleChars={10}
-                withSns
+                withSns={!isPrivate}
+                ephemeralRole={isPrivate ? 'provider' : undefined}
               />
             </div>
             {plaintext.notes && (

@@ -83,20 +83,21 @@ export type PayoutMode =
   /** Public mode - main wallet signs everything, gets paid + reputation. */
   | { kind: 'main' }
   /**
-   * Private mode - ephemeral keypair (deterministic from main-wallet sig)
-   * signs all bid txs locally. The main wallet is bound to the bid via a
-   * separate ed25519 signature included (encrypted) in the bid envelope; at
-   * select time the buyer reveals it and the program verifies it.
+   * Private mode (v2 claim-based) — bidder ephemeral (HD-derived from
+   * main wallet via HKDF) signs every bid + post-award tx locally. The
+   * main wallet leaves NO on-chain footprint at all: not in any RFP/Bid
+   * field, not in any encrypted envelope, not in any tx fee payer.
    *
-   * `mainWallet` + `bindingSignature` get encrypted into the bid envelope so
-   * the buyer learns them at decryption time and can construct the on-chain
-   * Ed25519SigVerify ix at award.
+   * Symmetric with the buyer side: `rfp.buyer = buyer eph` carries no
+   * main-wallet hint; same here for `bid.provider = bidder eph`.
+   *
+   * The provider's main wallet only ever surfaces post-completion when
+   * THEY voluntarily run `attest_win` from their dashboard — that ix
+   * re-signs the binding message live (no cached signature needed).
    */
   | {
       kind: 'ephemeral';
       ephemeralKeypair: import('@solana/web3.js').Keypair;
-      mainWallet: Address;
-      bindingSignature: Uint8Array;
     };
 
 export interface SubmitBidInput {
@@ -238,7 +239,7 @@ export async function submitBid({
 
   // 3. ECIES encrypt
   onProgress?.('encrypting');
-  const plaintext: SealedBidPlaintext = {
+  const baseFields = {
     priceUsdc: values.price_usdc,
     scope: values.scope,
     timelineDays: values.timeline_days,
@@ -249,25 +250,62 @@ export async function submitBid({
       durationDays: m.duration_days,
       successCriteria: m.success_criteria ?? '',
     })),
-    payoutPreference: { chain: 'solana', asset: 'USDC', address: values.payout_address },
     notes: values.notes,
   };
-  // In private mode, bake the main wallet + binding signature into the
-  // encrypted plaintext so the buyer can decrypt and use them at award time.
-  const plaintextWithBinding =
-    payoutMode.kind === 'ephemeral'
-      ? {
-          ...plaintext,
-          _bidBinding: {
-            mainWallet: payoutMode.mainWallet,
-            signatureBase64: btoa(String.fromCharCode(...payoutMode.bindingSignature)),
-          },
-        }
-      : plaintext;
-  const plaintextBytes = new TextEncoder().encode(JSON.stringify(plaintextWithBinding));
+
+  // v2 claim-based privacy split: build separate plaintexts per recipient.
+  // The buyer + provider envelopes don't have to carry the same JSON, since
+  // commit_hash binds whatever bytes ended up in each envelope.
+  //
+  //   - Buyer envelope: NEVER carries the provider's main wallet. The
+  //     buyer doesn't need it for award (claim-based v2 sets winner_provider
+  //     to the bid signer; the program's public-mode branch fires when
+  //     args.winner_provider == bid.provider). Payout address is forced to
+  //     `effectiveProviderWallet` — which equals the bidder ephemeral in
+  //     private mode — so the only Solana address the buyer sees is the eph.
+  //     Every settlement-path ix (accept / auto_release / resolve_dispute /
+  //     dispute_default_split / cancel_with_*) sends funds to bid.provider's
+  //     ATA, which IS the eph in private mode. Provider sweeps later via the
+  //     dashboard's Ephemeral Sweep panel.
+  //
+  //   - Provider envelope: carries the actual payout preference (their
+  //     real off-chain wallet of record), plus `_bidBinding` for the future
+  //     attest_win claim. Decrypted only by the provider with their own
+  //     ECIES keypair; never readable by the buyer or by the platform.
+  const buyerPlaintext: SealedBidPlaintext = {
+    ...baseFields,
+    payoutPreference: {
+      chain: 'solana',
+      asset: 'USDC',
+      address: String(effectiveProviderWallet),
+    },
+    // Cosmetic flag so the buyer-side reveal flow can detect "this was a
+    // private-bidder bid" without reading the (now-absent) _bidBinding.
+    // The buyer already knows their RFP's bidder_visibility setting; this
+    // marker just propagates the bit through to per-bid renderers.
+    ...(payoutMode.kind === 'ephemeral' ? { _private: true as const } : {}),
+  };
+  // Provider envelope: in PUBLIC mode this carries the main wallet as
+  // payout (which is already public anyway since bid.provider == main).
+  // In PRIVATE mode we force the payout to the eph too — symmetric with
+  // the buyer envelope, AND avoids a stale main-wallet hint sitting in
+  // the encrypted plaintext that the provider could later accidentally
+  // surface in a UI screenshot/log dump. The provider's actual
+  // off-chain payout preferences (different chain, different wallet)
+  // are out of scope for the on-chain plaintext today.
+  const providerPlaintext: SealedBidPlaintext = {
+    ...baseFields,
+    payoutPreference: {
+      chain: 'solana',
+      asset: 'USDC',
+      address: String(effectiveProviderWallet),
+    },
+  };
+  const buyerBytes = new TextEncoder().encode(JSON.stringify(buyerPlaintext));
+  const providerBytes = new TextEncoder().encode(JSON.stringify(providerPlaintext));
   const buyerPub = hexToBytes(buyerEncryptionPubkeyHex);
-  const sealedForBuyer = encryptBid(plaintextBytes, buyerPub);
-  const sealedForProvider = encryptBid(plaintextBytes, providerKp.x25519PublicKey);
+  const sealedForBuyer = encryptBid(buyerBytes, buyerPub);
+  const sealedForProvider = encryptBid(providerBytes, providerKp.x25519PublicKey);
   const commitHash = sha256Two(sealedForBuyer.blob, sealedForProvider.blob);
 
   // 4. Bid PDA - seeds = ["bid", rfp, provider.pubkey]

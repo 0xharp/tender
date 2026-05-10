@@ -90,6 +90,10 @@ pub fn handler(ctx: Context<CommitBidInit>, args: CommitBidInitArgs) -> Result<(
     bid.bump = ctx.bumps.bid;
     bid.payout_destination = args.payout_destination;
     bid.payout_chain = args.payout_chain;
+    // v2 — claim flag default. Flips true via `attest_win` when the
+    // provider's main wallet later claims this private-bidder win into
+    // their public ProviderReputation.
+    bid.winner_attested = false;
 
     rfp.bid_count = rfp.bid_count.saturating_add(1);
 

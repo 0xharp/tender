@@ -2,8 +2,8 @@ use anchor_lang::prelude::*;
 
 use crate::errors::TenderError;
 use crate::state::{
-    BidderVisibility, MAX_MILESTONE_COUNT, NO_ACTIVE_MILESTONE, PLATFORM_FEE_BPS, Rfp, RfpCreated,
-    RfpStatus, BPS_DENOMINATOR,
+    BidderVisibility, BuyerVisibility, MAX_MILESTONE_COUNT, NO_ACTIVE_MILESTONE, PLATFORM_FEE_BPS,
+    Rfp, RfpCreated, RfpStatus, BPS_DENOMINATOR,
     DEFAULT_CANCEL_NOTICE_SECS, DEFAULT_DISPUTE_COOLOFF_SECS, DEFAULT_FUNDING_WINDOW_SECS,
     DEFAULT_MAX_ITERATIONS, DEFAULT_REVIEW_WINDOW_SECS,
 };
@@ -27,6 +27,13 @@ pub struct RfpCreateArgs {
     pub bid_close_at: i64,
     pub reveal_close_at: i64,
     pub bidder_visibility: BidderVisibility,
+    /// v2: hides the buyer's main wallet by routing through a per-RFP
+    /// HD-derived ephemeral. When `Private`, the front-end signs this
+    /// ix with the ephemeral, so `rfp.buyer = ephemeral_pubkey`.
+    /// Buyer reputation accrues on a stranded per-RFP rep PDA that
+    /// nobody reads; main wallet rep is unaffected unless the buyer
+    /// later opts in via `attest_buyer_history`.
+    pub buyer_visibility: BuyerVisibility,
 
     /// SHA-256(reserve_amount_le_bytes || reserve_nonce). All zeros = no reserve.
     pub reserve_price_commitment: [u8; 32],
@@ -88,6 +95,8 @@ pub fn handler(ctx: Context<RfpCreate>, args: RfpCreateArgs) -> Result<()> {
     rfp.milestone_durations_secs = [0i64; MAX_MILESTONE_COUNT as usize];
     rfp.active_milestone_index = NO_ACTIVE_MILESTONE;
     rfp.bidder_visibility = args.bidder_visibility;
+    rfp.buyer_visibility = args.buyer_visibility;
+    rfp.buyer_attested = false;
     rfp.status = RfpStatus::Open;
     rfp.winner = None;
     rfp.winner_provider = None;
@@ -114,6 +123,7 @@ pub fn handler(ctx: Context<RfpCreate>, args: RfpCreateArgs) -> Result<()> {
         reveal_close_at: rfp.reveal_close_at,
         milestone_count: 0,
         bidder_visibility: rfp.bidder_visibility,
+        buyer_visibility: rfp.buyer_visibility,
         has_reserve,
     });
 

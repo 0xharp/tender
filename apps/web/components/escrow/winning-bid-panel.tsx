@@ -1,6 +1,11 @@
 'use client';
 
-import { useTendrAccount, useTendrSignMessage } from '@/lib/wallet';
+import {
+  useKeychainContext,
+  useMyActivity,
+  useTendrAccount,
+  useTendrSignMessage,
+} from '@/lib/wallet';
 /**
  * "Show winning bid" panel — replaces the prior decrypt-only banners.
  *
@@ -31,6 +36,7 @@ import { ChevronDownIcon, ChevronUpIcon, KeyRoundIcon, ShieldCheckIcon } from 'l
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { HashLink } from '@/components/primitives/hash-link';
 import { Button } from '@/components/ui/button';
 import { InlineMarkdown } from '@/components/ui/markdown';
 import {
@@ -79,6 +85,10 @@ export interface BuyerWinningBidPanelProps {
   rfpPda: Address;
   rfpNonceHex: string;
   winnerBidPda: Address;
+  /** RFP's `bidder_visibility`. Drives the "Anon Provider · trunc"
+   *  label on the payout field so the framing matches the privacy
+   *  posture of the bid. */
+  isPrivateBidder: boolean;
   /** Called whenever the plaintext becomes available (initial decrypt OR
    *  cache restore). Lets the parent thread the plaintext into milestone
    *  rows for inline acceptance-bar pills. */
@@ -94,15 +104,26 @@ export function BuyerWinningBidPanel(props: BuyerWinningBidPanelProps) {
 
 function BuyerInner({
   viewerWallet,
-  rfpPda: _rfpPda,
+  rfpPda,
   rfpNonceHex,
   winnerBidPda,
+  isPrivateBidder,
   plaintext,
   onDecrypted,
 }: BuyerWinningBidPanelProps & { viewerWallet: string }) {
   const accountObj = useTendrAccount();
   // biome-ignore lint/suspicious/noExplicitAny: signMessage hook narrowing
   const signMessage = useTendrSignMessage(accountObj as any);
+  const keychain = useKeychainContext();
+  // HD-private buyer detection — for these RFPs the on-chain rfp.buyer
+  // is the HD ephemeral and the bid envelopes were sealed with the
+  // ephemeral's signature on the RFP nonce. Signing with main wallet
+  // here would derive the wrong X25519 key → "schema validation"
+  // failure (the produced "plaintext" is junk bytes). Same routing as
+  // BuyerBidDecryptionPanel pre-award.
+  const activity = useMyActivity();
+  const hdBuyerEntry = activity.ownedRfps.find((r) => r.pda === String(rfpPda) && r.via === 'hd');
+  const hdIndex = hdBuyerEntry?.hdIndex;
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<DecryptStage | null>(null);
   const [expanded, setExpanded] = useState(true);
@@ -119,12 +140,30 @@ function BuyerInner({
     setBusy(true);
     setStage(null);
     try {
+      // For HD-private mode, build a local-signing closure backed by the
+      // buyer ephemeral. This drives BOTH the per-RFP X25519 derivation
+      // (must match what create-flow signed with the ephemeral) AND the
+      // TEE auth token (PER read access keyed off rfp.buyer = ephemeral).
+      let buyerWalletForDecrypt: Address = viewerWallet as Address;
+      let signMessageForDecrypt = signMessage;
+      if (hdIndex !== undefined && keychain) {
+        const eph = await keychain.buyerEphemeral(hdIndex);
+        buyerWalletForDecrypt = eph.publicKey.toBase58() as Address;
+        // biome-ignore lint/suspicious/noExplicitAny: noble subpath types vary
+        const ed = (await import('@noble/curves/ed25519.js')) as any;
+        const ed25519 = ed.ed25519 ?? ed.default?.ed25519 ?? ed;
+        const seed32 = eph.secretKey.slice(0, 32);
+        signMessageForDecrypt = (async ({ message }: { message: Uint8Array }) => ({
+          signature: new Uint8Array(ed25519.sign(message, seed32)),
+          // biome-ignore lint/suspicious/noExplicitAny: hook narrowing
+        })) as any;
+      }
       const result = await decryptWinnerBidAsBuyer({
-        buyerWallet: viewerWallet as Address,
+        buyerWallet: buyerWalletForDecrypt,
         winnerBidPda,
         rfpNonceHex,
         // biome-ignore lint/suspicious/noExplicitAny: hook return shape
-        signMessage: signMessage as any,
+        signMessage: signMessageForDecrypt as any,
         rpc,
         onProgress: setStage,
       });
@@ -158,6 +197,7 @@ function BuyerInner({
       expanded={expanded}
       onToggle={() => setExpanded((e) => !e)}
       onDecrypt={handleDecrypt}
+      isPrivateBidder={isPrivateBidder}
     />
   );
 }
@@ -169,6 +209,10 @@ function BuyerInner({
 export interface ProviderWinningBidPanelProps {
   rfpPda: Address;
   winnerBidPda: Address;
+  /** RFP's `bidder_visibility`. Drives the "Anon Provider · trunc"
+   *  label on the payout field — same framing as the buyer's view of
+   *  the same plaintext. */
+  isPrivateBidder: boolean;
   onDecrypted: (plaintext: SealedBidPlaintext) => void;
   plaintext: SealedBidPlaintext | null;
 }
@@ -183,12 +227,14 @@ function ProviderInner({
   mainWallet,
   rfpPda,
   winnerBidPda,
+  isPrivateBidder,
   plaintext,
   onDecrypted,
 }: ProviderWinningBidPanelProps & { mainWallet: Address }) {
   const accountObj = useTendrAccount();
   // biome-ignore lint/suspicious/noExplicitAny: signMessage hook narrowing
   const signMessage = useTendrSignMessage(accountObj as any);
+  const keychain = useKeychainContext();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<DecryptStage | null>(null);
   const [expanded, setExpanded] = useState(true);
@@ -226,13 +272,42 @@ function ProviderInner({
         sign: signMessage as any,
       };
     }
-    const { deriveEphemeralBidWalletMessage, deriveEphemeralBidKeypair } = await import(
-      '@/lib/crypto/derive-ephemeral-bid-wallet'
-    );
-    const seedMsg = deriveEphemeralBidWalletMessage(rfpPda);
-    // biome-ignore lint/suspicious/noExplicitAny: signMessage hook narrowing
-    const seedSig = await (signMessage as any)({ message: seedMsg });
-    const eph = await deriveEphemeralBidKeypair(seedSig.signature);
+    // v2 HD-keychain path. Resolution mirrors your-bid-panel:
+    //   1. Read the cached HD index for this RFP from localStorage
+    //      (written at bid submit time).
+    //   2. If absent — fresh device — enumerate HD bidder ephemerals
+    //      to find the one whose bid lives on this RFP.
+    //   3. Derive the ephemeral keypair via the shared keychain.
+    //   4. Sanity-check the derived pubkey against bid.provider so a
+    //      stale cache from a different main wallet is caught early.
+    if (!keychain) {
+      toast.error('Keychain not unlocked. Reconnect your wallet and try again.');
+      return null;
+    }
+    const indexCacheKey = `tender:bidder-index:${rfpPda}:${mainWallet}`;
+    let idx: number | null = null;
+    if (typeof window !== 'undefined') {
+      const raw = window.localStorage.getItem(indexCacheKey);
+      if (raw !== null) {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) idx = parsed;
+      }
+    }
+    if (idx === null) {
+      const masterSeed = await keychain.getMasterSeed();
+      const { enumerateOwnBids } = await import('@/lib/keychain/enumerate');
+      const hits = await enumerateOwnBids(masterSeed);
+      const hit = hits.find((h) => String(h.bid.data.rfp) === rfpPda);
+      if (!hit) {
+        toast.error('No HD-keychain bid found for this RFP');
+        return null;
+      }
+      idx = hit.index;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(indexCacheKey, String(idx));
+      }
+    }
+    const eph = await keychain.bidderEphemeral(idx);
     if (eph.publicKey.toBase58() !== bidSigner) {
       toast.error('Ephemeral wallet derivation does not match the bid signer', {
         description:
@@ -250,7 +325,7 @@ function ProviderInner({
         signature: new Uint8Array(ed25519.sign(message, seed32)),
       }),
     };
-  }, [signMessage, mainWallet, rfpPda, winnerBidPda]);
+  }, [signMessage, mainWallet, rfpPda, winnerBidPda, keychain]);
 
   async function handleDecrypt() {
     setBusy(true);
@@ -292,6 +367,7 @@ function ProviderInner({
       expanded={expanded}
       onToggle={() => setExpanded((e) => !e)}
       onDecrypt={handleDecrypt}
+      isPrivateBidder={isPrivateBidder}
     />
   );
 }
@@ -308,6 +384,7 @@ function Shell({
   expanded,
   onToggle,
   onDecrypt,
+  isPrivateBidder,
 }: {
   /** Named `roleLabel` (not `role`) so biome's a11y linter doesn't mistake
    *  it for an ARIA role. Drives the per-side copy in the prompt. */
@@ -318,6 +395,9 @@ function Shell({
   expanded: boolean;
   onToggle: () => void;
   onDecrypt: () => void;
+  /** RFP's bidder_visibility — used by BidPlaintextDetails to render
+   *  the payout target as "Anon Provider · trunc" in private mode. */
+  isPrivateBidder: boolean;
 }) {
   // Pre-decrypt: prompt for the one wallet sig
   if (!plaintext) {
@@ -376,12 +456,18 @@ function Shell({
         </button>
       </div>
 
-      {expanded && <BidPlaintextDetails plaintext={plaintext} />}
+      {expanded && <BidPlaintextDetails plaintext={plaintext} isPrivateBidder={isPrivateBidder} />}
     </div>
   );
 }
 
-function BidPlaintextDetails({ plaintext }: { plaintext: SealedBidPlaintext }) {
+function BidPlaintextDetails({
+  plaintext,
+  isPrivateBidder,
+}: {
+  plaintext: SealedBidPlaintext;
+  isPrivateBidder: boolean;
+}) {
   return (
     <div className="flex flex-col gap-4 text-xs">
       {/* Top-line summary */}
@@ -456,12 +542,25 @@ function BidPlaintextDetails({ plaintext }: { plaintext: SealedBidPlaintext }) {
         </Field>
       )}
 
-      {/* Payout destination */}
+      {/* Payout destination. In private bidder mode the
+          `ephemeralRole='provider'` flag flips the rendered hash to
+          "Anon Provider · trunc" — matches the privacy posture of the
+          bid regardless of which address ended up in the envelope.
+          Public mode resolves SNS so a claimed `.tendr.sol` shows up
+          instead of the raw hash. */}
       <Field label="Payout">
-        <span className="font-mono text-[11px] text-muted-foreground">
-          {plaintext.payoutPreference.asset} on {plaintext.payoutPreference.chain} →{' '}
-          {plaintext.payoutPreference.address.slice(0, 6)}…
-          {plaintext.payoutPreference.address.slice(-6)}
+        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+          <span>
+            {plaintext.payoutPreference.asset} on {plaintext.payoutPreference.chain} →
+          </span>
+          <HashLink
+            hash={plaintext.payoutPreference.address}
+            kind="account"
+            visibleChars={6}
+            withSns={!isPrivateBidder && plaintext.payoutPreference.chain === 'solana'}
+            ephemeralRole={isPrivateBidder ? 'provider' : undefined}
+            copyable={false}
+          />
         </span>
       </Field>
     </div>

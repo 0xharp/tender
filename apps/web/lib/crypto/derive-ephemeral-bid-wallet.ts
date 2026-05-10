@@ -52,7 +52,7 @@ export async function deriveEphemeralBidKeypair(walletSignature: Uint8Array): Pr
 /* -------------------------------------------------------------------------- */
 
 const BINDING_DOMAIN = 'tender-bid-binding-v1';
-const PROGRAM_ID_FOR_BINDING = '4RSbGBZQ7CDSv78DG3VoMcaKXBsoYvh9ZofEo6mTCvfQ';
+const PROGRAM_ID_FOR_BINDING = 'GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z';
 
 /**
  * The exact message the provider's main wallet signs to bind itself to a
@@ -70,6 +70,40 @@ export function buildBidBindingMessage(
     `rfp=${rfpPda}`,
     `bid=${bidPda}`,
     `main=${mainWallet}`,
+  ];
+  return new TextEncoder().encode(lines.join('\n'));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Buyer-eph binding signature - proves the main wallet owns the buyer        */
+/* ephemeral that ran a private RFP. Verified on-chain at                     */
+/* attest_buyer_history time via Ed25519SigVerify.                            */
+/* -------------------------------------------------------------------------- */
+
+const BUYER_EPH_BINDING_DOMAIN = 'tender-buyer-eph-binding-v1';
+
+/**
+ * The exact bytes the buyer's main wallet signs to bind itself to a
+ * specific RFP's buyer ephemeral. Format MUST match the on-chain helper
+ * `build_buyer_eph_binding_message` in
+ * `programs/tender/src/instructions/attest_buyer_history.rs` byte-for-byte —
+ * a one-character drift would cause the on-chain verify to reject the sig.
+ *
+ * Distinct domain from `buildBidBindingMessage` (`tender-bid-binding-v1`)
+ * so a signature meant for `attest_win` cannot be replayed against
+ * `attest_buyer_history` and vice versa.
+ */
+export function buildBuyerEphBindingMessage(
+  rfpPda: string,
+  mainWallet: string,
+  buyerEph: string,
+): Uint8Array {
+  const lines = [
+    BUYER_EPH_BINDING_DOMAIN,
+    `program=${PROGRAM_ID_FOR_BINDING}`,
+    `rfp=${rfpPda}`,
+    `main=${mainWallet}`,
+    `eph=${buyerEph}`,
   ];
   return new TextEncoder().encode(lines.join('\n'));
 }

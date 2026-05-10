@@ -109,4 +109,10 @@ pub enum TenderError {
     MathOverflow,
     #[msg("Insufficient escrow balance")]
     InsufficientEscrow,
+
+    // v2 — private buyer mode
+    #[msg("attest_buyer_history is only valid on private RFPs in Completed state")]
+    NotAttestable,
+    #[msg("This RFP has already been attested")]
+    AlreadyAttested,
 }
