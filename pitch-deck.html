@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tendr.bid — Frontier 2026 Pitch Deck</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --c-bg: #FAFAFC;
+      --c-bg-alt: #F2F2F6;
+      --c-bg-card: #FFFFFF;
+      --c-surface: #EBEBF0;
+      --c-border: rgba(24,24,31,0.10);
+      --c-border-strong: rgba(24,24,31,0.18);
+
+      --c-primary: #6E45A4;
+      --c-primary-dim: rgba(110,69,164,0.10);
+      --c-primary-soft: #553580;
+      --c-accent: #059669;
+      --c-accent-dim: rgba(5,150,105,0.10);
+      --c-danger: #DC2626;
+      --c-warning: #D97706;
+
+      --c-text: #18181F;
+      --c-text-secondary: rgba(24,24,31,0.72);
+      --c-text-muted: rgba(24,24,31,0.55);
+
+      --f-hero: 96px;
+      --f-h1: 60px;
+      --f-h2: 44px;
+      --f-h3: 32px;
+      --f-body: 24px;
+      --f-small: 19px;
+      --f-caption: 14px;
+
+      --font-display: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'Geist Mono', 'SF Mono', 'JetBrains Mono', Consolas, monospace;
+
+      --s-xs: 8px;
+      --s-sm: 16px;
+      --s-md: 28px;
+      --s-lg: 44px;
+      --s-xl: 64px;
+
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; background: var(--c-bg); color: var(--c-text); font-feature-settings: "ss01", "cv11"; }
+
+    .deck { width: 100vw; height: 100vh; position: relative; overflow: hidden; }
+
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 72px 96px;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.45s var(--ease-out);
+      font-family: var(--font-display);
+      background: var(--c-bg);
+    }
+    .slide.active { opacity: 1; pointer-events: auto; }
+
+    .slide.active .animate-in {
+      animation: slideUp 0.5s var(--ease-out) both;
+    }
+    .slide.active .animate-in:nth-child(1) { animation-delay: 0s; }
+    .slide.active .animate-in:nth-child(2) { animation-delay: 0.06s; }
+    .slide.active .animate-in:nth-child(3) { animation-delay: 0.12s; }
+    .slide.active .animate-in:nth-child(4) { animation-delay: 0.18s; }
+    .slide.active .animate-in:nth-child(5) { animation-delay: 0.24s; }
+    .slide.active .animate-in:nth-child(6) { animation-delay: 0.30s; }
+    .slide.active .animate-in:nth-child(7) { animation-delay: 0.36s; }
+    .slide.active .animate-in:nth-child(8) { animation-delay: 0.42s; }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero { font-size: var(--f-hero); font-weight: 800; letter-spacing: -3px; line-height: 1.02; }
+    .h1 { font-size: var(--f-h1); font-weight: 700; letter-spacing: -1.6px; line-height: 1.08; }
+    .h2 { font-size: var(--f-h2); font-weight: 700; letter-spacing: -1px; line-height: 1.12; }
+    .h3 { font-size: var(--f-h3); font-weight: 600; letter-spacing: -0.4px; line-height: 1.25; }
+    .body { font-size: var(--f-body); font-weight: 400; line-height: 1.5; color: var(--c-text-secondary); }
+    .small { font-size: var(--f-small); font-weight: 400; line-height: 1.5; color: var(--c-text-secondary); }
+    .caption { font-size: var(--f-caption); font-weight: 600; color: var(--c-text-muted); letter-spacing: 2.4px; text-transform: uppercase; font-family: var(--font-mono); }
+    .mono { font-family: var(--font-mono); font-feature-settings: "tnum"; }
+    .tabular { font-variant-numeric: tabular-nums; }
+
+    .text-primary { color: var(--c-primary); }
+    .text-primary-soft { color: var(--c-primary-soft); }
+    .text-accent { color: var(--c-accent); }
+    .text-muted { color: var(--c-text-muted); }
+    .text-danger { color: var(--c-danger); }
+    .text-emphasis { color: var(--c-primary); }
+
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .items-start { align-items: flex-start; }
+    .items-end { align-items: flex-end; }
+    .justify-center { justify-content: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-xs { gap: var(--s-xs); }
+    .gap-sm { gap: var(--s-sm); }
+    .gap-md { gap: var(--s-md); }
+    .gap-lg { gap: var(--s-lg); }
+    .flex-1 { flex: 1; }
+    .w-full { width: 100%; }
+    .text-center { text-align: center; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-lg); }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s-md); }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-md); }
+
+    .card {
+      background: var(--c-bg-card);
+      border: 1px solid var(--c-border);
+      border-radius: 14px;
+      padding: var(--s-lg);
+    }
+    .card-soft {
+      background: rgba(24,24,31,0.025);
+      border: 1px solid var(--c-border);
+      border-radius: 14px;
+      padding: var(--s-md);
+    }
+    .card-glow {
+      background: var(--c-bg-card);
+      border: 1px solid rgba(110,69,164,0.22);
+      border-radius: 14px;
+      padding: var(--s-lg);
+      box-shadow: 0 12px 40px rgba(110,69,164,0.08), 0 1px 2px rgba(24,24,31,0.04);
+    }
+    .card {
+      box-shadow: 0 1px 2px rgba(24,24,31,0.03);
+    }
+    .card-danger {
+      background: rgba(220,38,38,0.04);
+      border: 1px solid rgba(220,38,38,0.20);
+      border-radius: 14px;
+      padding: var(--s-lg);
+    }
+
+    .metric-card { padding: var(--s-md); }
+    .metric-value {
+      font-size: 64px; font-weight: 700;
+      color: var(--c-primary);
+      letter-spacing: -2px; line-height: 1;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+    .metric-label {
+      font-size: var(--f-small);
+      color: var(--c-text-muted);
+      margin-top: var(--s-xs);
+      font-weight: 500;
+    }
+
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 6px 14px; border-radius: 999px;
+      font-size: var(--f-caption); font-weight: 600;
+      letter-spacing: 1.2px; text-transform: uppercase;
+      font-family: var(--font-mono);
+    }
+    .badge-primary { background: var(--c-primary-dim); color: var(--c-primary); }
+    .badge-accent { background: var(--c-accent-dim); color: var(--c-accent); }
+    .badge-outline { border: 1px solid var(--c-border-strong); color: var(--c-text-secondary); }
+
+    .divider { width: 56px; height: 2px; border-radius: 2px; background: var(--c-primary); opacity: 0.7; margin: var(--s-md) 0; }
+    .divider-soft { width: 100%; height: 1px; background: var(--c-border); margin: var(--s-md) 0; }
+
+    .bullet-list { list-style: none; }
+    .bullet-list li {
+      padding: var(--s-sm) 0 var(--s-sm) var(--s-md);
+      position: relative;
+      font-size: var(--f-body);
+      color: var(--c-text-secondary);
+      border-bottom: 1px solid var(--c-border);
+    }
+    .bullet-list li:last-child { border-bottom: none; }
+    .bullet-list li::before {
+      content: ''; position: absolute; left: 0; top: 50%;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--c-primary);
+      transform: translateY(-50%);
+    }
+    .bullet-list strong { color: var(--c-text); font-weight: 600; }
+
+    .comparison-table { width: 100%; border-collapse: collapse; font-size: var(--f-small); }
+    .comparison-table th {
+      text-align: left; padding: 14px 18px;
+      font-size: var(--f-caption); color: var(--c-text-muted);
+      border-bottom: 1px solid var(--c-border);
+      font-weight: 600; text-transform: uppercase; letter-spacing: 1.4px;
+      font-family: var(--font-mono);
+    }
+    .comparison-table th:first-child { padding-left: 0; }
+    .comparison-table td {
+      padding: 14px 18px;
+      font-size: var(--f-small);
+      border-bottom: 1px solid var(--c-border);
+      color: var(--c-text-secondary);
+    }
+    .comparison-table td:first-child { padding-left: 0; color: var(--c-text); font-weight: 500; }
+    .comparison-table tr.highlight td { background: var(--c-primary-dim); color: var(--c-text); font-weight: 600; }
+    .comparison-table tr.highlight td:first-child { color: var(--c-primary-soft); }
+    .check { color: var(--c-accent); font-weight: 700; font-family: var(--font-mono); }
+    .cross { color: var(--c-danger); opacity: 0.7; font-weight: 700; font-family: var(--font-mono); }
+    .partial { color: var(--c-warning); font-weight: 700; font-family: var(--font-mono); }
+
+    .timeline { position: relative; }
+    .timeline-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-md); position: relative; }
+    .timeline-row::before {
+      content: ''; position: absolute; left: 12px; right: 12px; top: 11px;
+      height: 2px; background: var(--c-border); z-index: 0;
+    }
+    .timeline-cell { position: relative; padding-top: 36px; z-index: 1; }
+    .timeline-dot {
+      position: absolute; left: 0; top: 4px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--c-primary);
+      border: 3px solid var(--c-bg);
+      box-shadow: 0 0 0 1px var(--c-primary);
+    }
+    .timeline-cell.now .timeline-dot {
+      background: var(--c-accent);
+      box-shadow: 0 0 0 1px var(--c-accent), 0 0 14px rgba(5,150,105,0.30);
+    }
+
+    .quote-block {
+      position: relative;
+      padding: var(--s-md) var(--s-lg);
+      border-left: 3px solid var(--c-primary);
+      background: var(--c-bg-card);
+      border-radius: 0 12px 12px 0;
+    }
+
+    .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px;
+      background: var(--c-primary-dim);
+      color: var(--c-primary);
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .arch-stack {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: var(--s-md);
+    }
+    .arch-box {
+      padding: var(--s-md);
+      background: var(--c-bg-card);
+      border: 1px solid var(--c-border);
+      border-radius: 12px;
+      position: relative;
+    }
+    .arch-box-primary {
+      border-color: rgba(110,69,164,0.28);
+      background: rgba(110,69,164,0.03);
+      box-shadow: 0 8px 24px rgba(110,69,164,0.06);
+    }
+    .arch-box .label {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 1.6px;
+      text-transform: uppercase;
+      color: var(--c-primary);
+      margin-bottom: 10px;
+    }
+    .arch-box ul { list-style: none; }
+    .arch-box ul li {
+      font-size: 17px;
+      padding: 6px 0;
+      color: var(--c-text-secondary);
+    }
+    .arch-box ul li code {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      background: rgba(110,69,164,0.08);
+      color: var(--c-primary);
+      padding: 1px 8px;
+      border-radius: 4px;
+    }
+
+    .url-mono {
+      font-family: var(--font-mono);
+      color: var(--c-primary);
+      letter-spacing: -0.5px;
+    }
+
+    .bg-default { background: var(--c-bg); }
+    .bg-alt { background: var(--c-bg-alt); }
+
+    .nav-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 36px;
+      background: linear-gradient(0deg, rgba(250,250,252,0.96) 0%, rgba(250,250,252,0.6) 70%, transparent 100%);
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .deck:hover .nav-bar { opacity: 1; pointer-events: auto; }
+    .nav-counter { font-size: 13px; color: var(--c-text-muted); font-family: var(--font-mono); letter-spacing: 1px; }
+    .nav-progress { flex: 1; max-width: 220px; height: 2px; border-radius: 2px; background: rgba(24,24,31,0.10); margin: 0 24px; }
+    .nav-progress-fill { height: 100%; border-radius: 2px; background: var(--c-primary); transition: width 0.3s var(--ease-out); }
+    .nav-btn {
+      background: none; border: 1px solid var(--c-border-strong); color: var(--c-text-secondary);
+      padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+      font-family: var(--font-display); font-weight: 500;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .nav-btn:hover { border-color: var(--c-primary); color: var(--c-text); }
+
+    .notes {
+      display: none;
+      position: fixed; bottom: 64px; left: 36px; right: 36px;
+      background: rgba(15,15,20,0.96); border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 12px; padding: 18px 22px;
+      font-size: 14px; color: rgba(245,245,248,0.80); line-height: 1.55;
+      z-index: 200; max-height: 220px; overflow-y: auto;
+      font-family: var(--font-display);
+      box-shadow: 0 16px 48px rgba(24,24,31,0.18);
+    }
+    .notes.visible { display: block; }
+    .notes-label {
+      font-size: 11px; color: rgba(245,245,248,0.55); text-transform: uppercase;
+      letter-spacing: 2px; margin-bottom: 8px; font-family: var(--font-mono);
+    }
+    .notes strong { color: #C4A6F1; font-weight: 600; }
+
+    @media print {
+      .deck { overflow: visible; }
+      .slide {
+        position: relative; opacity: 1; pointer-events: auto;
+        page-break-after: always; height: 100vh;
+        break-inside: avoid;
+      }
+      .nav-bar, .notes { display: none !important; }
+      .animate-in { animation: none !important; opacity: 1 !important; transform: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+
+    <!-- =================== SLIDE 1: TITLE =================== -->
+    <div class="slide bg-alt" style="justify-content: center; align-items: center; text-align: center;">
+      <span class="caption animate-in">Colosseum Frontier 2026 · Submission</span>
+
+      <h1 class="hero animate-in mono" style="margin-top: 28px; color: var(--c-text);">
+        tendr<span class="text-primary">.</span>bid
+      </h1>
+
+      <p class="h3 animate-in" style="color: var(--c-text-secondary); margin-top: 24px; max-width: 780px; font-weight: 500;">
+        End-to-end private RFP procurement on Solana.
+      </p>
+
+      <p class="body animate-in" style="margin-top: 18px; max-width: 760px; color: var(--c-text-muted); font-style: italic;">
+        Sealed-bid Upwork — both sides anonymous, neither side can cheat, escrow handles the rest.
+      </p>
+
+      <div class="animate-in" style="margin-top: 44px; display: flex; gap: 12px;">
+        <span class="badge badge-primary">Live · Solana Devnet</span>
+        <span class="badge badge-outline">Solo founder · shipped end-to-end</span>
+      </div>
+
+      <div class="animate-in" style="margin-top: 64px;">
+        <p class="caption">0xharp · @tendrdotbid · tendr.bid</p>
+      </div>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        Bar test: <strong>"tendr.bid is sealed-bid Upwork on Solana — both sides can stay anonymous, buyers can't peek to undercut, providers can't get ghosted, escrow handles the rest."</strong> Don't explain the architecture yet. The next slide is the personal story that earned the right to build this.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 2: PROBLEM =================== -->
+    <div class="slide bg-default">
+      <span class="caption animate-in">The problem</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px; max-width: 1100px;">
+        I built the right structure.<br>
+        <span class="text-primary">Nothing was enforcing it.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <p class="body animate-in" style="max-width: 980px; margin-top: 4px;">
+        Five months ago I shipped a milestoned freelance build for a client. Got ghosted after milestone one. No escrow, no enforcement, no leverage. The smart structure I'd proposed didn't matter because nothing was making it stick.
+      </p>
+
+      <div class="grid-3 animate-in" style="margin-top: 40px;">
+        <div class="card-soft">
+          <p class="caption text-primary">No enforcement</p>
+          <p class="body" style="margin-top: 12px; color: var(--c-text);">
+            Smart milestones don't survive contact with a buyer who decides to walk.
+          </p>
+        </div>
+        <div class="card-soft">
+          <p class="caption text-primary">No discovery</p>
+          <p class="body" style="margin-top: 12px; color: var(--c-text);">
+            RFPs scatter across Discord, X DMs, Realms, Telegram. Find one in time and you've already lost.
+          </p>
+        </div>
+        <div class="card-soft">
+          <p class="caption text-primary">No equality</p>
+          <p class="body" style="margin-top: 12px; color: var(--c-text);">
+            Half the gigs go to whoever the buyer is connected to. Networks beat merit.
+          </p>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        Open with the personal story before the systemic frame. <strong>Founder lived this</strong> — that's the founder-market-fit signal judges look for. Then zoom out: every Solana operator I respect posts RFPs across 5 unorganized channels right now. The pattern is everywhere; nobody has fixed the loop end-to-end.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 3: WHY NOW =================== -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">Why now</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px; max-width: 1100px;">
+        Two Solana primitives shipped this year.<br>
+        <span class="text-primary">tendr.bid is what they make possible composed.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <div class="timeline animate-in" style="margin-top: 32px;">
+        <div class="timeline-row">
+          <div class="timeline-cell">
+            <div class="timeline-dot"></div>
+            <p class="caption mono">Sep 2 · 2025</p>
+            <p class="h3" style="margin-top: 8px;">TEE rollups on Solana</p>
+            <p class="small" style="margin-top: 8px;">MagicBlock ships Ephemeral Rollups with account-level read/write permissions inside Intel TDX.</p>
+          </div>
+          <div class="timeline-cell">
+            <div class="timeline-dot"></div>
+            <p class="caption mono">Mar 23 · 2026</p>
+            <p class="h3" style="margin-top: 8px;">Solana declares the category</p>
+            <p class="small" style="margin-top: 8px;">Solana Foundation publishes <em>Privacy on Solana: A Full-Spectrum Approach for the Modern Enterprise</em>.</p>
+          </div>
+          <div class="timeline-cell">
+            <div class="timeline-dot"></div>
+            <p class="caption mono">Apr 3 · 2026</p>
+            <p class="h3" style="margin-top: 8px;">Private rails go live</p>
+            <p class="small" style="margin-top: 8px;">MagicBlock Private Payments mainnet beta. Cloak's Groth16 shielded UTXO pool live and integrable.</p>
+          </div>
+          <div class="timeline-cell now">
+            <div class="timeline-dot"></div>
+            <p class="caption mono">May · 2026</p>
+            <p class="h3" style="margin-top: 8px; color: var(--c-accent);">tendr.bid</p>
+            <p class="small" style="margin-top: 8px;">First product composing TEE-gated sealed bids and shielded-pool private funding end-to-end.</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="body animate-in" style="margin-top: 44px; max-width: 1100px;">
+        Without both primitives, sealed-bid procurement on Solana is a marketing claim.<br>
+        With both, it's a verifiable system property. The macro is ready: Solana cleared <span class="mono text-primary">$1T</span> in stablecoin volume in 2025; Juniper projects <span class="mono text-primary">$5T</span> in cross-border B2B stablecoin payments by 2035.
+      </p>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        Sequoia's most overlooked slide — answers <strong>"why hasn't this existed already?"</strong>. Anchor every claim to a date. Sources: PRNewswire (Sep 2 2025), Colosseum blog "Umbra SDK, MagicBlock Private Payments, x402 Foundation" (Apr 3 2026), CoinDesk on Solana Foundation report (Mar 23 2026), range.org / williamblair.com on stablecoin volume, CoinDesk on Juniper $5T projection. Every figure is fresh — verify before submission.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 4: SOLUTION =================== -->
+    <div class="slide bg-default">
+      <span class="caption animate-in">The solution</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px;">
+        Three primitives stacked.<br>
+        <span class="text-primary">None depend on trusting the platform.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <div class="grid-3 animate-in" style="margin-top: 36px;">
+        <div class="card">
+          <span class="badge badge-primary mono">01 · Escrow</span>
+          <p class="h3" style="margin-top: 18px;">Permissionless auto-release</p>
+          <p class="small" style="margin-top: 12px;">
+            After the buyer's review window expires, anyone can call the on-chain ix to release payment. Silence becomes consent. The platform doesn't need to be online — the ix runs forever.
+          </p>
+        </div>
+        <div class="card">
+          <span class="badge badge-primary mono">02 · Bids</span>
+          <p class="h3" style="margin-top: 18px;">Sealed in one place</p>
+          <p class="small" style="margin-top: 12px;">
+            One marketplace, not five scattered channels. Bid contents cryptographically sealed even from the buyer until <span class="mono text-primary-soft">bid_close_at</span>. No favored vendor undercuts an early bid because the buyer cannot peek.
+          </p>
+        </div>
+        <div class="card">
+          <span class="badge badge-primary mono">03 · Reputation</span>
+          <p class="h3" style="margin-top: 18px;">Anonymous · claim-based</p>
+          <p class="small" style="margin-top: 12px;">
+            Both sides stay anonymous through the lifecycle. Reputation merges into your public wallet only when you explicitly claim it. Merit accrues to the wallet that did the work.
+          </p>
+        </div>
+      </div>
+
+      <div class="animate-in" style="margin-top: 44px; padding: 22px 28px; border-left: 3px solid var(--c-primary); background: var(--c-bg-card); border-radius: 0 10px 10px 0;">
+        <p class="h3" style="font-style: italic; color: var(--c-text);">
+          Platforms go down. The ixs run forever.
+        </p>
+      </div>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        Three primitives map 1:1 to the three pain points on the previous slide: enforcement, discovery, equality. The connecting principle — <strong>"platforms go down, the ixs run forever"</strong> — is the founder's own line and is the closing line of the deck. Land it here, return to it at the end.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 5: DEMO =================== -->
+    <div class="slide bg-default">
+      <span class="caption animate-in">Demo · 60 seconds</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px;">
+        Four privacy modes.<br>
+        <span class="text-primary">End-to-end private lifecycle.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <div class="grid-2 animate-in" style="margin-top: 28px; gap: 56px; align-items: start;">
+        <!-- Left: Demo flow steps -->
+        <div class="flex flex-col gap-md">
+          <div class="flex gap-md items-start">
+            <span class="step-num">1</span>
+            <div>
+              <p class="h3" style="font-size: 22px;">Buyer posts a fully sealed RFP</p>
+              <p class="small" style="margin-top: 4px;">Solscan shows an HD-derived ephemeral wallet, funded through Cloak's shielded UTXO pool. Main wallet never appears.</p>
+            </div>
+          </div>
+          <div class="flex gap-md items-start">
+            <span class="step-num">2</span>
+            <div>
+              <p class="h3" style="font-size: 22px;">Provider commits a sealed bid</p>
+              <p class="small" style="margin-top: 4px;">Bid encrypted into MagicBlock's Private ER. The on-chain ix that adds the buyer to the read-permission set <em>reverts</em> if called before <span class="mono text-primary-soft">bid_close_at</span>.</p>
+            </div>
+          </div>
+          <div class="flex gap-md items-start">
+            <span class="step-num">3</span>
+            <div>
+              <p class="h3" style="font-size: 22px;">Lifecycle runs through milestones</p>
+              <p class="small" style="margin-top: 4px;">Every post-award action is signed by the matching ephemeral. Tx fee payer never reveals the main wallet.</p>
+            </div>
+          </div>
+          <div class="flex gap-md items-start">
+            <span class="step-num">4</span>
+            <div>
+              <p class="h3" style="font-size: 22px;">Provider claims reputation</p>
+              <p class="small" style="margin-top: 4px;">A single <span class="mono text-primary-soft">attest_win</span> ix merges the ephemeral's accrued reputation into the public main wallet — on the user's terms, after the project completes.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Privacy mode matrix + URL -->
+        <div class="flex flex-col gap-md">
+          <div class="card-glow">
+            <p class="caption text-primary">Privacy modes shipped</p>
+            <table style="width: 100%; margin-top: 16px; border-collapse: collapse; font-size: 16px;">
+              <thead>
+                <tr style="color: var(--c-text-muted); font-family: var(--font-mono); font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase;">
+                  <th style="text-align: left; padding: 8px 0;">Buyer</th>
+                  <th style="text-align: left; padding: 8px 0;">Bidder</th>
+                  <th style="text-align: right; padding: 8px 0;">Status</th>
+                </tr>
+              </thead>
+              <tbody style="font-family: var(--font-mono); font-size: 15px;">
+                <tr style="border-top: 1px solid var(--c-border);">
+                  <td style="padding: 10px 0; color: var(--c-text-secondary);">public</td>
+                  <td style="padding: 10px 0; color: var(--c-text-secondary);">public</td>
+                  <td style="padding: 10px 0; text-align: right;" class="check">live</td>
+                </tr>
+                <tr style="border-top: 1px solid var(--c-border);">
+                  <td style="padding: 10px 0; color: var(--c-text-secondary);">public</td>
+                  <td style="padding: 10px 0; color: var(--c-text-secondary);">private</td>
+                  <td style="padding: 10px 0; text-align: right;" class="check">live</td>
+                </tr>
+                <tr style="border-top: 1px solid var(--c-border);">
+                  <td style="padding: 10px 0; color: var(--c-text-secondary);">private</td>
+                  <td style="padding: 10px 0; color: var(--c-text-secondary);">public</td>
+                  <td style="padding: 10px 0; text-align: right;" class="check">live</td>
+                </tr>
+                <tr style="border-top: 1px solid var(--c-border);">
+                  <td style="padding: 10px 0; color: var(--c-text);">private</td>
+                  <td style="padding: 10px 0; color: var(--c-text);">private</td>
+                  <td style="padding: 10px 0; text-align: right;" class="check">live</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card-soft">
+            <p class="caption text-muted">Try it · watch it</p>
+            <p class="h3 url-mono" style="margin-top: 8px;">tendr.bid</p>
+            <p class="small mono" style="margin-top: 8px; color: var(--c-primary);">▶ youtu.be/qhbG98OxR0o</p>
+            <p class="small text-muted" style="margin-top: 4px;">Solana devnet · 3-min walkthrough.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        This is the <strong>60-second judge moment</strong>. If you can run live, do — start at step 1, end at step 4. The privacy-mode matrix on the right is the proof: <strong>four orthogonal combinations all working on devnet</strong>, not a roadmap promise. Demo video URL goes in the contact slide; placeholder for now.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 6: ARCHITECTURE =================== -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">Architecture</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px;">
+        One product. <span class="text-primary">Three layers, composed.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <div class="arch-stack animate-in" style="margin-top: 36px;">
+        <div class="arch-box">
+          <p class="label">Browser</p>
+          <p class="h3" style="font-size: 22px; margin-bottom: 14px;">Client-side crypto + signing</p>
+          <ul>
+            <li>ECIES key derivation (X25519 + XChaCha20-Poly1305)</li>
+            <li>HD keychain (HKDF, single SIWS sign per session)</li>
+            <li>Codama-generated TS client + <code>@solana/kit</code> signer</li>
+            <li>SNS resolver — every wallet renders as <code>&lt;handle&gt;.tendr.sol</code></li>
+          </ul>
+        </div>
+
+        <div class="arch-box arch-box-primary">
+          <p class="label">Privacy plane</p>
+          <p class="h3" style="font-size: 22px; margin-bottom: 14px;">Cloak + MagicBlock PER</p>
+          <ul>
+            <li><strong style="color: var(--c-text);">Cloak shielded pool</strong> · Groth16 ZK funds buyer + bidder ephemerals</li>
+            <li><strong style="color: var(--c-text);">MagicBlock Private ER</strong> · TDX TEE gates reads on <code>BidCommit</code></li>
+            <li>Time-clocked permission ix · reverts before <code>bid_close_at</code></li>
+            <li>QVAC private AI on Nosana GPU · open-weight Qwen3</li>
+          </ul>
+        </div>
+
+        <div class="arch-box">
+          <p class="label">Solana base layer</p>
+          <p class="h3" style="font-size: 22px; margin-bottom: 14px;">Anchor program · devnet</p>
+          <ul>
+            <li><code>Rfp</code>, <code>BidCommit</code>, <code>Escrow</code>, <code>MilestoneState</code> PDAs</li>
+            <li><code>BuyerReputation</code>, <code>ProviderReputation</code>, <code>AttestWinReceipt</code></li>
+            <li>USDC escrow ATA · milestone-gated release</li>
+            <li>Permissionless auto-release · cancel / dispute paths</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="grid-4 animate-in" style="margin-top: 40px;">
+        <div class="metric-card">
+          <div class="metric-value">28</div>
+          <div class="metric-label">on-chain instructions</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">7</div>
+          <div class="metric-label">account state structs</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">22</div>
+          <div class="metric-label">LiteSVM tests passing</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">3</div>
+          <div class="metric-label">cryptographic layers stacked</div>
+        </div>
+      </div>
+
+      <p class="caption animate-in mono" style="margin-top: 22px; color: var(--c-text-muted);">
+        Program ID · GJe2DPcCBja5MLEenV2aeidsNxYavUMmA8eTJz8nSs9Z
+      </p>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        For technical judges, this is the depth slide. <strong>Three cryptographic layers stacked</strong> = ECIES at app layer + PER access control + Ed25519 binding-sig reveal. The <em>reverts before bid_close_at</em> line is the load-bearing claim — read the program at <code>programs/tender/src/instructions/open_reveal_window.rs</code> if asked.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 7: WHY SOLANA =================== -->
+    <div class="slide bg-default">
+      <span class="caption animate-in">Why Solana</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px;">
+        Remove the chain. <span class="text-primary">Every primitive breaks.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <div class="grid-2 animate-in" style="margin-top: 32px;">
+        <div class="card-danger">
+          <p class="caption" style="color: var(--c-danger);">Without blockchain</p>
+          <ul class="bullet-list" style="margin-top: 14px;">
+            <li>Escrow held by a platform — platform shuts down, freezes funds, changes rules</li>
+            <li>Bids on a server — buyer admin can peek, vendor admin can leak</li>
+            <li>Reputation locked per platform — start over each time</li>
+            <li>Cross-border payouts via banks — 3-day settlement, KYC purgatory</li>
+          </ul>
+        </div>
+
+        <div class="card-glow">
+          <p class="caption text-primary">With Solana</p>
+          <ul class="bullet-list" style="margin-top: 14px;">
+            <li><strong>Escrow as on-chain ix</strong> — runs forever, permissionless auto-release</li>
+            <li><strong>Sealed bids in TEE-gated PER</strong> — buyer cannot peek before reveal, by infrastructure not policy</li>
+            <li><strong>Reputation as on-chain PDA</strong> — portable across products, claim-based</li>
+            <li><strong>USDC settlement</strong> — minutes, no intermediaries, cross-border by default</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        This is the <strong>blockchain-necessity test</strong>. If a judge thinks <em>"couldn't you just use Stripe + Hellosign?"</em>, this slide ends the thought. The TEE-gated peek-prevention is the sharpest claim — buyer literally cannot read the bid before close, because the on-chain ix that grants read access reverts. Not policy, not promise — code.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 8: SPONSOR DEPTH =================== -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">Frontier side tracks</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px;">
+        Four side tracks.<br>
+        <span class="text-primary">Each one fails if its SDK is removed.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <div class="grid-2 animate-in" style="margin-top: 28px; gap: 22px;">
+        <div class="card-glow">
+          <div class="flex justify-between items-center">
+            <p class="h3">Cloak Track</p>
+            <span class="badge badge-primary mono">Privacy precondition</span>
+          </div>
+          <p class="small" style="margin-top: 12px;">
+            Cloak's bar: <em>"users would walk away the moment amounts and counterparties went public."</em> Sealed-bid procurement <em>is</em> that product — a buyer who can be doxxed by Solscan won't post the RFP. We use private transfers + stealth-style HD-derived ephemerals + viewing-key-style claim attestation across <span class="mono text-primary-soft">attest_buyer_history</span> / <span class="mono text-primary-soft">attest_win</span>. Going deep on the core, not wide on demos.
+          </p>
+        </div>
+
+        <div class="card-glow">
+          <div class="flex justify-between items-center">
+            <p class="h3">MagicBlock · Privacy Track</p>
+            <span class="badge badge-primary mono">Private DeFi · Auctions</span>
+          </div>
+          <p class="small" style="margin-top: 12px;">
+            Track explicitly names <em>"Private DeFi — auctions, lending, trading primitives"</em>. Tender is a sealed-bid auction with full lifecycle. Bid commitments live inside Private ER; the reveal ix reverts before <span class="mono text-primary-soft">bid_close_at</span> — sealed by infrastructure, not policy. Architecture and smart-contract design read across 28 ixs and 22 LiteSVM tests.
+          </p>
+        </div>
+
+        <div class="card-glow">
+          <div class="flex justify-between items-center">
+            <p class="h3">SNS Identity Track</p>
+            <span class="badge badge-primary mono">On-chain reputation</span>
+          </div>
+          <p class="small" style="margin-top: 12px;">
+            Track lists <em>"on-chain reputation systems"</em> as the first example. Tender renders <span class="mono text-primary-soft">.tendr.sol</span> across profiles, leaderboard, RFP cards, OG share cards. SNS is the <em>identity layer that makes claim-based reputation legible</em> — anonymous through the lifecycle, named when claimed. Sybil-resistant by design: rep is earned by completed work, not by self-attestation.
+          </p>
+        </div>
+
+        <div class="card-glow">
+          <div class="flex justify-between items-center">
+            <p class="h3">Tether · QVAC</p>
+            <span class="badge badge-primary mono">Private AI</span>
+          </div>
+          <p class="small" style="margin-top: 12px;">
+            QVAC powers RFP scope drafting + structured bid drafting + post-decrypt comparison. Open-weight Qwen3 4B Q4_K_M on a dedicated Nosana GPU — <em>no closed AI provider</em> in the pipeline. App servers never see prompts or bid plaintexts. Roadmap: bundled QVAC for the agent-bid path, where local-first is the user.
+          </p>
+        </div>
+      </div>
+
+      <p class="small animate-in mono" style="margin-top: 26px; color: var(--c-text-muted); letter-spacing: 0.5px;">
+        cloak track · magicblock privacy track · sns identity track · tether qvac track · all four live on superteam earn
+      </p>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        <strong>All four tracks confirmed live on Superteam Earn.</strong> Track-by-track strategy:
+        <br>• <strong>Cloak ($amount per Cloak listing):</strong> Strongest fit. Sponsor tweet validation. Lead with "privacy is a precondition" framing — Cloak's own thesis. Judging: integration depth 40%, product 30%, real-world use 30%. Hit 3 of 5 named directions: B2B payments, cross-border, viewing-key style audit.
+        <br>• <strong>MagicBlock Privacy Track ($5K, 1st = $2.5K):</strong> Explicit fit — track names "private auctions". Judging: tech 40%, impact 30%, creativity 30%. Lead with the time-clocked permission ix as the load-bearing technical claim.
+        <br>• <strong>SNS Identity Track ($1,800 × 2 winners + $700 × 2 runner-up):</strong> Track lists "on-chain reputation systems" as first example. Lead with the claim-merge flow — anonymous through lifecycle, named when claimed.
+        <br>• <strong>Tether QVAC Track ($10K, weakest fit):</strong> Track requires <em>"works offline or on-device — that's the point of QVAC."</em> We host on a Nosana GPU, not on-device. Be honest if asked. Strongest framing is "open-weight, no closed-AI provider, app servers never see prompts" + roadmap for bundled local-first QVAC at agent-bid time. <strong>Decide whether to submit to QVAC track on its own merits — the integration is real but the on-device thesis isn't met today.</strong>
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 9: TRACTION =================== -->
+    <div class="slide bg-default">
+      <span class="caption animate-in">Traction</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px;">
+        Built end-to-end. <span class="text-primary">Every code path on devnet.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <div class="grid-4 animate-in" style="margin-top: 32px;">
+        <div class="metric-card">
+          <div class="metric-value">28</div>
+          <div class="metric-label">on-chain instructions</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">22</div>
+          <div class="metric-label">LiteSVM tests passing</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">5</div>
+          <div class="metric-label">sponsor SDKs wired</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">4</div>
+          <div class="metric-label">privacy modes shipped</div>
+        </div>
+      </div>
+
+      <div class="quote-block animate-in" style="margin-top: 44px;">
+        <p class="h3" style="font-style: italic; color: var(--c-text); font-size: 26px;">
+          Sealed-bid procurement on Solana with private funding rails is hard. Really cool direction. Curious to see the final flow.
+        </p>
+        <p class="small mono" style="margin-top: 14px; color: var(--c-text-muted);">
+          — @cloak_ag · sponsor reply on a Tender ship-tweet · April 2026
+        </p>
+      </div>
+
+      <div class="grid-3 animate-in" style="margin-top: 32px;">
+        <div class="card-soft">
+          <p class="caption text-primary">Sponsor validation</p>
+          <p class="small" style="margin-top: 8px;">Cloak — the team building the primitive we depend on — flagged this as the hard problem and asked to see the flow.</p>
+        </div>
+        <div class="card-soft">
+          <p class="caption text-primary">Market observation</p>
+          <p class="small" style="margin-top: 8px;">Solana operators post RFPs across 5 unorganized channels today. Demand articulated as <em>"one place where escrow, reputation, payment work"</em>.</p>
+        </div>
+        <div class="card-soft">
+          <p class="caption text-primary">Founder experience</p>
+          <p class="small" style="margin-top: 8px;">Lived the freelancer-ghost moment that the product fixes. Built the enforcement that would have caught it.</p>
+        </div>
+      </div>
+
+      <p class="small animate-in" style="margin-top: 24px; color: var(--c-text-muted); font-style: italic;">
+        No paid users yet. No vanity DAU. The signals above are what we have actually earned.
+      </p>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        <strong>Honesty wins judges.</strong> Don't fake DAU. The Cloak quote is the strongest signal — the team building the primitive we depend on flagging the problem as hard is worth more than 1k Twitter likes. Brand-tone: this slide names what's missing as well as what's there.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 10: COMPETITION =================== -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">Positioning</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px;">
+        No one composes these <span class="text-primary">end-to-end.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <table class="comparison-table animate-in" style="margin-top: 28px;">
+        <thead>
+          <tr>
+            <th style="width: 280px;">&nbsp;</th>
+            <th style="text-align: center;">Sealed bids</th>
+            <th style="text-align: center;">Anon identity</th>
+            <th style="text-align: center;">On-chain escrow</th>
+            <th style="text-align: center;">Auto-release</th>
+            <th style="text-align: center;">Cross-border USDC</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div>Coupa · SAP Ariba</div>
+              <div style="font-size: 14px; color: var(--c-text-muted); margin-top: 2px;" class="mono">$8B Thoma Bravo · centralized · $50K+ onboarding</div>
+            </td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+          </tr>
+          <tr>
+            <td>
+              <div>Upwork · Fiverr</div>
+              <div style="font-size: 14px; color: var(--c-text-muted); margin-top: 2px;" class="mono">18.9–27.7% take · public bids · ghosting unsolved</div>
+            </td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+          </tr>
+          <tr>
+            <td>
+              <div>Braintrust</div>
+              <div style="font-size: 14px; color: var(--c-text-muted); margin-top: 2px;" class="mono">$15.9M mcap · ETH · KYC · no privacy</div>
+            </td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="partial">~</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+          </tr>
+          <tr>
+            <td>
+              <div>@craftsdev · Arcium</div>
+              <div style="font-size: 14px; color: var(--c-text-muted); margin-top: 2px;" class="mono">single-item auctions · launched May 8 · MPC, not TEE</div>
+            </td>
+            <td style="text-align: center;" class="check">✓</td>
+            <td style="text-align: center;" class="partial">~</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+            <td style="text-align: center;" class="cross">×</td>
+          </tr>
+          <tr class="highlight">
+            <td>
+              <div>tendr.bid</div>
+              <div style="font-size: 14px; color: var(--c-primary-soft); margin-top: 2px;" class="mono">vertical-agnostic · full lifecycle · TDX TEE + shielded UTXO</div>
+            </td>
+            <td style="text-align: center;" class="check">✓</td>
+            <td style="text-align: center;" class="check">✓</td>
+            <td style="text-align: center;" class="check">✓</td>
+            <td style="text-align: center;" class="check">✓</td>
+            <td style="text-align: center;" class="check">✓</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="small animate-in" style="margin-top: 28px; color: var(--c-text-muted); max-width: 1100px;">
+        Two teams shipped sealed-bid on Solana the same week. Different shape — Arcium-MPC single-item auctions vs. vertical-agnostic procurement with full milestone lifecycle. The category is real, and there's room for both.
+      </p>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        <strong>Never claim "no competition"</strong> — it means no market. The @craftsdev/Arcium launch (May 8) is market validation, not a threat. Different stack (MPC vs TEE), different scope (single-item auction vs end-to-end procurement). Web2 numbers verified: Coupa $8B Thoma Bravo (Feb 2023), Upwork 18.9% take rate Q4 2025, Fiverr 27.7% Q4 2025, Braintrust $15.9M mcap (May 4 2026).
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 11: FOUNDER FIT =================== -->
+    <div class="slide bg-default">
+      <span class="caption animate-in">Who's building</span>
+
+      <div class="animate-in" style="margin-top: 20px; display: flex; align-items: center; gap: 20px;">
+        <img
+          src="0xharp-profile.png"
+          alt="Harp · 0xharp"
+          style="width: 96px; height: 96px; border-radius: 50%; object-fit: cover; object-position: center top; border: 2px solid var(--c-border-strong); box-shadow: 0 6px 24px rgba(110,69,164,0.12);"
+        />
+        <div>
+          <p style="font-family: var(--font-display); font-size: 28px; font-weight: 600; color: var(--c-text); letter-spacing: -0.4px;">
+            Harp
+          </p>
+          <p class="mono" style="font-size: 18px; color: var(--c-text-muted); margin-top: 2px;">
+            @0xharp · 0xharp.dev
+          </p>
+        </div>
+      </div>
+
+      <h1 class="h1 animate-in" style="margin-top: 22px;">
+        I've built the privacy and governance primitives this requires <span class="text-primary">for a living.</span>
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <div class="grid-2 animate-in" style="margin-top: 32px; gap: 32px;">
+        <div class="flex flex-col gap-md">
+          <div class="card">
+            <p class="caption text-primary">Lived the problem</p>
+            <p class="body" style="margin-top: 12px; color: var(--c-text);">
+              Got ghosted on a milestoned freelance build five months ago. Built the enforcement that would have caught it.
+            </p>
+          </div>
+
+          <div class="card">
+            <p class="caption text-primary">Day job · Tier-1 Private Indian Bank</p>
+            <p class="body" style="margin-top: 12px; color: var(--c-text);">
+              Currently Technical Lead, working on privacy platforms at scale — millions of customers. Privacy at production scale is what I ship for a living.
+            </p>
+          </div>
+
+          <div class="card">
+            <p class="caption text-primary">Prior · Goldman Sachs</p>
+            <p class="body" style="margin-top: 12px; color: var(--c-text);">
+              VP, Engineering. Replaced a vendor Op Risk procurement tool at firmwide scale. Designed enterprise risk taxonomy from scratch.
+            </p>
+          </div>
+        </div>
+
+        <div class="card-glow">
+          <p class="caption text-primary">3 prior Solana wins</p>
+          <div class="flex flex-col gap-sm" style="margin-top: 18px;">
+            <div style="padding: 14px 0; border-bottom: 1px solid var(--c-border);">
+              <p class="h3" style="font-size: 22px;">OWSOps · 1st prize</p>
+              <p class="small" style="margin-top: 4px;">AI Agents Spend Governance Track. Scoped-policy spend governance for AI-agent wallets — the same primitive Tender extends to multi-party procurement escrow.</p>
+            </div>
+            <div style="padding: 14px 0; border-bottom: 1px solid var(--c-border);">
+              <p class="h3" style="font-size: 22px;">LazorKit Cookbook · 1st prize</p>
+              <p class="small" style="margin-top: 4px;">8-recipe Solana developer cookbook. Passkey wallets, gasless USDC, cNFT minting, Marinade staking, subscription billing.</p>
+            </div>
+            <div style="padding: 14px 0;">
+              <p class="h3" style="font-size: 22px;">Superteam Academy · 3rd prize</p>
+              <p class="small" style="margin-top: 4px;">Full-stack LMS for Solana devs. Soulbound XP via Token-2022 + Metaplex Core. On-chain enrollment, leaderboard via Helius DAS.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="small animate-in mono" style="margin-top: 28px; color: var(--c-text-muted);">
+        8.5+ years full-stack engineering · M.Sc. Computer Science (Blockchain Major)
+      </p>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        <strong>Founder-market fit is the #1 signal pre-seed VCs and accelerator judges look for.</strong> The OWSOps → Tender lineage is the cleanest line: same scoped-policy spend-governance primitive, extended from single-agent-wallet to multi-party-procurement-escrow. Plus enterprise privacy platforms at scale (millions of customers, Tier-1 Indian bank), plus replaced-a-vendor-procurement-tool at GS. The fit is exceptional and verifiable.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 12: WHAT'S NOT SOLVED YET =================== -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">What's not solved yet</span>
+
+      <h1 class="h1 animate-in" style="margin-top: 18px;">
+        V1 is <span class="text-primary">trust-minimized by design.</span><br>
+        V2 adds intelligence.
+      </h1>
+
+      <div class="divider animate-in"></div>
+
+      <div class="grid-2 animate-in" style="margin-top: 32px; gap: 28px;">
+        <div class="card">
+          <span class="badge badge-primary mono">Disputes · v1 · live</span>
+          <p class="h3" style="margin-top: 16px;">No human moderator. On-chain escape hatches.</p>
+          <p class="small" style="margin-top: 12px;">
+            Both sides propose splits in a window. Default 50/50 after cool-off. Reputation gains and hits are real and on-chain — abuse is priced into the rep PDA the next time you bid. Trust-minimized, not trust-free. The starting point.
+          </p>
+        </div>
+
+        <div class="card-glow">
+          <span class="badge badge-primary mono">Disputes · v2 · planned</span>
+          <p class="h3" style="margin-top: 16px;">Bid-time agreed resolution.</p>
+          <ul class="bullet-list" style="margin-top: 12px;">
+            <li>Buyer + provider pick a resolution path before commit</li>
+            <li>QVAC AI-judge over the success criteria already on chain</li>
+            <li>Optional trusted-party audit · mix and match per RFP</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="grid-3 animate-in" style="margin-top: 28px; gap: 20px;">
+        <div class="card-soft">
+          <p class="caption text-primary">Escrow lock model</p>
+          <p class="small" style="margin-top: 8px;">Today: full lock at award. v2: optional milestone-by-milestone lock for buyers who want capital efficiency.</p>
+        </div>
+        <div class="card-soft">
+          <p class="caption text-primary">Mainnet</p>
+          <p class="small" style="margin-top: 8px;">Post Frontier + audit review. Lean on already-deployed sponsor programs — no own mainnet program risk.</p>
+        </div>
+        <div class="card-soft">
+          <p class="caption text-primary">Agent mode</p>
+          <p class="small" style="margin-top: 8px;">QVAC bundled local-first when agents bid for agents. AI agents don't need our hosted sidecar.</p>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        <strong>Sharpest judges will ask about disputes.</strong> Address it head-on. Brand-tone: don't oversell — call v1 trust-minimized, not trust-free. Name the gap, show the plan. The 50/50 default is a known surface for abuse, but reputation is the on-chain incentive that prices it. v2 turns the success criteria already required at bid-time into the input for AI/audit adjudication.
+      </div>
+    </div>
+
+    <!-- =================== SLIDE 13: CLOSING =================== -->
+    <div class="slide bg-alt" style="justify-content: center; align-items: center; text-align: center;">
+      <p class="h2 animate-in" style="max-width: 1100px; line-height: 1.2; color: var(--c-text); font-weight: 600;">
+        The smart structure didn't matter<br>
+        because nothing was enforcing it.
+      </p>
+
+      <p class="h2 animate-in" style="margin-top: 12px; max-width: 1100px; line-height: 1.2; color: var(--c-primary); font-weight: 700;">
+        Now it does.
+      </p>
+
+      <div class="animate-in" style="margin-top: 56px; padding-top: 36px; border-top: 1px solid var(--c-border); width: 520px;">
+        <p class="h3" style="font-style: italic; color: var(--c-text-secondary); font-weight: 500;">
+          Platforms go down.<br>
+          The ixs run forever.
+        </p>
+      </div>
+
+      <div class="animate-in" style="margin-top: 64px; display: flex; flex-direction: column; gap: 14px; align-items: center;">
+        <p class="h3 url-mono">tendr.bid</p>
+        <p class="small mono" style="color: var(--c-primary);">▶ youtu.be/qhbG98OxR0o</p>
+        <p class="small mono" style="color: var(--c-text-muted);">github.com/0xharp/tender · @tendrdotbid · 0xharp.dev</p>
+        <div style="display: flex; gap: 10px; margin-top: 12px;">
+          <span class="badge badge-outline">Live · Solana devnet</span>
+          <span class="badge badge-outline">Solo founder · shipped end-to-end</span>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="notes-label">Speaker note</div>
+        Dual closing. <strong>Top callback</strong> — the freelancer-ghost moment that opened slide 2 ("smart structure didn't matter…") resolved by Tender ("now it does"). <strong>Bottom principle</strong> — "platforms go down, the ixs run forever" — the conviction that justifies why this had to be on-chain. Both lines are the founder's own words, not marketing copy. <strong>Demo video URL needs to be added before submission.</strong>
+      </div>
+    </div>
+
+    <!-- =================== NAV =================== -->
+    <div class="nav-bar">
+      <button class="nav-btn" onclick="prev()">← Prev</button>
+      <span class="nav-counter"><span id="current">1</span> / <span id="total"></span></span>
+      <div class="nav-progress"><div class="nav-progress-fill" id="progress"></div></div>
+      <button class="nav-btn" onclick="next()">Next →</button>
+      <span style="margin-left: 16px; font-size: 11px; color: var(--c-text-muted); font-family: var(--font-mono); letter-spacing: 1px;">N · notes</span>
+    </div>
+  </div>
+
+  <script>
+    let current = 0;
+    const slides = document.querySelectorAll('.slide');
+    const total = slides.length;
+    let notesVisible = false;
+
+    document.getElementById('total').textContent = total;
+
+    function show(i) {
+      slides.forEach(s => s.classList.remove('active'));
+      current = Math.max(0, Math.min(i, total - 1));
+      slides[current].classList.add('active');
+      document.getElementById('current').textContent = current + 1;
+      document.getElementById('progress').style.width = ((current + 1) / total * 100) + '%';
+
+      document.querySelectorAll('.notes').forEach(n => n.classList.remove('visible'));
+      const note = slides[current].querySelector('.notes');
+      if (note && notesVisible) note.classList.add('visible');
+    }
+
+    function next() { show(current + 1); }
+    function prev() { show(current - 1); }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+      if (e.key === 'n' || e.key === 'N') {
+        notesVisible = !notesVisible;
+        document.querySelectorAll('.notes').forEach(n => {
+          n.classList.toggle('visible', notesVisible && n.closest('.slide').classList.contains('active'));
+        });
+      }
+      if (e.key === 'Home') { show(0); }
+      if (e.key === 'End') { show(total - 1); }
+    });
+
+    document.getElementById('deck').addEventListener('click', (e) => {
+      if (e.target.closest('.nav-bar') || e.target.closest('.nav-btn')) return;
+      if (e.clientX > window.innerWidth / 2) next(); else prev();
+    });
+
+    show(0);
+  </script>
+</body>
+</html>
