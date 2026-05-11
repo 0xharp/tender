@@ -35,13 +35,27 @@ Full detail in [docs/privacy-model.md](docs/privacy-model.md). Lifecycle map in 
 
 ## Quickstart
 
-### Prerequisites
+### Try the live demo (no install needed)
+
+Visit **[tendr.bid](https://tendr.bid)** — already deployed on Solana devnet against the Anchor program above. To walk through a full RFP lifecycle you'll need:
+
+1. **A Solana wallet switched to Devnet network.**
+   - Phantom: `Settings → Developer Settings → Change Network → Devnet`
+   - Backpack: `Settings → Network → Devnet`
+2. **Devnet SOL for transaction fees** — airdrop ~2 SOL from [faucet.solana.com](https://faucet.solana.com/).
+3. **Cloak Mock USDC for RFP funding** — claim from [devnet.cloak.ag/privacy/faucet](https://devnet.cloak.ag/privacy/faucet). Tender uses Cloak's mock USDC (mint `61ro7AExqfk4dZYoCyRzTahahCC2TdUUZ4M5epMPunJf`) so RFP escrow funding flows through Cloak's shielded UTXO pool when in anonymous-buyer mode.
+
+Once funded, walk the full lifecycle: claim your `.tendr.sol` identity → create an RFP (try fully sealed mode) → submit a bid from a second wallet → close the bid window → decrypt → award → fund escrow → milestone release → claim reputation.
+
+> Hackathon judges: same setup applies. The mock USDC step is what unlocks end-to-end RFP funding.
+
+### Prerequisites (for local development)
 
 - Node ≥ 22, pnpm ≥ 10
 - Rust + Solana CLI 1.18+ (only if you want to build/test the program)
 - Anchor 0.32.1 (only for program work)
 
-### Run the web app against devnet
+### Run the web app locally against devnet
 
 The program is already deployed on devnet at the address above; you don't need to build the program just to run the UI.
 
@@ -51,7 +65,7 @@ cp apps/web/.env.example apps/web/.env.local   # fill in supabase URL + anon key
 pnpm --filter @tender/web dev                  # http://localhost:3000
 ```
 
-You'll need a Solana wallet (Phantom, Backpack, etc.) on devnet and a small amount of devnet SOL.
+Wallet + faucet setup is the same as the **Try the live demo** section above (devnet network, devnet SOL, Cloak mock USDC).
 
 ### Build the program
 

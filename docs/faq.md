@@ -19,9 +19,19 @@ Connect a Solana wallet (Phantom, Backpack, Solflare — anything wallet-standar
 - **Buyers** post an RFP from `New RFP` in the top nav.
 - **Providers** browse `/rfps`, open one that fits, and submit a sealed bid.
 
-### Do I need devnet SOL?
+### What do I need to use tendr.bid on devnet?
 
-Yes — tendr.bid runs on Solana devnet right now. Get devnet SOL from the official [Solana faucet](https://faucet.solana.com/) or any community faucet. You'll need a small amount for transaction fees (well under 0.05 SOL for a full RFP cycle).
+Three things — all free, all under a minute each:
+
+1. **A Solana wallet switched to Devnet network.** Phantom: `Settings → Developer Settings → Change Network → Devnet`. Backpack: `Settings → Network → Devnet`.
+2. **Devnet SOL for transaction fees.** Airdrop ~2 SOL from the official [Solana faucet](https://faucet.solana.com/) or any community faucet. A full RFP cycle uses well under 0.05 SOL.
+3. **Cloak Mock USDC for RFP funding.** Claim from [devnet.cloak.ag/privacy/faucet](https://devnet.cloak.ag/privacy/faucet). Tendr uses Cloak's mock USDC (mint `61ro7AExqfk4dZYoCyRzTahahCC2TdUUZ4M5epMPunJf`) on devnet so RFP escrow funding flows through Cloak's shielded UTXO pool when the buyer is in anonymous-buyer mode.
+
+After that you're set: connect the wallet at [tendr.bid](https://tendr.bid), claim your `.tendr.sol` identity, and walk through a full lifecycle (create RFP → bid → award → milestones → claim reputation).
+
+### Where can I get the Devnet USDC to run through the entire RFP lifecycle on tendr.bid?
+
+Claim it from Cloak's devnet faucet: [devnet.cloak.ag/privacy/faucet](https://devnet.cloak.ag/privacy/faucet). Tendr uses Cloak's mock USDC on devnet (mint `61ro7AExqfk4dZYoCyRzTahahCC2TdUUZ4M5epMPunJf`). A few hundred mock USDC from a single faucet claim is plenty for a full lifecycle test.
 
 ### What does it cost?
 
