@@ -4,7 +4,9 @@
 
 **Live on Solana devnet — End-to-End Privacy Enabled RFP Procurement.** Mainnet post Colosseum Frontier & audit review.
 
-[**tendr.bid**](https://tendr.bid) · [@tendrdotbid](https://x.com/tendrdotbid) · [FAQ](docs/faq.md) · [Privacy model](docs/privacy-model.md) · [Lifecycle](docs/lifecycle.md) · [Reputation model](docs/reputation-model.md) · [Anchor program](programs/tender/src)
+[**tendr.bid**](https://tendr.bid) · [@tendrdotbid](https://x.com/tendrdotbid) · [Pitch deck](https://drive.google.com/drive/folders/1vfZMNhaBSmkz53Fzw3I0LAvUxagDq3gM) · [Demo video (3 min)](https://youtu.be/qhbG98OxR0o) · [Pitch video (2 min)](https://youtu.be/ivvk7OGRypw)
+
+[FAQ](docs/faq.md) · [Privacy model](docs/privacy-model.md) · [Lifecycle](docs/lifecycle.md) · [Reputation model](docs/reputation-model.md) · [Anchor program](programs/tender/src)
 
 ---
 
