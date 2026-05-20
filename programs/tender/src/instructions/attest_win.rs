@@ -128,7 +128,7 @@ pub struct AttestWin<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "attest_win", hash = "ae7b3a8a13a55713", spec_hash = "a888d579f70b43e8", accounts = "AttestWin", accounts_file = "src/instructions/attest_win.rs", accounts_hash = "45385970ba6ca7d0")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "attest_win", hash = "ba32e7fd4c3c7cd6", spec_hash = "506197613e557377", accounts = "AttestWin", accounts_file = "src/instructions/attest_win.rs", accounts_hash = "45385970ba6ca7d0")]
 pub fn handler(ctx: Context<AttestWin>) -> Result<()> {
     let rfp = &ctx.accounts.rfp;
     let bid_pda = ctx.accounts.bid.key();
@@ -204,20 +204,20 @@ pub fn handler(ctx: Context<AttestWin>) -> Result<()> {
 
     // Atomic merge — every counter on the stranded eph rep is added into
     // main rep. saturating_add guards against overflow.
-    main.total_wins = main.total_wins.saturating_add(eph.total_wins);
-    main.completed_projects = main.completed_projects.saturating_add(eph.completed_projects);
+    main.total_wins = main.total_wins.checked_add(eph.total_wins).ok_or(TenderError::MathOverflow)?;
+    main.completed_projects = main.completed_projects.checked_add(eph.completed_projects).ok_or(TenderError::MathOverflow)?;
     main.disputed_milestones = main
         .disputed_milestones
-        .saturating_add(eph.disputed_milestones);
-    main.late_milestones = main.late_milestones.saturating_add(eph.late_milestones);
+        .checked_add(eph.disputed_milestones).ok_or(TenderError::MathOverflow)?;
+    main.late_milestones = main.late_milestones.checked_add(eph.late_milestones).ok_or(TenderError::MathOverflow)?;
     main.abandoned_projects = main
         .abandoned_projects
-        .saturating_add(eph.abandoned_projects);
-    main.total_won_usdc = main.total_won_usdc.saturating_add(eph.total_won_usdc);
-    main.total_earned_usdc = main.total_earned_usdc.saturating_add(eph.total_earned_usdc);
+        .checked_add(eph.abandoned_projects).ok_or(TenderError::MathOverflow)?;
+    main.total_won_usdc = main.total_won_usdc.checked_add(eph.total_won_usdc).ok_or(TenderError::MathOverflow)?;
+    main.total_earned_usdc = main.total_earned_usdc.checked_add(eph.total_earned_usdc).ok_or(TenderError::MathOverflow)?;
     main.total_disputed_usdc = main
         .total_disputed_usdc
-        .saturating_add(eph.total_disputed_usdc);
+        .checked_add(eph.total_disputed_usdc).ok_or(TenderError::MathOverflow)?;
     main.last_updated = now;
 
     // Receipt PDA — its mere existence is the idempotency proof. Init

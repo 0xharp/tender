@@ -110,7 +110,7 @@ pub struct AcceptMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "accept_milestone", hash = "4606ba5bc2948d06", spec_hash = "307c294ad9004b44", accounts = "AcceptMilestone", accounts_file = "src/instructions/accept_milestone.rs", accounts_hash = "18dd92c1949c64f2")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "accept_milestone", hash = "085bfc5dce534eaa", spec_hash = "7dc258c669edba12", accounts = "AcceptMilestone", accounts_file = "src/instructions/accept_milestone.rs", accounts_hash = "18dd92c1949c64f2")]
 pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(
@@ -130,9 +130,9 @@ pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()
         .accounts
         .escrow
         .total_released
-        .saturating_add(ctx.accounts.escrow.total_refunded);
+        .checked_add(ctx.accounts.escrow.total_refunded).ok_or(TenderError::MathOverflow)?;
     require!(
-        ctx.accounts.escrow.total_locked >= escrow_settled.saturating_add(ms.amount),
+        ctx.accounts.escrow.total_locked >= escrow_settled.checked_add(ms.amount).ok_or(TenderError::MathOverflow)?,
         TenderError::InsufficientEscrow
     );
 
@@ -181,10 +181,10 @@ pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()
     // Free the active-milestone slot so provider can start the next one.
     rfp.active_milestone_index = NO_ACTIVE_MILESTONE;
     let escrow = &mut ctx.accounts.escrow;
-    escrow.total_released = escrow.total_released.saturating_add(total);
+    escrow.total_released = escrow.total_released.checked_add(total).ok_or(TenderError::MathOverflow)?;
 
     let treasury = &mut ctx.accounts.treasury;
-    treasury.total_collected = treasury.total_collected.saturating_add(fee);
+    treasury.total_collected = treasury.total_collected.checked_add(fee).ok_or(TenderError::MathOverflow)?;
 
     let provider_rep = &mut ctx.accounts.provider_reputation;
     let main_wallet = rfp.winner_provider.unwrap_or(Pubkey::default());
@@ -192,7 +192,7 @@ pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()
         provider_rep.provider = main_wallet;
         provider_rep.bump = ctx.bumps.provider_reputation;
     }
-    provider_rep.total_earned_usdc = provider_rep.total_earned_usdc.saturating_add(to_provider);
+    provider_rep.total_earned_usdc = provider_rep.total_earned_usdc.checked_add(to_provider).ok_or(TenderError::MathOverflow)?;
     provider_rep.last_updated = now;
 
     let buyer_rep = &mut ctx.accounts.buyer_reputation;
@@ -201,7 +201,7 @@ pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()
         buyer_rep.bump = ctx.bumps.buyer_reputation;
     }
     // Track gross released (provider net + treasury fee) - that's what left escrow.
-    buyer_rep.total_released_usdc = buyer_rep.total_released_usdc.saturating_add(total);
+    buyer_rep.total_released_usdc = buyer_rep.total_released_usdc.checked_add(total).ok_or(TenderError::MathOverflow)?;
     buyer_rep.last_updated = now;
 
     emit!(MilestoneAccepted {
@@ -221,17 +221,17 @@ pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()
     // reach the Completed branch in practice - the Cancelled fallback is
     // defensive (matches cancel_with_notice's pattern).
     let total_settled = escrow.total_released
-        .saturating_add(escrow.total_refunded);
+        .checked_add(escrow.total_refunded).ok_or(TenderError::MathOverflow)?;
     if total_settled >= escrow.total_locked {
         if escrow.total_released == 0 {
             rfp.status = RfpStatus::Cancelled;
         } else {
             rfp.status = RfpStatus::Completed;
-            provider_rep.completed_projects = provider_rep.completed_projects.saturating_add(1);
+            provider_rep.completed_projects = provider_rep.completed_projects.checked_add(1).ok_or(TenderError::MathOverflow)?;
             // Was previously emitting the BuyerReputationUpdated event without
             // actually incrementing the counter - the event-only write left every
             // buyer's `completed_rfps` permanently at 0. Increment + emit now.
-            buyer_rep.completed_rfps = buyer_rep.completed_rfps.saturating_add(1);
+            buyer_rep.completed_rfps = buyer_rep.completed_rfps.checked_add(1).ok_or(TenderError::MathOverflow)?;
             emit!(ProviderReputationUpdated {
                 provider: provider_rep.provider,
                 field: 1,

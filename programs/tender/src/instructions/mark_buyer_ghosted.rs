@@ -23,7 +23,7 @@ pub struct MarkBuyerGhosted<'info> {
     pub buyer_reputation: Account<'info, BuyerReputation>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "mark_buyer_ghosted", hash = "62eb2bea3aa8848e", spec_hash = "95a43d0b6d6cbfe8", accounts = "MarkBuyerGhosted", accounts_file = "src/instructions/mark_buyer_ghosted.rs", accounts_hash = "4da6eecf289d3178")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "mark_buyer_ghosted", hash = "600ee5d0491cf6b4", spec_hash = "2098a139135fc140", accounts = "MarkBuyerGhosted", accounts_file = "src/instructions/mark_buyer_ghosted.rs", accounts_hash = "4da6eecf289d3178")]
 pub fn handler(ctx: Context<MarkBuyerGhosted>) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(rfp.status == RfpStatus::Awarded, TenderError::InvalidRfpStatus);
@@ -34,7 +34,7 @@ pub fn handler(ctx: Context<MarkBuyerGhosted>) -> Result<()> {
     rfp.status = RfpStatus::GhostedByBuyer;
 
     let rep = &mut ctx.accounts.buyer_reputation;
-    rep.ghosted_rfps = rep.ghosted_rfps.saturating_add(1);
+    rep.ghosted_rfps = rep.ghosted_rfps.checked_add(1).ok_or(TenderError::MathOverflow)?;
     rep.last_updated = now;
     emit!(BuyerReputationUpdated { buyer: rep.buyer, field: 3, at: now });
 

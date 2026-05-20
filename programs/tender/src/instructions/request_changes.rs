@@ -30,7 +30,7 @@ pub struct RequestChanges<'info> {
     pub milestone: Account<'info, MilestoneState>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "request_changes", hash = "56f57009d4bc979c", spec_hash = "88f1169ffe53252d", accounts = "RequestChanges", accounts_file = "src/instructions/request_changes.rs", accounts_hash = "4a6f255c8b7a9793")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "request_changes", hash = "a7523db448887109", spec_hash = "b61fe8933df325fa", accounts = "RequestChanges", accounts_file = "src/instructions/request_changes.rs", accounts_hash = "4a6f255c8b7a9793")]
 pub fn handler(ctx: Context<RequestChanges>, _milestone_index: u8) -> Result<()> {
     let rfp = &ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;
@@ -45,7 +45,7 @@ pub fn handler(ctx: Context<RequestChanges>, _milestone_index: u8) -> Result<()>
         ms.disputed_at = now;
         ms.dispute_deadline = now + rfp.dispute_cooloff_secs;
     } else {
-        ms.iteration_count = ms.iteration_count.saturating_add(1);
+        ms.iteration_count = ms.iteration_count.checked_add(1).ok_or(TenderError::MathOverflow)?;
         ms.status = MilestoneStatus::Started;
         ms.review_deadline = 0;
     }

@@ -6,9 +6,10 @@
 //! (e.g., contract_value up to u64::MAX). Run with:
 //!   cargo kani --tests --harness verify_escrow_conservation_after_accept
 //!
-//! Auto-generated Kani harnesses (qedgen v2.18 codegen) hit codegen bugs
-//! similar to the proptest output. Hand-written harnesses are the canonical
-//! Kani pattern across mature Solana programs (Drift, Marinade, etc.).
+//! Hand-written Kani harnesses are the canonical pattern across mature
+//! Solana programs (Drift, Marinade, etc.) — one focused harness per
+//! property, with hand-picked symbolic bounds. The auto-generated
+//! `kani_auto.rs` complements these with one harness per transition.
 
 #![cfg(kani)]
 

@@ -128,7 +128,7 @@ pub struct FundProject<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "fund_project", hash = "fbd42046e30dd884", spec_hash = "02ad59235724d03e", accounts = "FundProject", accounts_file = "src/instructions/fund_project.rs", accounts_hash = "b36b8ff2e7770e5e")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "fund_project", hash = "87322ceee06585d7", spec_hash = "03487b950803108f", accounts = "FundProject", accounts_file = "src/instructions/fund_project.rs", accounts_hash = "b36b8ff2e7770e5e")]
 pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, FundProject<'info>>) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(rfp.status == RfpStatus::Awarded, TenderError::InvalidRfpStatus);
@@ -240,7 +240,7 @@ pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, FundProject<'info>>) -> Re
     rfp.status = RfpStatus::Funded;
 
     let buyer_rep = &mut ctx.accounts.buyer_reputation;
-    buyer_rep.funded_rfps = buyer_rep.funded_rfps.saturating_add(1);
+    buyer_rep.funded_rfps = buyer_rep.funded_rfps.checked_add(1).ok_or(TenderError::MathOverflow)?;
     buyer_rep.last_updated = now;
     emit!(BuyerReputationUpdated { buyer: buyer_rep.buyer, field: 1, at: now });
 

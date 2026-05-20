@@ -83,7 +83,7 @@ pub struct CancelLateMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_late_milestone", hash = "a1a86fa258510a0b", spec_hash = "62cc374635367bdf", accounts = "CancelLateMilestone", accounts_file = "src/instructions/cancel_late_milestone.rs", accounts_hash = "291ec713f6579061")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_late_milestone", hash = "b12168b1c86bf04b", spec_hash = "809d56fb4c6022cb", accounts = "CancelLateMilestone", accounts_file = "src/instructions/cancel_late_milestone.rs", accounts_hash = "291ec713f6579061")]
 pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;
@@ -102,9 +102,9 @@ pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Resul
         .accounts
         .escrow
         .total_released
-        .saturating_add(ctx.accounts.escrow.total_refunded);
+        .checked_add(ctx.accounts.escrow.total_refunded).ok_or(TenderError::MathOverflow)?;
     require!(
-        ctx.accounts.escrow.total_locked >= escrow_settled.saturating_add(ms.amount),
+        ctx.accounts.escrow.total_locked >= escrow_settled.checked_add(ms.amount).ok_or(TenderError::MathOverflow)?,
         TenderError::InsufficientEscrow
     );
 
@@ -133,7 +133,7 @@ pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Resul
     ms.status = MilestoneStatus::CancelledByBuyer;
     rfp.active_milestone_index = NO_ACTIVE_MILESTONE;
     let escrow = &mut ctx.accounts.escrow;
-    escrow.total_refunded = escrow.total_refunded.saturating_add(amount);
+    escrow.total_refunded = escrow.total_refunded.checked_add(amount).ok_or(TenderError::MathOverflow)?;
 
     // Buyer rep - amount tracker only (no counter ding; this is provider's fault).
     let buyer_rep = &mut ctx.accounts.buyer_reputation;
@@ -141,7 +141,7 @@ pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Resul
         buyer_rep.buyer = ctx.accounts.buyer.key();
         buyer_rep.bump = ctx.bumps.buyer_reputation;
     }
-    buyer_rep.total_refunded_usdc = buyer_rep.total_refunded_usdc.saturating_add(amount);
+    buyer_rep.total_refunded_usdc = buyer_rep.total_refunded_usdc.checked_add(amount).ok_or(TenderError::MathOverflow)?;
     buyer_rep.last_updated = now;
 
     // Provider rep - late_milestones counter goes up. No total_earned change.
@@ -151,7 +151,7 @@ pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Resul
         provider_rep.provider = main_wallet;
         provider_rep.bump = ctx.bumps.provider_reputation;
     }
-    provider_rep.late_milestones = provider_rep.late_milestones.saturating_add(1);
+    provider_rep.late_milestones = provider_rep.late_milestones.checked_add(1).ok_or(TenderError::MathOverflow)?;
     provider_rep.last_updated = now;
     emit!(ProviderReputationUpdated { provider: provider_rep.provider, field: 4, at: now });
     // BuyerReputationUpdated event suppressed - buyer didn't accrue any
@@ -160,7 +160,7 @@ pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Resul
     // See cancel_with_notice for the Cancelled-vs-Completed rationale: a
     // project where every milestone resulted in refunds is qualitatively
     // different from one where work was delivered.
-    if escrow.total_released.saturating_add(escrow.total_refunded) >= escrow.total_locked {
+    if escrow.total_released.checked_add(escrow.total_refunded).ok_or(TenderError::MathOverflow)? >= escrow.total_locked {
         rfp.status = if escrow.total_released == 0 {
             RfpStatus::Cancelled
         } else {

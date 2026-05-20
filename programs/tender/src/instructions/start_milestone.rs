@@ -31,7 +31,7 @@ pub struct StartMilestone<'info> {
     pub milestone: Account<'info, MilestoneState>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "start_milestone", hash = "3e023cf51019e49f", spec_hash = "eec9b1a8ac1f66fd", accounts = "StartMilestone", accounts_file = "src/instructions/start_milestone.rs", accounts_hash = "68b838642de51219")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "start_milestone", hash = "60b331c3a924f069", spec_hash = "2c44702434076cb8", accounts = "StartMilestone", accounts_file = "src/instructions/start_milestone.rs", accounts_hash = "68b838642de51219")]
 pub fn handler(ctx: Context<StartMilestone>, milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(
@@ -67,7 +67,7 @@ pub fn handler(ctx: Context<StartMilestone>, milestone_index: u8) -> Result<()> 
     // Per-milestone delivery deadline. 0 duration in the bid = no deadline,
     // and we leave delivery_deadline at 0 (cancel_late_milestone unavailable).
     let duration = rfp.milestone_durations_secs[ms.index as usize];
-    ms.delivery_deadline = if duration > 0 { now.saturating_add(duration) } else { 0 };
+    ms.delivery_deadline = if duration > 0 { now.checked_add(duration).ok_or(TenderError::MathOverflow)? } else { 0 };
 
     rfp.active_milestone_index = ms.index;
     rfp.status = RfpStatus::InProgress;

@@ -99,7 +99,7 @@ pub struct ResolveDispute<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "resolve_dispute", hash = "4546c1f59c828b3a", spec_hash = "67adce4827637d5c", accounts = "ResolveDispute", accounts_file = "src/instructions/resolve_dispute.rs", accounts_hash = "bae7a320a7d79324")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "resolve_dispute", hash = "c2acbe367a31bbde", spec_hash = "67adce4827637d5c", accounts = "ResolveDispute", accounts_file = "src/instructions/resolve_dispute.rs", accounts_hash = "bae7a320a7d79324")]
 pub fn handler(
     ctx: Context<ResolveDispute>,
     _milestone_index: u8,
@@ -147,9 +147,9 @@ pub fn handler(
     let amount = ms.amount;
     let split_to_provider = (amount as u128 * args.split_to_provider_bps as u128
         / BPS_DENOMINATOR as u128) as u64;
-    let to_buyer_refund = amount.saturating_sub(split_to_provider);
+    let to_buyer_refund = amount.checked_sub(split_to_provider).ok_or(TenderError::MathOverflow)?;
     let fee = (split_to_provider as u128 * rfp.fee_bps as u128 / BPS_DENOMINATOR as u128) as u64;
-    let to_provider_net = split_to_provider.saturating_sub(fee);
+    let to_provider_net = split_to_provider.checked_sub(fee).ok_or(TenderError::MathOverflow)?;
 
     let rfp_key = rfp.key();
     let escrow_seeds: &[&[u8]] = &[ESCROW_SEED, rfp_key.as_ref(), &[ctx.accounts.escrow.bump]];
@@ -207,11 +207,11 @@ pub fn handler(
     // Free the active-milestone slot now that the dispute is resolved.
     rfp.active_milestone_index = NO_ACTIVE_MILESTONE;
     let escrow = &mut ctx.accounts.escrow;
-    escrow.total_released = escrow.total_released.saturating_add(split_to_provider);
-    escrow.total_refunded = escrow.total_refunded.saturating_add(to_buyer_refund);
+    escrow.total_released = escrow.total_released.checked_add(split_to_provider).ok_or(TenderError::MathOverflow)?;
+    escrow.total_refunded = escrow.total_refunded.checked_add(to_buyer_refund).ok_or(TenderError::MathOverflow)?;
 
     let treasury = &mut ctx.accounts.treasury;
-    treasury.total_collected = treasury.total_collected.saturating_add(fee);
+    treasury.total_collected = treasury.total_collected.checked_add(fee).ok_or(TenderError::MathOverflow)?;
 
     // Reputation amount tracking. The dispute outcome counts in both parties'
     // amount fields (gross released to provider + gross refunded to buyer);
@@ -222,8 +222,8 @@ pub fn handler(
         buyer_rep.buyer = rfp.buyer;
         buyer_rep.bump = ctx.bumps.buyer_reputation;
     }
-    buyer_rep.total_released_usdc = buyer_rep.total_released_usdc.saturating_add(split_to_provider);
-    buyer_rep.total_refunded_usdc = buyer_rep.total_refunded_usdc.saturating_add(to_buyer_refund);
+    buyer_rep.total_released_usdc = buyer_rep.total_released_usdc.checked_add(split_to_provider).ok_or(TenderError::MathOverflow)?;
+    buyer_rep.total_refunded_usdc = buyer_rep.total_refunded_usdc.checked_add(to_buyer_refund).ok_or(TenderError::MathOverflow)?;
     buyer_rep.last_updated = now;
 
     let provider_rep = &mut ctx.accounts.provider_reputation;
@@ -232,7 +232,7 @@ pub fn handler(
         provider_rep.provider = main_wallet;
         provider_rep.bump = ctx.bumps.provider_reputation;
     }
-    provider_rep.total_earned_usdc = provider_rep.total_earned_usdc.saturating_add(to_provider_net);
+    provider_rep.total_earned_usdc = provider_rep.total_earned_usdc.checked_add(to_provider_net).ok_or(TenderError::MathOverflow)?;
     // total_disputed_usdc is bumped at reject_milestone time (dispute OPEN),
     // not here. This avoids double-counting and ensures the field is correct
     // even when a dispute closes via dispute_default_split (lapse path).
@@ -241,7 +241,7 @@ pub fn handler(
     // resolve_dispute can theoretically settle 100% to buyer (split=0) — in
     // that case total_released stays at 0 from this call and the project is
     // a Cancelled-equivalent (no work value retained). Otherwise Completed.
-    if escrow.total_released.saturating_add(escrow.total_refunded) >= escrow.total_locked {
+    if escrow.total_released.checked_add(escrow.total_refunded).ok_or(TenderError::MathOverflow)? >= escrow.total_locked {
       if escrow.total_released == 0 {
         rfp.status = RfpStatus::Cancelled;
       } else {
@@ -249,8 +249,8 @@ pub fn handler(
         // Tick completion counters - mirrors accept_milestone +
         // dispute_default_split. A dispute that drains the escrow still
         // counts as a completed RFP from "the project is done" perspective.
-        provider_rep.completed_projects = provider_rep.completed_projects.saturating_add(1);
-        buyer_rep.completed_rfps = buyer_rep.completed_rfps.saturating_add(1);
+        provider_rep.completed_projects = provider_rep.completed_projects.checked_add(1).ok_or(TenderError::MathOverflow)?;
+        buyer_rep.completed_rfps = buyer_rep.completed_rfps.checked_add(1).ok_or(TenderError::MathOverflow)?;
         emit!(ProviderReputationUpdated { provider: provider_rep.provider, field: 1, at: now });
         emit!(BuyerReputationUpdated { buyer: buyer_rep.buyer, field: 2, at: now });
         emit!(RfpCompleted { rfp: rfp.key(), at: now });

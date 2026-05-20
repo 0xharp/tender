@@ -273,7 +273,6 @@ theorem dispute_default_split_preserves_escrow_conservation
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- 12. contract_value_set_on_award preserved by select_bid
---     (was blocked on qedgen v2.18 Lean codegen — fixed in v2.22.)
 -- ─────────────────────────────────────────────────────────────────────────
 
 theorem select_bid_preserves_contract_value_set_on_award

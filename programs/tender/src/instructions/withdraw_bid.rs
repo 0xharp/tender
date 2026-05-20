@@ -35,7 +35,7 @@ pub struct WithdrawBid<'info> {
     pub permission_program: UncheckedAccount<'info>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "withdraw_bid", hash = "1080b3e96579f21d", spec_hash = "75d502ecc05e402b", accounts = "WithdrawBid", accounts_file = "src/instructions/withdraw_bid.rs", accounts_hash = "842a1976764d8858")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "withdraw_bid", hash = "1080b3e96579f21d", spec_hash = "b87da268cf212e53", accounts = "WithdrawBid", accounts_file = "src/instructions/withdraw_bid.rs", accounts_hash = "842a1976764d8858")]
 pub fn handler(ctx: Context<WithdrawBid>) -> Result<()> {
     let now = Clock::get()?.unix_timestamp;
 
