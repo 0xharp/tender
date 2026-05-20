@@ -10,8 +10,9 @@ name: Formal Verification (qedgen)
 # untested in CI to date (works locally; needs first-run validation before
 # making always-on).
 #
-# qedgen is pinned to v2.22.0 (the first release with our PR #46 fixes). Bump
-# the version + regen + run the post-codegen script in one PR when changing.
+# qedgen is pinned to v2.22.1 (docs-only hotfix on top of v2.22.0 which carries
+# our PR #46 kani-codegen fixes). Bump the version + regen + run the post-
+# codegen script in one PR when changing.
 
 on:
   push:
@@ -31,7 +32,7 @@ on:
       - '.github/workflows/qedgen-verify.yml'
 
 env:
-  QEDGEN_VERSION: v2.22.0
+  QEDGEN_VERSION: v2.22.1
 
 jobs:
   # ── Tier 0 — spec well-formedness + brownfield Anchor cross-check ──────────
@@ -162,7 +163,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Lean (elan)
-        uses: leanprover/lean4-action@v1
+        uses: leanprover/lean-action@v1
 
       - name: Cache lake packages
         uses: actions/cache@v4

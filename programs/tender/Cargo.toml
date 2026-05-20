@@ -32,10 +32,10 @@ ed25519-dalek = "2.0"
 # Mismatch fires `compile_error!` — handler bodies cannot drift from the spec without
 # explicit re-stamping via `qedgen reconcile --update-hashes`.
 #
-# Pinned to upstream release v2.22.0 — includes the three kani-codegen fixes from
-# PR #46 (effect-conformance binder, mul_div inline, type-aware seed init) plus the
-# Pubkey state-field lowering from v2.21 S3.
-qedgen-macros = { git = "https://github.com/QEDGen/solana-skills", tag = "v2.22.0" }
+# Pinned to upstream release v2.22.1 — same code as v2.22.0 (PR #46 kani-codegen
+# fixes + v2.21 S3 Pubkey lowering); v2.22.1 is a docs-only hotfix tightening
+# `references/qedspec-dsl.md` to match what the chumsky parser actually accepts.
+qedgen-macros = { git = "https://github.com/QEDGen/solana-skills", tag = "v2.22.1" }
 
 [dev-dependencies]
 litesvm = "0.7"
