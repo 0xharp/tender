@@ -1,0 +1,116 @@
+// `qedgen adapt --spec ...` — paste each attribute above the named handler.
+// The body hash matches what `qedgen-macros` recomputes at compile time;
+// editing the body fires `compile_error!` until you re-run this command.
+
+// === handler: init_treasury ===
+// source: src/instructions/init_treasury.rs
+#[qed(verified, spec = "tender.qedspec", handler = "init_treasury", hash = "fbf69446fb590dff", spec_hash = "880b9d1f677a5560", accounts = "InitTreasury", accounts_file = "src/instructions/init_treasury.rs", accounts_hash = "ffb9404fb8bb34c3")]
+
+// === handler: rfp_create ===
+// source: src/instructions/rfp_create.rs
+#[qed(verified, spec = "tender.qedspec", handler = "rfp_create", hash = "41d192634b2adc62", spec_hash = "e721adc94ed7683c", accounts = "RfpCreate", accounts_file = "src/instructions/rfp_create.rs", accounts_hash = "13b7ae01e9a861f3")]
+
+// === handler: rfp_close_bidding ===
+// source: src/instructions/rfp_close_bidding.rs
+#[qed(verified, spec = "tender.qedspec", handler = "rfp_close_bidding", hash = "c8270ba244935132", spec_hash = "9758cb03921a3c58", accounts = "RfpCloseBidding", accounts_file = "src/instructions/rfp_close_bidding.rs", accounts_hash = "eb56438cc871d736")]
+
+// === handler: reveal_reserve ===
+// source: src/instructions/reveal_reserve.rs
+#[qed(verified, spec = "tender.qedspec", handler = "reveal_reserve", hash = "a3bea4bbaa9e5acf", spec_hash = "129621b8e4fc2dbf", accounts = "RevealReserve", accounts_file = "src/instructions/reveal_reserve.rs", accounts_hash = "5d6630bf5f10eddd")]
+
+// === handler: commit_bid_init ===
+// source: src/instructions/commit_bid_init.rs
+#[qed(verified, spec = "tender.qedspec", handler = "commit_bid_init", hash = "55f09b39bec50aed", spec_hash = "2658b348572873c1", accounts = "CommitBidInit", accounts_file = "src/instructions/commit_bid_init.rs", accounts_hash = "107ed7fdf54f7c26")]
+
+// === handler: delegate_bid ===
+// source: src/instructions/delegate_bid.rs
+#[qed(verified, spec = "tender.qedspec", handler = "delegate_bid", hash = "be9438b29ed6facb", spec_hash = "bc537afb4b3fc15d", accounts = "DelegateBid", accounts_file = "src/instructions/delegate_bid.rs", accounts_hash = "43a8b5ecf02b460a")]
+
+// === handler: write_bid_chunk ===
+// source: src/instructions/write_bid_chunk.rs
+#[qed(verified, spec = "tender.qedspec", handler = "write_bid_chunk", hash = "351e9191bcb17d65", spec_hash = "b78944ed6b137df8", accounts = "WriteBidChunk", accounts_file = "src/instructions/write_bid_chunk.rs", accounts_hash = "195c6f52f7ce93d1")]
+
+// === handler: finalize_bid ===
+// source: src/instructions/finalize_bid.rs
+#[qed(verified, spec = "tender.qedspec", handler = "finalize_bid", hash = "fec23e63492117f9", spec_hash = "f113697c6fadcce0", accounts = "FinalizeBid", accounts_file = "src/instructions/finalize_bid.rs", accounts_hash = "b2165cb603ce99fd")]
+
+// === handler: open_reveal_window ===
+// source: src/instructions/open_reveal_window.rs
+#[qed(verified, spec = "tender.qedspec", handler = "open_reveal_window", hash = "6ad232e1591c64b5", spec_hash = "d0a134bed246b791", accounts = "OpenRevealWindow", accounts_file = "src/instructions/open_reveal_window.rs", accounts_hash = "f7237821173bd7f1")]
+
+// === handler: withdraw_bid ===
+// source: src/instructions/withdraw_bid.rs
+#[qed(verified, spec = "tender.qedspec", handler = "withdraw_bid", hash = "1080b3e96579f21d", spec_hash = "fb0c1cf10f333beb", accounts = "WithdrawBid", accounts_file = "src/instructions/withdraw_bid.rs", accounts_hash = "842a1976764d8858")]
+
+// === handler: close_withdrawn_bid ===
+// source: src/instructions/close_withdrawn_bid.rs
+#[qed(verified, spec = "tender.qedspec", handler = "close_withdrawn_bid", hash = "04548e2838819f8a", spec_hash = "c94a2ec0bbb7f1b4", accounts = "CloseWithdrawnBid", accounts_file = "src/instructions/close_withdrawn_bid.rs", accounts_hash = "a8c597541dc8e407")]
+
+// === handler: select_bid ===
+// source: src/instructions/select_bid.rs
+#[qed(verified, spec = "tender.qedspec", handler = "select_bid", hash = "06ece4c004b69722", spec_hash = "7a20668d761daabb", accounts = "SelectBid", accounts_file = "src/instructions/select_bid.rs", accounts_hash = "39e91c855c29029c")]
+
+// === handler: fund_project ===
+// source: src/instructions/fund_project.rs
+#[qed(verified, spec = "tender.qedspec", handler = "fund_project", hash = "fbd42046e30dd884", spec_hash = "bae8db8b333a1cfd", accounts = "FundProject", accounts_file = "src/instructions/fund_project.rs", accounts_hash = "d70420ed7cfd9998")]
+
+// === handler: start_milestone ===
+// source: src/instructions/start_milestone.rs
+#[qed(verified, spec = "tender.qedspec", handler = "start_milestone", hash = "57f91f40daba7a15", spec_hash = "d2f13264d7cae87a", accounts = "StartMilestone", accounts_file = "src/instructions/start_milestone.rs", accounts_hash = "68b838642de51219")]
+
+// === handler: submit_milestone ===
+// source: src/instructions/submit_milestone.rs
+#[qed(verified, spec = "tender.qedspec", handler = "submit_milestone", hash = "379f14c649463ba7", spec_hash = "82031450b4c4c1a6", accounts = "SubmitMilestone", accounts_file = "src/instructions/submit_milestone.rs", accounts_hash = "40626f3d5b5b281e")]
+
+// === handler: accept_milestone ===
+// source: src/instructions/accept_milestone.rs
+#[qed(verified, spec = "tender.qedspec", handler = "accept_milestone", hash = "c00ddd1bf214b0d0", spec_hash = "696b1c8fc47764e6", accounts = "AcceptMilestone", accounts_file = "src/instructions/accept_milestone.rs", accounts_hash = "e760af7d304c17dc")]
+
+// === handler: auto_release_milestone ===
+// source: src/instructions/auto_release_milestone.rs
+#[qed(verified, spec = "tender.qedspec", handler = "auto_release_milestone", hash = "b35e8771f3903eff", spec_hash = "0c096634d4e34d5d", accounts = "AutoReleaseMilestone", accounts_file = "src/instructions/auto_release_milestone.rs", accounts_hash = "3057a6a71a98bfb8")]
+
+// === handler: request_changes ===
+// source: src/instructions/request_changes.rs
+#[qed(verified, spec = "tender.qedspec", handler = "request_changes", hash = "56f57009d4bc979c", spec_hash = "a792e882032772ac", accounts = "RequestChanges", accounts_file = "src/instructions/request_changes.rs", accounts_hash = "4a6f255c8b7a9793")]
+
+// === handler: reject_milestone ===
+// source: src/instructions/reject_milestone.rs
+#[qed(verified, spec = "tender.qedspec", handler = "reject_milestone", hash = "6048f384eab3b603", spec_hash = "3bb9f885eb7110e5", accounts = "RejectMilestone", accounts_file = "src/instructions/reject_milestone.rs", accounts_hash = "c88aa7b0f3e3c118")]
+
+// === handler: cancel_with_notice ===
+// source: src/instructions/cancel_with_notice.rs
+#[qed(verified, spec = "tender.qedspec", handler = "cancel_with_notice", hash = "f48d73ef52c47ffa", spec_hash = "8a852e2f410a9d21", accounts = "CancelWithNotice", accounts_file = "src/instructions/cancel_with_notice.rs", accounts_hash = "eb1dc94486e12def")]
+
+// === handler: cancel_with_penalty ===
+// source: src/instructions/cancel_with_penalty.rs
+#[qed(verified, spec = "tender.qedspec", handler = "cancel_with_penalty", hash = "bb663a064498f72f", spec_hash = "e55844e2747bb483", accounts = "CancelWithPenalty", accounts_file = "src/instructions/cancel_with_penalty.rs", accounts_hash = "79c439776c614cf5")]
+
+// === handler: cancel_late_milestone ===
+// source: src/instructions/cancel_late_milestone.rs
+#[qed(verified, spec = "tender.qedspec", handler = "cancel_late_milestone", hash = "dfe7ef20a5b6be76", spec_hash = "7ab6e3c46cf65211", accounts = "CancelLateMilestone", accounts_file = "src/instructions/cancel_late_milestone.rs", accounts_hash = "291ec713f6579061")]
+
+// === handler: mark_buyer_ghosted ===
+// source: src/instructions/mark_buyer_ghosted.rs
+#[qed(verified, spec = "tender.qedspec", handler = "mark_buyer_ghosted", hash = "62eb2bea3aa8848e", spec_hash = "fd499c862f5a984f", accounts = "MarkBuyerGhosted", accounts_file = "src/instructions/mark_buyer_ghosted.rs", accounts_hash = "4da6eecf289d3178")]
+
+// === handler: expire_rfp ===
+// source: src/instructions/expire_rfp.rs
+#[qed(verified, spec = "tender.qedspec", handler = "expire_rfp", hash = "ae061276835fdec0", spec_hash = "7e62dde4ccf92e76", accounts = "ExpireRfp", accounts_file = "src/instructions/expire_rfp.rs", accounts_hash = "a349a36258a5dbfc")]
+
+// === handler: resolve_dispute ===
+// source: src/instructions/resolve_dispute.rs
+#[qed(verified, spec = "tender.qedspec", handler = "resolve_dispute", hash = "4546c1f59c828b3a", spec_hash = "3a45e2ca66b97279", accounts = "ResolveDispute", accounts_file = "src/instructions/resolve_dispute.rs", accounts_hash = "bae7a320a7d79324")]
+
+// === handler: dispute_default_split ===
+// source: src/instructions/dispute_default_split.rs
+#[qed(verified, spec = "tender.qedspec", handler = "dispute_default_split", hash = "cf30bed3da3ae4de", spec_hash = "dd71698ee97d8ca3", accounts = "DisputeDefaultSplit", accounts_file = "src/instructions/dispute_default_split.rs", accounts_hash = "2c5e32d305569581")]
+
+// === handler: attest_buyer_history ===
+// source: src/instructions/attest_buyer_history.rs
+#[qed(verified, spec = "tender.qedspec", handler = "attest_buyer_history", hash = "b6c5edd6f9d904af", spec_hash = "98b341b86c0aadd4", accounts = "AttestBuyerHistory", accounts_file = "src/instructions/attest_buyer_history.rs", accounts_hash = "6b96ea56d70a2991")]
+
+// === handler: attest_win ===
+// source: src/instructions/attest_win.rs
+#[qed(verified, spec = "tender.qedspec", handler = "attest_win", hash = "ae7b3a8a13a55713", spec_hash = "4262df7b96c1fe4e", accounts = "AttestWin", accounts_file = "src/instructions/attest_win.rs", accounts_hash = "6da3bd1f517f261f")]
+
