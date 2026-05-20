@@ -29,6 +29,7 @@ pub struct OpenRevealWindow<'info> {
     pub permission_program: AccountInfo<'info>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "open_reveal_window", hash = "6ad232e1591c64b5", spec_hash = "7357d7a83d10250f", accounts = "OpenRevealWindow", accounts_file = "src/instructions/open_reveal_window.rs", accounts_hash = "f7237821173bd7f1")]
 pub fn handler(ctx: Context<OpenRevealWindow>) -> Result<()> {
     let bid = &ctx.accounts.bid;
 

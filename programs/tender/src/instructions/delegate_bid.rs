@@ -87,6 +87,7 @@ pub struct DelegateBid<'info> {
     pub validator: Option<AccountInfo<'info>>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "delegate_bid", hash = "be9438b29ed6facb", spec_hash = "6048cde83d9ebb13", accounts = "DelegateBid", accounts_file = "src/instructions/delegate_bid.rs", accounts_hash = "43a8b5ecf02b460a")]
 pub fn handler(ctx: Context<DelegateBid>) -> Result<()> {
     let validator = ctx.accounts.validator.as_ref();
     let rfp_key = ctx.accounts.rfp.to_account_info().key;

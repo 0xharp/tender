@@ -97,6 +97,7 @@ pub struct AutoReleaseMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "auto_release_milestone", hash = "3ecce04b7e1f63af", spec_hash = "94a343c734abb5b7", accounts = "AutoReleaseMilestone", accounts_file = "src/instructions/auto_release_milestone.rs", accounts_hash = "b7e85ab9bb0687d2")]
 pub fn handler(ctx: Context<AutoReleaseMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(
@@ -109,6 +110,17 @@ pub fn handler(ctx: Context<AutoReleaseMilestone>, _milestone_index: u8) -> Resu
 
     let now = Clock::get()?.unix_timestamp;
     require!(now > ms.review_deadline, TenderError::ReviewWindowOpen);
+
+    // Explicit escrow-conservation guard; mirrors qedspec `requires` clause.
+    let escrow_settled = ctx
+        .accounts
+        .escrow
+        .total_released
+        .saturating_add(ctx.accounts.escrow.total_refunded);
+    require!(
+        ctx.accounts.escrow.total_locked >= escrow_settled.saturating_add(ms.amount),
+        TenderError::InsufficientEscrow
+    );
 
     let total = ms.amount;
     let fee = (total as u128 * rfp.fee_bps as u128 / BPS_DENOMINATOR as u128) as u64;

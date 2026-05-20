@@ -83,6 +83,7 @@ pub struct CancelLateMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_late_milestone", hash = "a1a86fa258510a0b", spec_hash = "62cc374635367bdf", accounts = "CancelLateMilestone", accounts_file = "src/instructions/cancel_late_milestone.rs", accounts_hash = "291ec713f6579061")]
 pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;
@@ -95,6 +96,17 @@ pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Resul
 
     let now = Clock::get()?.unix_timestamp;
     require!(now > ms.delivery_deadline, TenderError::DeliveryDeadlineNotPassed);
+
+    // Explicit escrow-conservation guard; mirrors qedspec `requires` clause.
+    let escrow_settled = ctx
+        .accounts
+        .escrow
+        .total_released
+        .saturating_add(ctx.accounts.escrow.total_refunded);
+    require!(
+        ctx.accounts.escrow.total_locked >= escrow_settled.saturating_add(ms.amount),
+        TenderError::InsufficientEscrow
+    );
 
     let amount = ms.amount;
     let rfp_key = rfp.key();

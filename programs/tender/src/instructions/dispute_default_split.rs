@@ -96,6 +96,7 @@ pub struct DisputeDefaultSplit<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "dispute_default_split", hash = "2bcdcf1caa786fa9", spec_hash = "393a1f21ab74b0e9", accounts = "DisputeDefaultSplit", accounts_file = "src/instructions/dispute_default_split.rs", accounts_hash = "2c5e32d305569581")]
 pub fn handler(ctx: Context<DisputeDefaultSplit>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;
@@ -103,6 +104,17 @@ pub fn handler(ctx: Context<DisputeDefaultSplit>, _milestone_index: u8) -> Resul
 
     let now = Clock::get()?.unix_timestamp;
     require!(now > ms.dispute_deadline, TenderError::DisputeCooloffActive);
+
+    // Explicit escrow-conservation guard; mirrors qedspec `requires` clause.
+    let escrow_settled = ctx
+        .accounts
+        .escrow
+        .total_released
+        .saturating_add(ctx.accounts.escrow.total_refunded);
+    require!(
+        ctx.accounts.escrow.total_locked >= escrow_settled.saturating_add(ms.amount),
+        TenderError::InsufficientEscrow
+    );
 
     // 50/50.
     let amount = ms.amount;

@@ -83,6 +83,7 @@ pub struct CancelWithPenalty<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_with_penalty", hash = "bb663a064498f72f", spec_hash = "d40c1d356682dd60", accounts = "CancelWithPenalty", accounts_file = "src/instructions/cancel_with_penalty.rs", accounts_hash = "79c439776c614cf5")]
 pub fn handler(ctx: Context<CancelWithPenalty>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;

@@ -2,8 +2,8 @@ use anchor_lang::prelude::*;
 
 use crate::errors::TenderError;
 use crate::state::{
-    BidderVisibility, BuyerVisibility, MAX_MILESTONE_COUNT, NO_ACTIVE_MILESTONE, PLATFORM_FEE_BPS,
-    Rfp, RfpCreated, RfpStatus, BPS_DENOMINATOR,
+    BidderVisibility, BuyerVisibility, MAX_MILESTONE_COUNT, MAX_WINDOW_SECS, NO_ACTIVE_MILESTONE,
+    PLATFORM_FEE_BPS, Rfp, RfpCreated, RfpStatus, BPS_DENOMINATOR,
     DEFAULT_CANCEL_NOTICE_SECS, DEFAULT_DISPUTE_COOLOFF_SECS, DEFAULT_FUNDING_WINDOW_SECS,
     DEFAULT_MAX_ITERATIONS, DEFAULT_REVIEW_WINDOW_SECS,
 };
@@ -64,6 +64,7 @@ pub struct RfpCreate<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "rfp_create", hash = "a3023401f49652f4", spec_hash = "b53a70f63ddc5c1f", accounts = "RfpCreate", accounts_file = "src/instructions/rfp_create.rs", accounts_hash = "13b7ae01e9a861f3")]
 pub fn handler(ctx: Context<RfpCreate>, args: RfpCreateArgs) -> Result<()> {
     require!(
         args.bid_open_at < args.bid_close_at && args.bid_close_at < args.reveal_close_at,
@@ -76,6 +77,16 @@ pub fn handler(ctx: Context<RfpCreate>, args: RfpCreateArgs) -> Result<()> {
     let cancel = if args.cancel_notice_secs > 0 { args.cancel_notice_secs } else { DEFAULT_CANCEL_NOTICE_SECS };
     let max_iter = if args.max_iterations > 0 { args.max_iterations } else { DEFAULT_MAX_ITERATIONS };
     require!(funding > 0 && review > 0 && dispute > 0 && cancel > 0, TenderError::InvalidWindowSecs);
+    // Upper bound (~31 years). Prevents nuisance RFPs with absurd deadlines and
+    // keeps `now + window` arithmetic well below i64::MAX. Bound is mirrored in
+    // the qedspec so formal verification sees the same constraint.
+    require!(
+        funding <= MAX_WINDOW_SECS
+            && review <= MAX_WINDOW_SECS
+            && dispute <= MAX_WINDOW_SECS
+            && cancel <= MAX_WINDOW_SECS,
+        TenderError::InvalidWindowSecs
+    );
     require!(max_iter > 0, TenderError::InvalidMaxIterations);
 
     let now = Clock::get()?.unix_timestamp;
