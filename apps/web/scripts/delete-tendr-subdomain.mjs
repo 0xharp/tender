@@ -32,7 +32,7 @@
 import fs from 'node:fs';
 import { homedir } from 'node:os';
 
-import { devnet, NameRegistryState } from '@bonfida/spl-name-service';
+import { NameRegistryState, devnet } from '@bonfida/spl-name-service';
 import { TransactionInstruction } from '@solana/web3.js';
 
 // SPL Name Service program ID — same on every Solana cluster.

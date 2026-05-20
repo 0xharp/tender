@@ -162,19 +162,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Lean (elan)
+      - name: Install Lean (elan) + build proofs
         uses: leanprover/lean-action@v1
-
-      - name: Cache lake packages
-        uses: actions/cache@v4
         with:
-          path: formal_verification/.lake
-          key: lake-${{ hashFiles('formal_verification/lean-toolchain', 'formal_verification/lakefile.lean') }}
-          restore-keys: |
-            lake-
+          lake-package-directory: formal_verification
+          use-mathlib-cache: true
+          # The action installs elan, reads the toolchain pin from
+          # formal_verification/lean-toolchain (v4.30.0-rc2), and runs
+          # `lake build` from that directory.
 
-      - name: Build proofs
-        run: cd formal_verification && lake build
+      # Caching + `lake build` handled by leanprover/lean-action above.
 
   # ── Tier 4 — Kani bounded model checking (matrix) ─────────────────────────
   # Always-on. 27 transitions verified in parallel jobs. Each job: ~30s–4min
