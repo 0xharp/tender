@@ -44,11 +44,15 @@ jobs:
 
       - name: Install qedgen ${{ env.QEDGEN_VERSION }}
         run: |
-          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/qedgen-x86_64-unknown-linux-gnu" -o qedgen
-          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/qedgen-x86_64-unknown-linux-gnu.sha256" -o qedgen.sha256
-          sha256sum -c qedgen.sha256
-          chmod +x qedgen
-          sudo mv qedgen /usr/local/bin/qedgen
+          # Download asset under its original name so `sha256sum -c` can
+          # find the file the checksum references (the .sha256 file content
+          # is literally `<hash>  qedgen-x86_64-unknown-linux-gnu`).
+          BIN="qedgen-x86_64-unknown-linux-gnu"
+          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/${BIN}" -o "${BIN}"
+          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/${BIN}.sha256" -o "${BIN}.sha256"
+          sha256sum -c "${BIN}.sha256"
+          chmod +x "${BIN}"
+          sudo mv "${BIN}" /usr/local/bin/qedgen
 
       - name: qedgen check (lint + coverage)
         run: qedgen check --spec tender.qedspec --coverage
@@ -200,9 +204,10 @@ jobs:
 
       - name: Install qedgen ${{ env.QEDGEN_VERSION }}
         run: |
-          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/qedgen-x86_64-unknown-linux-gnu" -o qedgen
-          chmod +x qedgen
-          sudo mv qedgen /usr/local/bin/qedgen
+          BIN="qedgen-x86_64-unknown-linux-gnu"
+          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/${BIN}" -o "${BIN}"
+          chmod +x "${BIN}"
+          sudo mv "${BIN}" /usr/local/bin/qedgen
 
       - name: Regen kani harness + apply post-codegen patches
         run: |
@@ -291,9 +296,10 @@ jobs:
 
       - name: Install qedgen ${{ env.QEDGEN_VERSION }}
         run: |
-          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/qedgen-x86_64-unknown-linux-gnu" -o qedgen
-          chmod +x qedgen
-          sudo mv qedgen /usr/local/bin/qedgen
+          BIN="qedgen-x86_64-unknown-linux-gnu"
+          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/${BIN}" -o "${BIN}"
+          chmod +x "${BIN}"
+          sudo mv "${BIN}" /usr/local/bin/qedgen
 
       - name: Install crucible
         run: cargo install --locked crucible
