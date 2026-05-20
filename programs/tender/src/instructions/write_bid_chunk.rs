@@ -28,7 +28,7 @@ pub struct WriteBidChunk<'info> {
     pub bid: Account<'info, BidCommit>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "write_bid_chunk", hash = "351e9191bcb17d65", spec_hash = "df829248cd29763b", accounts = "WriteBidChunk", accounts_file = "src/instructions/write_bid_chunk.rs", accounts_hash = "195c6f52f7ce93d1")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "write_bid_chunk", hash = "351e9191bcb17d65", spec_hash = "6e7f199a50515fe1", accounts = "WriteBidChunk", accounts_file = "src/instructions/write_bid_chunk.rs", accounts_hash = "195c6f52f7ce93d1")]
 pub fn handler(ctx: Context<WriteBidChunk>, args: WriteBidChunkArgs) -> Result<()> {
     let bid = &mut ctx.accounts.bid;
     require!(

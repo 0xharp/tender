@@ -99,7 +99,7 @@ pub struct ResolveDispute<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "resolve_dispute", hash = "c2acbe367a31bbde", spec_hash = "67adce4827637d5c", accounts = "ResolveDispute", accounts_file = "src/instructions/resolve_dispute.rs", accounts_hash = "bae7a320a7d79324")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "resolve_dispute", hash = "c2acbe367a31bbde", spec_hash = "1fe03eaed9a5336e", accounts = "ResolveDispute", accounts_file = "src/instructions/resolve_dispute.rs", accounts_hash = "bae7a320a7d79324")]
 pub fn handler(
     ctx: Context<ResolveDispute>,
     _milestone_index: u8,

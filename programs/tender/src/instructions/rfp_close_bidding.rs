@@ -11,7 +11,7 @@ pub struct RfpCloseBidding<'info> {
     pub rfp: Account<'info, Rfp>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "rfp_close_bidding", hash = "c8270ba244935132", spec_hash = "b20defc2330c84b4", accounts = "RfpCloseBidding", accounts_file = "src/instructions/rfp_close_bidding.rs", accounts_hash = "eb56438cc871d736")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "rfp_close_bidding", hash = "c8270ba244935132", spec_hash = "16d932cc3b688d31", accounts = "RfpCloseBidding", accounts_file = "src/instructions/rfp_close_bidding.rs", accounts_hash = "eb56438cc871d736")]
 pub fn handler(ctx: Context<RfpCloseBidding>) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(rfp.status == RfpStatus::Open, TenderError::InvalidRfpStatus);

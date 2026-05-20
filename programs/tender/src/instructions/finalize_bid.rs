@@ -19,7 +19,7 @@ pub struct FinalizeBid<'info> {
     pub bid: Account<'info, BidCommit>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "finalize_bid", hash = "fec23e63492117f9", spec_hash = "d0283cd017430ec2", accounts = "FinalizeBid", accounts_file = "src/instructions/finalize_bid.rs", accounts_hash = "b2165cb603ce99fd")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "finalize_bid", hash = "fec23e63492117f9", spec_hash = "4c82d003a86fcad1", accounts = "FinalizeBid", accounts_file = "src/instructions/finalize_bid.rs", accounts_hash = "b2165cb603ce99fd")]
 pub fn handler(ctx: Context<FinalizeBid>) -> Result<()> {
     let bid = &mut ctx.accounts.bid;
     require!(
