@@ -110,7 +110,7 @@ pub struct AcceptMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "accept_milestone", hash = "1fe79304a01b4b8e", spec_hash = "95cfdf3b85dfa779", accounts = "AcceptMilestone", accounts_file = "src/instructions/accept_milestone.rs", accounts_hash = "18dd92c1949c64f2")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "accept_milestone", hash = "4606ba5bc2948d06", spec_hash = "95cfdf3b85dfa779", accounts = "AcceptMilestone", accounts_file = "src/instructions/accept_milestone.rs", accounts_hash = "None")]
 pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(
@@ -139,7 +139,7 @@ pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()
     let now = Clock::get()?.unix_timestamp;
     let total = ms.amount;
     let fee = (total as u128 * rfp.fee_bps as u128 / BPS_DENOMINATOR as u128) as u64;
-    let to_provider = total.saturating_sub(fee);
+    let to_provider = total.checked_sub(fee).ok_or(TenderError::MathOverflow)?;
 
     // Release tokens from escrow ATA to provider + treasury.
     let rfp_key = rfp.key();

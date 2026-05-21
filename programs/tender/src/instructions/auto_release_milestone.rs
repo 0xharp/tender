@@ -97,7 +97,7 @@ pub struct AutoReleaseMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "auto_release_milestone", hash = "845ffecc631c4386", spec_hash = "7f103cdbaef0af32", accounts = "AutoReleaseMilestone", accounts_file = "src/instructions/auto_release_milestone.rs", accounts_hash = "b7e85ab9bb0687d2")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "auto_release_milestone", hash = "3ecce04b7e1f63af", spec_hash = "7f103cdbaef0af32", accounts = "AutoReleaseMilestone", accounts_file = "src/instructions/auto_release_milestone.rs", accounts_hash = "None")]
 pub fn handler(ctx: Context<AutoReleaseMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(
@@ -124,7 +124,7 @@ pub fn handler(ctx: Context<AutoReleaseMilestone>, _milestone_index: u8) -> Resu
 
     let total = ms.amount;
     let fee = (total as u128 * rfp.fee_bps as u128 / BPS_DENOMINATOR as u128) as u64;
-    let to_provider = total.saturating_sub(fee);
+    let to_provider = total.checked_sub(fee).ok_or(TenderError::MathOverflow)?;
 
     let rfp_key = rfp.key();
     let escrow_seeds: &[&[u8]] = &[ESCROW_SEED, rfp_key.as_ref(), &[ctx.accounts.escrow.bump]];
