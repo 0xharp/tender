@@ -50,7 +50,7 @@ jobs:
   #     `unused_field` on the `now` Clock sysvar)
   #
   # The regression-baseline step below ENFORCES that the warning count never
-  # exceeds 35. Any NEW warning fails the step and goes red, so the gate stays
+  # exceeds 165. Any NEW warning fails the step and goes red, so the gate stays
   # honest — we just don't pretend to be at zero when we can't be. Remove the
   # `continue-on-error` lines (and tighten the baseline) once upstream qedgen
   # lands the analyser fixes.
@@ -81,7 +81,7 @@ jobs:
         continue-on-error: true
 
       # Regression baseline — fail if the spec gains NEW warnings beyond the
-      # documented 35-finding floor. Any net-new finding (a brand-new
+      # documented 165-finding floor. Any net-new finding (a brand-new
       # unbound_auth, missing_effect, write_without_read, etc.) is something
       # the contributor introduced and should fix in their PR.
       - name: Enforce warning-count baseline (≤ 165)
