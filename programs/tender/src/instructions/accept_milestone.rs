@@ -110,7 +110,7 @@ pub struct AcceptMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "accept_milestone", hash = "4606ba5bc2948d06", spec_hash = "95cfdf3b85dfa779", accounts = "AcceptMilestone", accounts_file = "src/instructions/accept_milestone.rs", accounts_hash = "None")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "accept_milestone", hash = "4606ba5bc2948d06", spec_hash = "95cfdf3b85dfa779", accounts = "AcceptMilestone", accounts_file = "src/instructions/accept_milestone.rs", accounts_hash = "18dd92c1949c64f2")]
 pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(

@@ -97,7 +97,7 @@ pub struct AutoReleaseMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "auto_release_milestone", hash = "3ecce04b7e1f63af", spec_hash = "7f103cdbaef0af32", accounts = "AutoReleaseMilestone", accounts_file = "src/instructions/auto_release_milestone.rs", accounts_hash = "None")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "auto_release_milestone", hash = "3ecce04b7e1f63af", spec_hash = "7f103cdbaef0af32", accounts = "AutoReleaseMilestone", accounts_file = "src/instructions/auto_release_milestone.rs", accounts_hash = "b7e85ab9bb0687d2")]
 pub fn handler(ctx: Context<AutoReleaseMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(
