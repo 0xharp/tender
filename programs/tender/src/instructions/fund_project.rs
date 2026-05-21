@@ -128,6 +128,7 @@ pub struct FundProject<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "fund_project", hash = "fbd42046e30dd884", spec_hash = "eb13cdc0708386f6", accounts = "FundProject", accounts_file = "src/instructions/fund_project.rs", accounts_hash = "b36b8ff2e7770e5e")]
 pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, FundProject<'info>>) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(rfp.status == RfpStatus::Awarded, TenderError::InvalidRfpStatus);

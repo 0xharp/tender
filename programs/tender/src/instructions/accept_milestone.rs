@@ -110,6 +110,7 @@ pub struct AcceptMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "accept_milestone", hash = "4606ba5bc2948d06", spec_hash = "95cfdf3b85dfa779", accounts = "AcceptMilestone", accounts_file = "src/instructions/accept_milestone.rs", accounts_hash = "18dd92c1949c64f2")]
 pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(
@@ -119,6 +120,21 @@ pub fn handler(ctx: Context<AcceptMilestone>, _milestone_index: u8) -> Result<()
 
     let ms = &mut ctx.accounts.milestone;
     require!(ms.status == MilestoneStatus::Submitted, TenderError::InvalidMilestoneStatus);
+
+    // Explicit escrow-conservation guard: enough must remain in escrow to
+    // cover this milestone's release. Belt-and-suspenders with SPL token's
+    // own balance check inside `transfer_checked`; matches the qedspec
+    // `requires` clause directly so formal verification doesn't depend on
+    // framework-layer behavior.
+    let escrow_settled = ctx
+        .accounts
+        .escrow
+        .total_released
+        .saturating_add(ctx.accounts.escrow.total_refunded);
+    require!(
+        ctx.accounts.escrow.total_locked >= escrow_settled.saturating_add(ms.amount),
+        TenderError::InsufficientEscrow
+    );
 
     let now = Clock::get()?.unix_timestamp;
     let total = ms.amount;

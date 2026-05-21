@@ -1,0 +1,351 @@
+name: Formal Verification (qedgen)
+
+# Runs the qedgen verification waterfall on every push to main and on PRs that
+# touch the program source, the spec, or the formal_verification dir.
+#
+# Tier 0 (spec check) runs first and gates the rest.
+# Tier 1-4 (proptest / drift / Lean / Kani) are always-on — Kani matrix runs
+# 27 transitions in parallel (~10-15min wall clock total).
+# Tier 5 (Crucible) is label-gated via the `crucible` label — opt-in only,
+# untested in CI to date (works locally; needs first-run validation before
+# making always-on).
+#
+# qedgen is pinned to v2.22.1 (docs-only hotfix on top of v2.22.0 which carries
+# our PR #46 kani-codegen fixes). Bump the version + regen + run the post-
+# codegen script in one PR when changing.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'programs/tender/**'
+      - 'tender.qedspec'
+      - 'formal_verification/**'
+      - 'scripts/qedgen-post-codegen.py'
+      - '.github/workflows/qedgen-verify.yml'
+  pull_request:
+    paths:
+      - 'programs/tender/**'
+      - 'tender.qedspec'
+      - 'formal_verification/**'
+      - 'scripts/qedgen-post-codegen.py'
+      - '.github/workflows/qedgen-verify.yml'
+
+env:
+  QEDGEN_VERSION: v2.22.1
+
+jobs:
+  # ── Tier 0 — spec well-formedness + brownfield Anchor cross-check ──────────
+  # Always runs. Sub-30s. Gates every downstream tier.
+  #
+  # The two `qedgen check` steps are marked `continue-on-error: true` because
+  # qedgen v2.22 reports 165 advisory warnings that fall into three categories
+  # that can't be fixed locally (qedgen analyser limitations + spec hygiene findings — most reducible only with upstream qedgen analyser fixes):
+  #
+  #   - qedgen analyser limitations (`unguarded_arithmetic` on dynamic
+  #     operands, `preserved_by_all_potential_violation` false positives on
+  #     conditional properties) — needs upstream fixes
+  #   - spec/program design constraints (`scalar_counter_no_dedup` for attest
+  #     receipts, `missing_cpi_for_token_context` for init handlers,
+  #     `unused_field` on the `now` Clock sysvar)
+  #
+  # The regression-baseline step below ENFORCES that the warning count never
+  # exceeds 165. Any NEW warning fails the step and goes red, so the gate stays
+  # honest — we just don't pretend to be at zero when we can't be. Remove the
+  # `continue-on-error` lines (and tighten the baseline) once upstream qedgen
+  # lands the analyser fixes.
+  check:
+    name: Spec lint + coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install qedgen ${{ env.QEDGEN_VERSION }}
+        run: |
+          # Download asset under its original name so `sha256sum -c` can
+          # find the file the checksum references (the .sha256 file content
+          # is literally `<hash>  qedgen-x86_64-unknown-linux-gnu`).
+          BIN="qedgen-x86_64-unknown-linux-gnu"
+          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/${BIN}" -o "${BIN}"
+          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/${BIN}.sha256" -o "${BIN}.sha256"
+          sha256sum -c "${BIN}.sha256"
+          chmod +x "${BIN}"
+          sudo mv "${BIN}" /usr/local/bin/qedgen
+
+      - name: qedgen check (lint + coverage)
+        run: qedgen check --spec tender.qedspec --coverage
+        continue-on-error: true
+
+      - name: qedgen check --anchor-project (brownfield diff)
+        run: qedgen check --spec tender.qedspec --anchor-project programs/tender
+        continue-on-error: true
+
+      # Regression baseline — fail if the spec gains NEW warnings beyond the
+      # documented 165-finding floor. Any net-new finding (a brand-new
+      # unbound_auth, missing_effect, write_without_read, etc.) is something
+      # the contributor introduced and should fix in their PR.
+      - name: Enforce warning-count baseline (≤ 165)
+        run: |
+          qedgen check --spec tender.qedspec --coverage > /tmp/qedgen-check.out 2>&1 || true
+          COUNT=$(grep -cE '^\s*[!i]\s+\[P[0-9]\]\s+\[' /tmp/qedgen-check.out || echo 0)
+          BASELINE=165
+          echo "qedgen check warnings: ${COUNT} (baseline ${BASELINE})"
+          if [ "${COUNT}" -gt "${BASELINE}" ]; then
+            echo "::error::Spec lint regression: ${COUNT} warnings > baseline ${BASELINE}."
+            echo "::error::Investigate new findings introduced by this PR:"
+            grep -E '^\s*[!i]\s+\[P[0-9]\]\s+\[' /tmp/qedgen-check.out | head -50
+            exit 1
+          fi
+          echo "OK — no new findings introduced."
+
+  # ── Tier 1 — proptest harness ─────────────────────────────────────────────
+  # Always-on. ~30s. Exercises 122 randomised state-machine tests against the
+  # spec model. Fast feedback for spec-level breakage.
+  proptest:
+    name: Proptest harness
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-proptest-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run proptest
+        run: |
+          cd programs/tender
+          PROPTEST_CASES=1000 cargo test --release --test proptest -- --test-threads=4
+
+  # ── Tier 2 — drift gate ───────────────────────────────────────────────────
+  # Always-on. The `qedgen-macros` `#[qed(verified, ...)]` attribute on each
+  # handler re-hashes the spec block + handler body at compile time and fires
+  # `compile_error!` on mismatch. So `cargo build` IS the drift gate — no
+  # separate step needed. Caching pre-warms.
+  drift-gate:
+    name: Drift gate (cargo build)
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-drift-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: cargo build (fires compile_error! on spec_hash drift)
+        run: cd programs/tender && cargo build --tests
+
+  # ── Tier 3 — Lean proofs ──────────────────────────────────────────────────
+  # Always-on. ~5min with Mathlib cached. 859 jobs (Spec.lean + Proofs.lean).
+  # 7 headline theorems proved; rest are auto-derived from the spec.
+  lean:
+    name: Lean proofs
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean (elan) + build proofs
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: formal_verification
+          use-mathlib-cache: true
+          # The action installs elan, reads the toolchain pin from
+          # formal_verification/lean-toolchain (v4.30.0-rc2), and runs
+          # `lake build` from that directory.
+
+      # Caching + `lake build` handled by leanprover/lean-action above.
+
+  # ── Tier 4 — Kani bounded model checking (matrix) ─────────────────────────
+  # Always-on. 27 transitions verified in parallel jobs. Each job: ~30s–4min
+  # depending on transition complexity. Matrix total ~10-15min wall clock
+  # (parallel) vs ~25min sequential.
+  #
+  # Each job regens the kani harness from spec, applies the post-codegen
+  # script (bounds + mul_div narrow), then runs cargo kani filtered to one
+  # transition's prefix.
+  kani:
+    name: Kani — ${{ matrix.transition }}
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        transition:
+          - accept_milestone
+          - attest_buyer_history
+          - attest_win
+          - auto_release_milestone
+          - cancel_late_milestone
+          - cancel_with_notice
+          - cancel_with_penalty
+          - close_withdrawn_bid
+          - commit_bid_init
+          - delegate_bid
+          - dispute_default_split
+          - expire_rfp
+          - finalize_bid
+          - fund_project
+          - init_treasury
+          - mark_buyer_ghosted
+          - open_reveal_window
+          - reject_milestone
+          - request_changes
+          - resolve_dispute
+          - rfp_close_bidding
+          - rfp_create
+          - select_bid
+          - start_milestone
+          - submit_milestone
+          - withdraw_bid
+          - write_bid_chunk
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            ~/.kani
+          key: ${{ runner.os }}-cargo-kani-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install z3 (required by Kani for some arithmetic-heavy harnesses)
+        run: sudo apt-get update && sudo apt-get install -y z3
+
+      - name: Install Kani
+        run: |
+          cargo install --locked kani-verifier
+          cargo kani setup
+
+      - name: Install qedgen ${{ env.QEDGEN_VERSION }}
+        run: |
+          BIN="qedgen-x86_64-unknown-linux-gnu"
+          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/${BIN}" -o "${BIN}"
+          chmod +x "${BIN}"
+          sudo mv "${BIN}" /usr/local/bin/qedgen
+
+      - name: Regen kani harness + apply post-codegen patches
+        run: |
+          qedgen codegen --spec tender.qedspec --kani
+          cp programs/tests/kani.rs programs/tender/tests/kani_auto.rs
+          rm -rf programs/Cargo.toml programs/src programs/tests fuzz/tender .github/workflows/verify.yml
+          python3 scripts/qedgen-post-codegen.py
+
+      - name: cargo kani --harness "verify_${{ matrix.transition }}"
+        run: |
+          cd programs/tender
+          cargo kani --no-unwinding-checks --default-unwind 8 \
+            --tests --harness "verify_${{ matrix.transition }}"
+        timeout-minutes: 8
+
+  # ── Tier 5 — LiteSVM cover paths ──────────────────────────────────────────
+  # Always-on. ~7min wall clock (~5min anchor build + ~1min test run + cache
+  # warm-up). Executes each `cover` declaration from `tender.qedspec` against
+  # the deployed `.so` via LiteSVM — no mocks, real Anchor account
+  # constraints, real CPI dispatch, real PDA derivation. Locally: `cargo test
+  # --test cover_paths{,_attest,_extended,_withdraw}` returns 16 passed
+  # / 2 ignored. Adds the only test tier that exercises the compiled BPF
+  # binary (proptest + Kani both run on the native build).
+  litesvm:
+    name: LiteSVM cover paths
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # Anchor (and the Solana CLI it shells out to) pulls libudev via hidapi
+      # for hardware-wallet support; mirrors the apt list in .github/workflows/ci.yml.
+      - name: Install build deps for solana/anchor
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config build-essential
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor 0.32.1
+        run: cargo install --git https://github.com/coral-xyz/anchor --tag v0.32.1 anchor-cli
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-litesvm-${{ hashFiles('**/Cargo.lock') }}
+
+      # Anchor build produces target/deploy/tender.so + the IDL at
+      # target/idl/tender.json; cover_paths loads the .so via
+      # `svm.add_program_from_file(tender::ID, "../../target/deploy/tender.so")`.
+      - name: anchor build (target/deploy/tender.so)
+        run: anchor build
+
+      - name: Run cover_paths
+        run: |
+          cd programs/tender
+          cargo test --release --test cover_paths -- --test-threads=4
+          cargo test --release --test cover_paths_attest -- --test-threads=4
+          cargo test --release --test cover_paths_extended -- --test-threads=4
+          cargo test --release --test cover_paths_withdraw -- --test-threads=4
+
+  # ── Tier 6 — Crucible coverage-guided fuzz ────────────────────────────────
+  # Label-gated via `crucible`. NOT YET VALIDATED in CI or locally — the
+  # harness generated by `qedgen probe --fuzz` carries 28 `todo!()` sites
+  # (one per handler's `accounts::X { ... }` literal) that need agent-fill
+  # before `cargo build --features invariant_test` succeeds. Also needs an
+  # Anchor IDL at `idls/tender.json` (run `anchor build` first). Tracked as
+  # a future workstream — keep label-gated until first-run validated.
+  crucible:
+    name: Crucible fuzz
+    needs: check
+    if: contains(github.event.pull_request.labels.*.name, 'crucible')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install qedgen ${{ env.QEDGEN_VERSION }}
+        run: |
+          BIN="qedgen-x86_64-unknown-linux-gnu"
+          curl -fsSL "https://github.com/QEDGen/solana-skills/releases/download/${QEDGEN_VERSION}/${BIN}" -o "${BIN}"
+          chmod +x "${BIN}"
+          sudo mv "${BIN}" /usr/local/bin/qedgen
+
+      - name: Install crucible
+        run: cargo install --locked crucible
+
+      - name: Generate + build fuzz harness
+        run: |
+          qedgen codegen --spec tender.qedspec --crucible
+          cd fuzz/tender && cargo build --features invariant_test
+
+      - name: Run fuzz (5 min)
+        run: qedgen verify --spec tender.qedspec --crucible 300

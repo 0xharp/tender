@@ -102,6 +102,7 @@ pub struct SelectBid<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "select_bid", hash = "06ece4c004b69722", spec_hash = "12701557bda81540", accounts = "SelectBid", accounts_file = "src/instructions/select_bid.rs", accounts_hash = "39e91c855c29029c")]
 pub fn handler(ctx: Context<SelectBid>, args: SelectBidArgs) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(

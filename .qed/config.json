@@ -1,0 +1,6 @@
+{
+  "name": "tender",
+  "spec": "tender.qedspec",
+  "interfaces_dir": ".qed/interfaces",
+  "created_at": "1778686829s-since-epoch"
+}

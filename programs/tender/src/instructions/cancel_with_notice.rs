@@ -69,6 +69,7 @@ pub struct CancelWithNotice<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_with_notice", hash = "f48d73ef52c47ffa", spec_hash = "79471e3c509e0b00", accounts = "CancelWithNotice", accounts_file = "src/instructions/cancel_with_notice.rs", accounts_hash = "eb1dc94486e12def")]
 pub fn handler(ctx: Context<CancelWithNotice>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;

@@ -19,7 +19,9 @@
       "**/*.gguf",
       "**/*.onnx",
       ".local-docs/**",
-      "**/generated/**"
+      "**/generated/**",
+      "formal_verification/**",
+      ".qed/**"
     ]
   },
   "formatter": {

@@ -19,6 +19,7 @@ pub struct FinalizeBid<'info> {
     pub bid: Account<'info, BidCommit>,
 }
 
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "finalize_bid", hash = "fec23e63492117f9", spec_hash = "c90777b66a15a7e6", accounts = "FinalizeBid", accounts_file = "src/instructions/finalize_bid.rs", accounts_hash = "b2165cb603ce99fd")]
 pub fn handler(ctx: Context<FinalizeBid>) -> Result<()> {
     let bid = &mut ctx.accounts.bid;
     require!(

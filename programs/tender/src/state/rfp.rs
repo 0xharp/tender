@@ -10,6 +10,11 @@ pub const DEFAULT_DISPUTE_COOLOFF_SECS: i64 = 14 * 86_400;
 pub const DEFAULT_CANCEL_NOTICE_SECS: i64 = 3 * 86_400;
 pub const DEFAULT_MAX_ITERATIONS: u8 = 2;
 
+/// Upper bound on per-RFP windows. ~31 years; prevents nuisance RFPs with
+/// billion-year deadlines and keeps `now + secs` arithmetic comfortably
+/// below i64::MAX (formal-verification bound aligns with this constant).
+pub const MAX_WINDOW_SECS: i64 = 1_000_000_000;
+
 /// Platform take rate (basis points). 250 = 2.5%.
 pub const PLATFORM_FEE_BPS: u16 = 250;
 pub const BPS_DENOMINATOR: u16 = 10_000;

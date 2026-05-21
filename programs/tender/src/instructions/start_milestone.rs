@@ -2,8 +2,8 @@ use anchor_lang::prelude::*;
 
 use crate::errors::TenderError;
 use crate::state::{
-    MilestoneStarted, MilestoneState, MILESTONE_SEED, MilestoneStatus, NO_ACTIVE_MILESTONE, Rfp,
-    RfpStatus,
+    MAX_MILESTONE_COUNT, MilestoneStarted, MilestoneState, MILESTONE_SEED, MilestoneStatus,
+    NO_ACTIVE_MILESTONE, Rfp, RfpStatus,
 };
 
 /// Provider commits to working on milestone N. After this ix, the milestone is
@@ -31,7 +31,8 @@ pub struct StartMilestone<'info> {
     pub milestone: Account<'info, MilestoneState>,
 }
 
-pub fn handler(ctx: Context<StartMilestone>, _milestone_index: u8) -> Result<()> {
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "start_milestone", hash = "3e023cf51019e49f", spec_hash = "bb8deb36e26c7840", accounts = "StartMilestone", accounts_file = "src/instructions/start_milestone.rs", accounts_hash = "68b838642de51219")]
+pub fn handler(ctx: Context<StartMilestone>, milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(
         matches!(rfp.status, RfpStatus::Funded | RfpStatus::InProgress),
@@ -41,6 +42,13 @@ pub fn handler(ctx: Context<StartMilestone>, _milestone_index: u8) -> Result<()>
         rfp.winner_provider == Some(ctx.accounts.provider.key()),
         TenderError::NotProvider
     );
+    // Bound milestone_index explicitly to the array slot range. The Anchor
+    // PDA seeds already make `index = 255` unreachable at runtime (no
+    // milestone account exists there — they're only created 0..milestone_count
+    // at fund_project), but stating the bound explicitly mirrors the qedspec
+    // `requires milestone_index < MAX_MILESTONE_COUNT` so the spec ↔ code
+    // correspondence is 1:1 without relying on Anchor's PDA validation.
+    require!(milestone_index < MAX_MILESTONE_COUNT, TenderError::InvalidMilestoneIndex);
     // Single-milestone-in-flight: provider can only have ONE milestone active
     // at a time (Started OR Submitted). Prevents stuffing all milestones into
     // Started to lock funds without delivering.

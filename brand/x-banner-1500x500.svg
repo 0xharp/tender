@@ -86,25 +86,39 @@
           font-weight="500"
           letter-spacing="-0.5"
           fill="url(#accent)">
-      Sealed-bid RFP procurement on Solana
+      End-to-end private RFP procurement on Solana
     </text>
 
-    <!-- Supporting line - the proof point -->
-    <text x="0" y="340"
+    <!-- Supporting lines - the three proof points (sealed bids,
+         symmetric anonymity, shielded funding). v2 expansion: was two
+         lines covering only bid-content privacy; now covers the full
+         end-to-end story (buyer privacy + funding rails) without
+         losing the original "cryptography, not policy" punch line.
+         Font reduced 22→20 + tighter y-spacing to fit 3 lines above
+         the live-on-devnet pill at y=440. -->
+    <text x="0" y="336"
           font-family="'Geist', 'Inter', -apple-system, system-ui, sans-serif"
-          font-size="22"
+          font-size="20"
           font-weight="400"
           letter-spacing="0"
           fill="#a8a4b8">
-      Bids stay private even from the buyer, until the window closes.
+      Bids sealed even from the buyer, until the window closes.
     </text>
-    <text x="0" y="372"
+    <text x="0" y="366"
           font-family="'Geist', 'Inter', -apple-system, system-ui, sans-serif"
-          font-size="22"
+          font-size="20"
           font-weight="400"
           letter-spacing="0"
           fill="#a8a4b8">
-      Cryptography, not policy.
+      Buyer + bidder identities stay anonymous. Reputation public only on claim.
+    </text>
+    <text x="0" y="396"
+          font-family="'Geist', 'Inter', -apple-system, system-ui, sans-serif"
+          font-size="20"
+          font-weight="400"
+          letter-spacing="0"
+          fill="#a8a4b8">
+      Shielded funding rails. Cryptography, not policy.
     </text>
   </g>
 
