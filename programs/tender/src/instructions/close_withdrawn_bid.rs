@@ -40,7 +40,7 @@ pub struct CloseWithdrawnBid<'info> {
     pub permission_program: UncheckedAccount<'info>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "close_withdrawn_bid", hash = "95297cc743507d93", spec_hash = "44857f98aae873d7", accounts = "CloseWithdrawnBid", accounts_file = "src/instructions/close_withdrawn_bid.rs", accounts_hash = "a8c597541dc8e407")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "close_withdrawn_bid", hash = "95297cc743507d93", spec_hash = "018c4c8dcec366d1", accounts = "CloseWithdrawnBid", accounts_file = "src/instructions/close_withdrawn_bid.rs", accounts_hash = "a8c597541dc8e407")]
 pub fn handler(ctx: Context<CloseWithdrawnBid>) -> Result<()> {
     require_keys_eq!(
         ctx.accounts.provider.key(),

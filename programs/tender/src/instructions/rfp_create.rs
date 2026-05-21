@@ -64,7 +64,7 @@ pub struct RfpCreate<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "rfp_create", hash = "a3023401f49652f4", spec_hash = "8f1852875c318c1a", accounts = "RfpCreate", accounts_file = "src/instructions/rfp_create.rs", accounts_hash = "13b7ae01e9a861f3")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "rfp_create", hash = "a3023401f49652f4", spec_hash = "b53a70f63ddc5c1f", accounts = "RfpCreate", accounts_file = "src/instructions/rfp_create.rs", accounts_hash = "13b7ae01e9a861f3")]
 pub fn handler(ctx: Context<RfpCreate>, args: RfpCreateArgs) -> Result<()> {
     require!(
         args.bid_open_at < args.bid_close_at && args.bid_close_at < args.reveal_close_at,

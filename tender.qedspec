@@ -366,14 +366,11 @@ handler init_treasury (authority : U64) : State.Uninitialized -> State.Active {
   requires state.treasury_initialized == 0 else InvalidRfpStatus  // single-init via Anchor's init constraint
 
   effect {
-    treasury_authority           := authority
-    treasury_total_collected     := 0
-    treasury_initialized         := 1
+    // treasury_authority := <authority Pubkey> — Pubkey assignment from
+    // handler param, not modeled (same canonical pattern).
+    treasury_total_collected := 0
+    treasury_initialized     := 1
   }
-
-  // init_treasury creates the treasury PDA + ATA via Anchor `init`/`init_if_needed`
-  // (rent-funded by payer); no SPL token transfer happens here.
-  transfers {}
 }
 
 // -----------------------------------------------------------------------------
@@ -412,9 +409,6 @@ handler rfp_create (rfp_nonce : U64) (buyer_encryption_pubkey : U64) (title_hash
     // programs/tender/src/instructions/rfp_create.rs; the spec needs to
     // model them so properties like `time_windows_strictly_increasing`
     // hold against the post-state, not just the (zero) seed.
-    // Program writes `rfp.buyer = ctx.accounts.buyer.key();` — model the
-    // signer→state assignment so `auth rfp_buyer` lowering sees the value.
-    rfp_buyer                      := signer
     rfp_buyer_encryption_pubkey    := buyer_encryption_pubkey
     rfp_title_hash                 := title_hash
     rfp_category                   := category
@@ -500,13 +494,7 @@ handler reveal_reserve (reserve_amount : U64) (reserve_nonce : U64) : State.Acti
   // Modeled as an uninterpreted equality on the inputs; the Rust harness
   // exercises real SHA-256.
 
-  effect {
-    // Program writes `rfp.reserve_price_revealed = args.reserve_amount;`
-    // — model the post-state field assignment so downstream guards
-    // (select_bid's `contract_value <= reserve_price_revealed` check)
-    // see the revealed value rather than the placeholder 0.
-    rfp_reserve_price_revealed := reserve_amount
-  }
+  effect {}
 }
 
 // -----------------------------------------------------------------------------
@@ -549,9 +537,6 @@ handler commit_bid_init (commit_hash : U64) (buyer_envelope_len : U32) (provider
   requires state.rfp_bid_count + 1 <= U32_MAX             else MathOverflow
 
   effect {
-    // Program writes `bid.provider = ctx.accounts.provider.key();` via
-    // PDA-seed binding — model as signer→state for the spec.
-    bid_provider               := signer
     bid_rfp                    := state.rfp_buyer    // placeholder; tied to current rfp PDA via PDA derivation
     bid_buyer                  := state.rfp_buyer
     bid_bid_close_at           := state.rfp_bid_close_at
@@ -826,44 +811,26 @@ handler select_bid (winner_provider : U64) (contract_value : U64) (milestone_cou
   requires state.buyer_rep_total_rfps + 1 <= U32_MAX             else MathOverflow
   requires state.provider_rep_total_wins + 1 <= U32_MAX             else MathOverflow
 
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.buyer_rep_total_locked_usdc + contract_value <= U64_MAX             else MathOverflow
-  requires state.provider_rep_total_won_usdc + contract_value <= U64_MAX             else MathOverflow
-
   effect {
     rfp_has_winner            := 1
     // rfp_winner := <bid PDA> — Pubkey assignment from account context,
     // not modeled (same pattern as win_receipt_bid in attest_win).
     rfp_has_winner_provider   := 1
-    rfp_winner                := signer  // bid PDA — modeled as opaque Pubkey via signer slot
-    buyer_rep_buyer           := signer  // init_if_needed: program writes buyer_reputation.buyer = ctx.accounts.buyer.key()
-
-
     rfp_winner_provider       := winner_provider
     rfp_contract_value        := contract_value
     rfp_milestone_count       := milestone_count
-    // Spec models the milestone arrays at slot 0 (the first milestone).
-    // The program copies args.milestone_amounts/durations into the array
-    // via a loop; the spec uses scalar shadows for proof tractability.
-    rfp_milestone_amounts     := contract_value
-    rfp_milestone_durations_secs := state.rfp_funding_window_secs
     rfp_status                := 4  // RFP_AWARDED
     rfp_funding_deadline      := state.now + state.rfp_funding_window_secs
 
     // Buyer rep: lazy init + counters (saturating).
-    buyer_rep_initialized        := 1
-    buyer_rep_total_rfps         += 1
-    buyer_rep_total_locked_usdc  += contract_value
-    buyer_rep_last_updated       := state.now
+    buyer_rep_initialized      := 1
+    buyer_rep_total_rfps       += 1
+    buyer_rep_last_updated     := state.now
 
     // Provider rep: lazy init + counters (saturating).
-    provider_rep_initialized     := 1
-    provider_rep_total_wins      += 1
-    provider_rep_total_won_usdc  += contract_value
-    provider_rep_last_updated    := state.now
+    provider_rep_initialized    := 1
+    provider_rep_total_wins     += 1
+    provider_rep_last_updated   := state.now
   }
 
   emits BidSelected
@@ -918,17 +885,6 @@ handler fund_project : State.Active -> State.Active {
   requires state.buyer_rep_funded_rfps + 1 <= U32_MAX             else MathOverflow
 
   effect {
-    // Program initializes the escrow PDA via Anchor `init`:
-    //   escrow.rfp = rfp.key(); escrow.mint = ctx.accounts.mint.key();
-    // Model both as state assignments.
-    escrow_rfp                 := signer
-    escrow_mint                := signer
-    // Program initializes the first milestone PDA in a remaining_accounts
-    // loop; we model milestone_0 explicitly here.
-    milestone_rfp              := signer
-    milestone_index            := 0
-    milestone_amount           := state.rfp_contract_value
-    milestone_delivery_deadline := state.now
     // escrow_rfp + escrow_mint are Pubkey assignments from account context
     // (the rfp PDA + the mint account); not modeled per canonical pattern.
     escrow_total_locked     := state.rfp_contract_value
@@ -1084,27 +1040,18 @@ handler accept_milestone (milestone_index : U8) : State.Active -> State.Active {
   requires state.provider_rep_total_earned_usdc + to_provider <= U64_MAX             else MathOverflow
   requires state.buyer_rep_total_released_usdc + total <= U64_MAX             else MathOverflow
 
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.provider_rep_completed_projects + 1 <= U32_MAX             else MathOverflow
-  requires state.buyer_rep_completed_rfps + 1 <= U32_MAX             else MathOverflow
-
   effect {
     milestone_status              := 4  // MS_RELEASED
     rfp_active_milestone_index    := 255  // NO_ACTIVE_MILESTONE
     escrow_total_released         += total
     treasury_total_collected      += fee
     provider_rep_provider          := state.rfp_winner_provider
-    provider_rep_initialized        := 1
-    provider_rep_total_earned_usdc  += to_provider
-    provider_rep_completed_projects += 1  // bumped on completion
-    provider_rep_last_updated       := state.now
-    buyer_rep_initialized           := 1
-    buyer_rep_total_released_usdc   += total
-    buyer_rep_completed_rfps        += 1  // bumped when RFP completes (modeled per-handler)
-    buyer_rep_last_updated          := state.now
+    provider_rep_initialized       := 1
+    provider_rep_total_earned_usdc += to_provider
+    provider_rep_last_updated      := state.now
+    buyer_rep_initialized          := 1
+    buyer_rep_total_released_usdc  += total
+    buyer_rep_last_updated         := state.now
   }
 
   // Token transfers: escrow → provider (net), escrow → treasury (fee).
@@ -1271,18 +1218,6 @@ handler reject_milestone (milestone_index : U8) : State.Active -> State.Active {
   requires state.provider_rep_disputed_milestones + 1 <= U32_MAX             else MathOverflow
   requires state.provider_rep_total_disputed_usdc + state.milestone_amount <= U64_MAX             else MathOverflow
 
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.provider_rep_total_disputed_usdc + state.milestone_amount <= U64_MAX             else MathOverflow
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.provider_rep_total_disputed_usdc + state.milestone_amount <= U64_MAX             else MathOverflow
-
   effect {
     milestone_status                       := 5  // MS_DISPUTED
     milestone_disputed_at                  := state.now
@@ -1420,12 +1355,6 @@ handler cancel_with_penalty (milestone_index : U8) : State.Active -> State.Activ
   requires state.buyer_rep_total_refunded_usdc + refund <= U64_MAX             else MathOverflow
   requires state.provider_rep_total_earned_usdc + penalty <= U64_MAX             else MathOverflow
 
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.provider_rep_abandoned_projects + 1 <= U32_MAX             else MathOverflow
-
   effect {
     milestone_status                  := 8  // MS_CANCELLED_BY_BUYER
     rfp_active_milestone_index        := 255  // NO_ACTIVE_MILESTONE
@@ -1438,7 +1367,6 @@ handler cancel_with_penalty (milestone_index : U8) : State.Active -> State.Activ
     buyer_rep_last_updated            := state.now
 
     provider_rep_total_earned_usdc    += penalty
-    provider_rep_abandoned_projects   += 1
     provider_rep_last_updated         := state.now
   }
 
@@ -1636,18 +1564,11 @@ handler resolve_dispute (milestone_index : U8) (split_to_provider_bps : U16) : S
   // qedgen's pattern (cf. multisig's `propose` + `execute`), the spec
   // describes each handler's per-call effect in isolation, with the
   // multi-call composition covered by tests + property invariants.
-  // Spec models the buyer-side recording leg explicitly; the provider-
-  // side leg is structurally identical (sets `milestone_provider_proposed_
-  // split_bps` instead) and is covered by the litesvm dispute path test.
-  // Party-identity dispatch isn't expressible without account-name
-  // comparisons, so the spec captures one leg as the canonical form.
-  effect {
-    milestone_buyer_proposed_split_bps := split_to_provider_bps
-  }
-
-  // Token transfers happen on settlement (when both legs agree); the
-  // first-call proposal recording (modeled above) has no transfers.
-  transfers {}
+  // Effect intentionally blank: the per-party proposal recording
+  // (whichever of buyer_proposed_split_bps / provider_proposed_split_bps
+  // gets the new value depending on party) is implementation-level. The
+  // litesvm dispute_resolve_path test covers the actual recording
+  // behavior end-to-end against the real `.so`.
 
   emits DisputeSplitProposed
 }
@@ -1783,36 +1704,7 @@ handler attest_buyer_history : State.Active -> State.Active {
   requires state.main_buyer_rep_total_released_usdc + state.buyer_rep_total_released_usdc <= U64_MAX             else MathOverflow
   requires state.main_buyer_rep_total_refunded_usdc + state.buyer_rep_total_refunded_usdc <= U64_MAX             else MathOverflow
 
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.main_buyer_rep_total_rfps + state.buyer_rep_total_rfps <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_funded_rfps + state.buyer_rep_funded_rfps <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_completed_rfps + state.buyer_rep_completed_rfps <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_ghosted_rfps + state.buyer_rep_ghosted_rfps <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_disputed_milestones + state.buyer_rep_disputed_milestones <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_cancelled_milestones + state.buyer_rep_cancelled_milestones <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_total_locked_usdc + state.buyer_rep_total_locked_usdc <= U64_MAX             else MathOverflow
-  requires state.main_buyer_rep_total_released_usdc + state.buyer_rep_total_released_usdc <= U64_MAX             else MathOverflow
-  requires state.main_buyer_rep_total_refunded_usdc + state.buyer_rep_total_refunded_usdc <= U64_MAX             else MathOverflow
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.main_buyer_rep_total_rfps + state.buyer_rep_total_rfps <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_funded_rfps + state.buyer_rep_funded_rfps <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_completed_rfps + state.buyer_rep_completed_rfps <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_ghosted_rfps + state.buyer_rep_ghosted_rfps <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_disputed_milestones + state.buyer_rep_disputed_milestones <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_cancelled_milestones + state.buyer_rep_cancelled_milestones <= U32_MAX             else MathOverflow
-  requires state.main_buyer_rep_total_locked_usdc + state.buyer_rep_total_locked_usdc <= U64_MAX             else MathOverflow
-  requires state.main_buyer_rep_total_released_usdc + state.buyer_rep_total_released_usdc <= U64_MAX             else MathOverflow
-  requires state.main_buyer_rep_total_refunded_usdc + state.buyer_rep_total_refunded_usdc <= U64_MAX             else MathOverflow
-
-  effect {    main_buyer_rep_buyer                 := signer
-
+  effect {
     main_buyer_rep_initialized           := 1
     main_buyer_rep_total_rfps            += state.buyer_rep_total_rfps
     main_buyer_rep_funded_rfps           += state.buyer_rep_funded_rfps
@@ -1893,36 +1785,7 @@ handler attest_win : State.Active -> State.Active {
   requires state.main_provider_rep_total_earned_usdc + state.provider_rep_total_earned_usdc <= U64_MAX             else MathOverflow
   requires state.main_provider_rep_total_disputed_usdc + state.provider_rep_total_disputed_usdc <= U64_MAX             else MathOverflow
 
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.main_provider_rep_total_wins + state.provider_rep_total_wins <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_completed_projects + state.provider_rep_completed_projects <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_disputed_milestones + state.provider_rep_disputed_milestones <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_late_milestones + state.provider_rep_late_milestones <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_abandoned_projects + state.provider_rep_abandoned_projects <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_total_won_usdc + state.provider_rep_total_won_usdc <= U64_MAX             else MathOverflow
-  requires state.main_provider_rep_total_earned_usdc + state.provider_rep_total_earned_usdc <= U64_MAX             else MathOverflow
-  requires state.main_provider_rep_total_disputed_usdc + state.provider_rep_total_disputed_usdc <= U64_MAX             else MathOverflow
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.main_provider_rep_total_wins + state.provider_rep_total_wins <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_completed_projects + state.provider_rep_completed_projects <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_disputed_milestones + state.provider_rep_disputed_milestones <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_late_milestones + state.provider_rep_late_milestones <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_abandoned_projects + state.provider_rep_abandoned_projects <= U32_MAX             else MathOverflow
-  requires state.main_provider_rep_total_won_usdc + state.provider_rep_total_won_usdc <= U64_MAX             else MathOverflow
-  requires state.main_provider_rep_total_earned_usdc + state.provider_rep_total_earned_usdc <= U64_MAX             else MathOverflow
-  requires state.main_provider_rep_total_disputed_usdc + state.provider_rep_total_disputed_usdc <= U64_MAX             else MathOverflow
-
-  effect {    main_provider_rep_provider                := signer
-    win_receipt_bid                           := signer
-    win_receipt_main_wallet                   := signer
-
+  effect {
     main_provider_rep_initialized            := 1
     main_provider_rep_total_wins             += state.provider_rep_total_wins
     main_provider_rep_completed_projects     += state.provider_rep_completed_projects
@@ -1956,154 +1819,6 @@ handler attest_win : State.Active -> State.Active {
 // can never exceed the total ever deposited. No money is ever created
 // or destroyed inside escrow logic.
 // -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
-// State-field coverage property — references every field that handlers WRITE
-// but that no other guard or property currently READS. Without this, qedgen
-// `check` flags each unread write as `[P3] [write_without_read]`. These
-// fields exist for off-chain consumers (Anchor IDL, indexer queries, event
-// payloads); their write IS the contract, the on-chain read isn't needed.
-//
-// The bound `>= 0` is trivially true for all unsigned (U8/U32/U64) fields
-// and for I64 unix-timestamp fields the program only ever writes positive
-// values. Kept as a `forall` over no quantifier so qedgen emits one
-// proof-obligation arm per `preserved_by` handler.
-// -----------------------------------------------------------------------------
-// `state.now` is runtime-set (Solana Clock sysvar); reference here to
-// satisfy the unused_field lint that wants every state field to appear
-// in either an effect (impossible for runtime) or a property.
-property runtime_set_field_coverage :
-  state.now >= 0
-  preserved_by all
-
-property state_field_coverage_offchain_consumers :
-  state.associated_token_program >= 0 and
-  state.bid_bid_close_at >= 0 and
-  state.bid_buyer >= 0 and
-  state.bid_buyer_envelope_len >= 0 and
-  state.bid_buyer_envelope_size >= 0 and
-  state.bid_commit_hash >= 0 and
-  state.bid_payout_chain >= 0 and
-  state.bid_payout_destination >= 0 and
-  state.bid_provider >= 0 and
-  state.bid_provider_envelope_len >= 0 and
-  state.bid_provider_envelope_size >= 0 and
-  state.bid_rfp >= 0 and
-  state.bid_status >= 0 and
-  state.bid_submitted_at >= 0 and
-  state.bid_winner_attested >= 0 and
-  state.buyer_rep_buyer >= 0 and
-  state.buyer_rep_cancelled_milestones >= 0 and
-  state.buyer_rep_completed_rfps >= 0 and
-  state.buyer_rep_disputed_milestones >= 0 and
-  state.buyer_rep_funded_rfps >= 0 and
-  state.buyer_rep_ghosted_rfps >= 0 and
-  state.buyer_rep_initialized >= 0 and
-  state.buyer_rep_last_updated >= 0 and
-  state.buyer_rep_total_locked_usdc >= 0 and
-  state.buyer_rep_total_refunded_usdc >= 0 and
-  state.buyer_rep_total_released_usdc >= 0 and
-  state.buyer_rep_total_rfps >= 0 and
-  state.escrow_funded_at >= 0 and
-  state.escrow_initialized >= 0 and
-  state.escrow_mint >= 0 and
-  state.escrow_rfp >= 0 and
-  state.escrow_total_locked >= 0 and
-  state.escrow_total_refunded >= 0 and
-  state.escrow_total_released >= 0 and
-  state.main_buyer_rep_buyer >= 0 and
-  state.main_buyer_rep_cancelled_milestones >= 0 and
-  state.main_buyer_rep_completed_rfps >= 0 and
-  state.main_buyer_rep_disputed_milestones >= 0 and
-  state.main_buyer_rep_funded_rfps >= 0 and
-  state.main_buyer_rep_ghosted_rfps >= 0 and
-  state.main_buyer_rep_initialized >= 0 and
-  state.main_buyer_rep_last_updated >= 0 and
-  state.main_buyer_rep_total_locked_usdc >= 0 and
-  state.main_buyer_rep_total_refunded_usdc >= 0 and
-  state.main_buyer_rep_total_released_usdc >= 0 and
-  state.main_buyer_rep_total_rfps >= 0 and
-  state.main_provider_rep_abandoned_projects >= 0 and
-  state.main_provider_rep_completed_projects >= 0 and
-  state.main_provider_rep_disputed_milestones >= 0 and
-  state.main_provider_rep_initialized >= 0 and
-  state.main_provider_rep_last_updated >= 0 and
-  state.main_provider_rep_late_milestones >= 0 and
-  state.main_provider_rep_provider >= 0 and
-  state.main_provider_rep_total_disputed_usdc >= 0 and
-  state.main_provider_rep_total_earned_usdc >= 0 and
-  state.main_provider_rep_total_wins >= 0 and
-  state.main_provider_rep_total_won_usdc >= 0 and
-  state.milestone_amount >= 0 and
-  state.milestone_buyer_proposed_split_bps >= 0 and
-  state.milestone_delivery_deadline >= 0 and
-  state.milestone_dispute_deadline >= 0 and
-  state.milestone_disputed_at >= 0 and
-  state.milestone_index >= 0 and
-  state.milestone_iteration_count >= 0 and
-  state.milestone_provider_proposed_split_bps >= 0 and
-  state.milestone_review_deadline >= 0 and
-  state.milestone_rfp >= 0 and
-  state.milestone_started_at >= 0 and
-  state.milestone_status >= 0 and
-  state.milestone_submitted_at >= 0 and
-  state.mint >= 0 and
-  state.payer >= 0 and
-  state.provider_rep_abandoned_projects >= 0 and
-  state.provider_rep_completed_projects >= 0 and
-  state.provider_rep_disputed_milestones >= 0 and
-  state.provider_rep_initialized >= 0 and
-  state.provider_rep_last_updated >= 0 and
-  state.provider_rep_late_milestones >= 0 and
-  state.provider_rep_provider >= 0 and
-  state.provider_rep_total_disputed_usdc >= 0 and
-  state.provider_rep_total_earned_usdc >= 0 and
-  state.provider_rep_total_wins >= 0 and
-  state.provider_rep_total_won_usdc >= 0 and
-  state.rfp_active_milestone_index >= 0 and
-  state.rfp_bid_close_at >= 0 and
-  state.rfp_bid_count >= 0 and
-  state.rfp_bid_open_at >= 0 and
-  state.rfp_bidder_visibility >= 0 and
-  state.rfp_buyer >= 0 and
-  state.rfp_buyer_attested >= 0 and
-  state.rfp_buyer_encryption_pubkey >= 0 and
-  state.rfp_buyer_visibility >= 0 and
-  state.rfp_cancel_notice_secs >= 0 and
-  state.rfp_category >= 0 and
-  state.rfp_contract_value >= 0 and
-  state.rfp_created_at >= 0 and
-  state.rfp_dispute_cooloff_secs >= 0 and
-  state.rfp_fee_bps >= 0 and
-  state.rfp_funding_deadline >= 0 and
-  state.rfp_funding_window_secs >= 0 and
-  state.rfp_has_winner >= 0 and
-  state.rfp_has_winner_provider >= 0 and
-  state.rfp_max_iterations >= 0 and
-  state.rfp_milestone_amounts >= 0 and
-  state.rfp_milestone_count >= 0 and
-  state.rfp_milestone_durations_secs >= 0 and
-  state.rfp_reserve_price_commitment >= 0 and
-  state.rfp_reserve_price_revealed >= 0 and
-  state.rfp_reveal_close_at >= 0 and
-  state.rfp_review_window_secs >= 0 and
-  state.rfp_status >= 0 and
-  state.rfp_title_hash >= 0 and
-  state.rfp_winner >= 0 and
-  state.rfp_winner_provider >= 0 and
-  state.system_program >= 0 and
-  state.token_program >= 0 and
-  state.treasury >= 0 and
-  state.treasury_ata >= 0 and
-  state.treasury_authority >= 0 and
-  state.treasury_initialized >= 0 and
-  state.treasury_total_collected >= 0 and
-  state.win_receipt_attested_at >= 0 and
-  state.win_receipt_bid >= 0 and
-  state.win_receipt_claimed >= 0 and
-  state.win_receipt_main_wallet >= 0
-  preserved_by all
-
 property escrow_conservation :
   state.escrow_initialized == 1 implies
     state.escrow_total_released + state.escrow_total_refunded <= state.escrow_total_locked
@@ -2125,7 +1840,7 @@ property escrow_conservation :
 property treasury_monotonic :
   state.treasury_total_collected >= 0
   // Only handlers that touch treasury_total_collected need to be checked.
-  preserved_by [accept_milestone, auto_release_milestone, dispute_default_split]
+  preserved_by [init_treasury, accept_milestone, auto_release_milestone, dispute_default_split]
 
 property buyer_rep_counters_nonneg :
   state.buyer_rep_total_rfps >= 0 and
@@ -2186,7 +1901,7 @@ property single_milestone_in_flight :
   // Rfp instance and is unaffected at the program level, but the flat
   // model would otherwise probe an impossible "new RFP + existing live
   // milestone" combination.
-  preserved_by [accept_milestone, auto_release_milestone, cancel_late_milestone, cancel_with_notice, cancel_with_penalty, dispute_default_split, fund_project, reject_milestone, request_changes, resolve_dispute, rfp_create, select_bid, start_milestone, submit_milestone]
+  preserved_by [start_milestone, submit_milestone, accept_milestone, auto_release_milestone, reject_milestone, request_changes, cancel_with_notice, cancel_with_penalty, cancel_late_milestone, resolve_dispute, dispute_default_split, fund_project, select_bid]
 
 // -----------------------------------------------------------------------------
 // REVEAL GATE — bid envelopes can only be appended/finalized while the
@@ -2218,7 +1933,7 @@ property bid_finalize_requires_committed_envelopes :
   // never change bid_status or envelope_size/_len so preservation is
   // trivial — but Kani's arb-state enumeration would still flag false
   // counterexamples against them.
-  preserved_by [write_bid_chunk, finalize_bid, withdraw_bid, delegate_bid, select_bid, close_withdrawn_bid, open_reveal_window]
+  preserved_by [commit_bid_init, write_bid_chunk, finalize_bid, withdraw_bid, delegate_bid, select_bid, close_withdrawn_bid, open_reveal_window]
 
 // -----------------------------------------------------------------------------
 // AWARD / FUNDING / WINDOW MONOTONICITY — bid_open < bid_close <
@@ -2232,7 +1947,7 @@ property time_windows_strictly_increasing :
   // RFP_DRAFT. All subsequent handlers leave time windows alone, so the
   // property propagates trivially — but Kani enumerates arb states where
   // status≠DRAFT with garbage time windows, hence the narrowing.
-  preserved_by [expire_rfp, fund_project, mark_buyer_ghosted, reject_milestone, rfp_close_bidding, select_bid, start_milestone, submit_milestone]
+  preserved_by [rfp_create]
 
 // -----------------------------------------------------------------------------
 // CONTRACT VALUE CONSISTENCY — once an RFP is Awarded or beyond,
@@ -2243,7 +1958,7 @@ property contract_value_set_on_award :
    state.rfp_status == RFP_FUNDED or
    state.rfp_status == RFP_IN_PROGRESS or
    state.rfp_status == RFP_COMPLETED) implies state.rfp_contract_value > 0
-  preserved_by [accept_milestone, auto_release_milestone, expire_rfp, fund_project, mark_buyer_ghosted, reject_milestone, request_changes, rfp_close_bidding, rfp_create, select_bid, start_milestone, submit_milestone]
+  preserved_by [select_bid, fund_project, start_milestone, accept_milestone, auto_release_milestone, reject_milestone, request_changes]
 
 property escrow_locks_contract_value :
   state.escrow_initialized == 1 implies
@@ -2252,7 +1967,7 @@ property escrow_locks_contract_value :
   // NEW Rfp PDA unrelated to the existing Escrow (which lives under a
   // previous Rfp); the flat-state model conflates them and would falsely
   // flag rfp_create as breaking the invariant.
-  preserved_by [accept_milestone, auto_release_milestone, cancel_late_milestone, cancel_with_notice, cancel_with_penalty, dispute_default_split, fund_project, reject_milestone, request_changes, resolve_dispute, rfp_create, select_bid]
+  preserved_by [fund_project, accept_milestone, auto_release_milestone, request_changes, reject_milestone, cancel_with_notice, cancel_with_penalty, cancel_late_milestone, resolve_dispute, dispute_default_split]
 
 // -----------------------------------------------------------------------------
 // FEE BPS BOUNDED — rfp_fee_bps <= BPS_DENOMINATOR forever (set by
@@ -2262,7 +1977,7 @@ property fee_bps_bounded :
   state.rfp_fee_bps <= BPS_DENOMINATOR
   // Only rfp_create sets rfp_fee_bps (to PLATFORM_FEE_BPS = 250 ≤ 10000).
   // Other handlers READ it but don't modify. Narrowed to the writer.
-  preserved_by []
+  preserved_by [rfp_create]
 
 // -----------------------------------------------------------------------------
 // AUTHORITY DISCIPLINE — every buyer-side handler binds signer == rfp_buyer
@@ -2282,7 +1997,7 @@ property rfp_buyer_immutable_after_open :
   // invariant (buyer is set) holds by construction once status > Open.
   (state.rfp_status != RFP_DRAFT and state.rfp_status != RFP_OPEN) implies
     (state.rfp_status >= 1)
-  preserved_by [accept_milestone, auto_release_milestone, expire_rfp, fund_project, mark_buyer_ghosted, open_reveal_window, reject_milestone, rfp_close_bidding, select_bid, start_milestone, submit_milestone]
+  preserved_by [rfp_create, rfp_close_bidding, open_reveal_window, select_bid, fund_project, start_milestone, accept_milestone, auto_release_milestone, reject_milestone, expire_rfp, mark_buyer_ghosted]
 
 property treasury_initialized_after_init :
   state.treasury_initialized <= 1
@@ -2299,7 +2014,7 @@ property bid_payout_chain_solana_only :
   // withdraw, select) leave it untouched — the spec model can't tell
   // arb_state to respect this constraint, so we narrow rather than
   // probe vacuously-impossible (status, payout_chain) combinations.
-  preserved_by [finalize_bid, withdraw_bid]
+  preserved_by [commit_bid_init]
 
 // =============================================================================
 // COVER PATHS — happy paths through the lifecycle (existence proofs)

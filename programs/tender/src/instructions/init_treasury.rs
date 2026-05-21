@@ -36,7 +36,7 @@ pub struct InitTreasury<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "init_treasury", hash = "fbf69446fb590dff", spec_hash = "13da0884bc83840a", accounts = "InitTreasury", accounts_file = "src/instructions/init_treasury.rs", accounts_hash = "ffb9404fb8bb34c3")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "init_treasury", hash = "fbf69446fb590dff", spec_hash = "729b663035d7f96a", accounts = "InitTreasury", accounts_file = "src/instructions/init_treasury.rs", accounts_hash = "ffb9404fb8bb34c3")]
 pub fn handler(ctx: Context<InitTreasury>, authority: Pubkey) -> Result<()> {
     let t = &mut ctx.accounts.treasury;
     t.authority = authority;

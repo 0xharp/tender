@@ -49,7 +49,7 @@ pub struct CommitBidInit<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "commit_bid_init", hash = "2912d7e3dcec94bc", spec_hash = "7d84c63d18e33110", accounts = "CommitBidInit", accounts_file = "src/instructions/commit_bid_init.rs", accounts_hash = "107ed7fdf54f7c26")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "commit_bid_init", hash = "2912d7e3dcec94bc", spec_hash = "452ad00c2613f410", accounts = "CommitBidInit", accounts_file = "src/instructions/commit_bid_init.rs", accounts_hash = "107ed7fdf54f7c26")]
 pub fn handler(ctx: Context<CommitBidInit>, args: CommitBidInitArgs) -> Result<()> {
     require!(
         args.buyer_envelope_len > 0 && args.provider_envelope_len > 0,

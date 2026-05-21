@@ -96,7 +96,7 @@ pub struct DisputeDefaultSplit<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "dispute_default_split", hash = "ad18b7df45f43293", spec_hash = "3e9a5aff27255063", accounts = "DisputeDefaultSplit", accounts_file = "src/instructions/dispute_default_split.rs", accounts_hash = "2c5e32d305569581")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "dispute_default_split", hash = "ad18b7df45f43293", spec_hash = "ef4b4f0feb3e96ba", accounts = "DisputeDefaultSplit", accounts_file = "src/instructions/dispute_default_split.rs", accounts_hash = "2c5e32d305569581")]
 pub fn handler(ctx: Context<DisputeDefaultSplit>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;
