@@ -54,7 +54,7 @@ pub struct RejectMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "reject_milestone", hash = "6048f384eab3b603", spec_hash = "14b9689c4ffa6f25", accounts = "RejectMilestone", accounts_file = "src/instructions/reject_milestone.rs", accounts_hash = "c88aa7b0f3e3c118")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "reject_milestone", hash = "6048f384eab3b603", spec_hash = "8ab0fbd0bd482b8b", accounts = "RejectMilestone", accounts_file = "src/instructions/reject_milestone.rs", accounts_hash = "c88aa7b0f3e3c118")]
 pub fn handler(ctx: Context<RejectMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;

@@ -529,8 +529,6 @@ handler commit_bid_init (commit_hash : U64) (buyer_envelope_len : U32) (provider
   requires state.rfp_status == RFP_OPEN                 else InvalidRfpStatus
   requires state.now >= state.rfp_bid_open_at        else BidWindowNotOpen
   requires state.now < state.rfp_bid_close_at        else BidWindowClosed
-  requires state.rfp_bid_count + 1 <= U32_MAX             else MathOverflow
-
   effect {
     bid_rfp                    := state.rfp_buyer    // placeholder; tied to current rfp PDA via PDA derivation
     bid_buyer                  := state.rfp_buyer
@@ -798,9 +796,6 @@ handler select_bid (winner_provider : U64) (contract_value : U64) (milestone_cou
   // The semantic invariant: rfp_winner_provider after this handler is
   // either bid_provider (public mode) or a cryptographically-bound main
   // wallet (private mode, verified at runtime).
-  requires state.buyer_rep_total_rfps + 1 <= U32_MAX             else MathOverflow
-  requires state.provider_rep_total_wins + 1 <= U32_MAX             else MathOverflow
-
   effect {
     rfp_has_winner            := 1
     // rfp_winner := <bid PDA> — Pubkey assignment from account context,
@@ -867,8 +862,6 @@ handler fund_project : State.Active -> State.Active {
   // Ed25519 fund-authorization must verify with rfp_buyer's pubkey + canonical msg.
   // Idempotency: status check above prevents double-funding (Anchor
   // `init` on the escrow PDA fails on the second call too).
-  requires state.buyer_rep_funded_rfps + 1 <= U32_MAX             else MathOverflow
-
   effect {
     // escrow_rfp + escrow_mint are Pubkey assignments from account context
     // (the rfp PDA + the mint account); not modeled per canonical pattern.
@@ -1137,8 +1130,6 @@ handler request_changes (milestone_index : U8) : State.Active -> State.Active {
   // state transitions stay first-order; the escalation behavior is
   // covered by the litesvm dispute-path tests + a dedicated Lean
   // theorem in Phase 4 ("request_changes_escalates_when_iter_exhausted").
-  requires state.milestone_iteration_count + 1 <= U64_MAX             else MathOverflow
-
   effect {
     milestone_iteration_count +=! 1
     milestone_status          := 1  // MS_STARTED
@@ -1170,8 +1161,6 @@ handler reject_milestone (milestone_index : U8) : State.Active -> State.Active {
   // stays below i64::MAX. rfp_create's program guard enforces this at write
   // time; reflected here in the spec model.
   requires state.rfp_dispute_cooloff_secs <= MAX_WINDOW_SECS
-  requires state.buyer_rep_disputed_milestones + 1 <= U32_MAX             else MathOverflow
-  requires state.provider_rep_disputed_milestones + 1 <= U32_MAX             else MathOverflow
   requires state.provider_rep_total_disputed_usdc + state.milestone_amount <= U64_MAX             else MathOverflow
 
   effect {
@@ -1291,7 +1280,6 @@ handler cancel_with_penalty (milestone_index : U8) : State.Active -> State.Activ
   let amount  = state.milestone_amount
   let penalty = mul_div_floor(amount, ABANDON_PENALTY_BPS, BPS_DENOMINATOR)
   let refund  = amount - penalty
-  requires state.buyer_rep_cancelled_milestones + 1 <= U32_MAX             else MathOverflow
   effect {
     milestone_status                  := 8  // MS_CANCELLED_BY_BUYER
     rfp_active_milestone_index        := 255  // NO_ACTIVE_MILESTONE
@@ -1355,8 +1343,6 @@ handler cancel_late_milestone (milestone_index : U8) : State.Active -> State.Act
   requires state.rfp_fee_bps == PLATFORM_FEE_BPS
 
   let amount = state.milestone_amount
-  requires state.provider_rep_late_milestones + 1 <= U32_MAX             else MathOverflow
-
   effect {
     milestone_status              := 8  // MS_CANCELLED_BY_BUYER
     rfp_active_milestone_index    := 255  // NO_ACTIVE_MILESTONE
@@ -1394,8 +1380,6 @@ handler mark_buyer_ghosted : State.Active -> State.Active {
 
   requires state.rfp_status == RFP_AWARDED                  else InvalidRfpStatus
   requires state.now > state.rfp_funding_deadline        else FundingWindowOpen
-  requires state.buyer_rep_ghosted_rfps + 1 <= U32_MAX             else MathOverflow
-
   effect {
     rfp_status                := 9  // RFP_GHOSTED
     buyer_rep_ghosted_rfps +=! 1
