@@ -93,7 +93,7 @@ pub struct AttestBuyerHistory<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "attest_buyer_history", hash = "07849d091d8fb78a", spec_hash = "df6c16a76aa4f95a", accounts = "AttestBuyerHistory", accounts_file = "src/instructions/attest_buyer_history.rs", accounts_hash = "fa386906e274fd33")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "attest_buyer_history", hash = "07849d091d8fb78a", spec_hash = "a71a025580d3e5b3", accounts = "AttestBuyerHistory", accounts_file = "src/instructions/attest_buyer_history.rs", accounts_hash = "fa386906e274fd33")]
 pub fn handler(ctx: Context<AttestBuyerHistory>) -> Result<()> {
     require!(
         ctx.accounts.rfp.buyer_visibility == BuyerVisibility::Private,

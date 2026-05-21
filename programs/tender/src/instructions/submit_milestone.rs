@@ -28,7 +28,7 @@ pub struct SubmitMilestone<'info> {
     pub milestone: Account<'info, MilestoneState>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "submit_milestone", hash = "379f14c649463ba7", spec_hash = "7382e5faa55f67e1", accounts = "SubmitMilestone", accounts_file = "src/instructions/submit_milestone.rs", accounts_hash = "40626f3d5b5b281e")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "submit_milestone", hash = "379f14c649463ba7", spec_hash = "9d9cc837d8f9a0fa", accounts = "SubmitMilestone", accounts_file = "src/instructions/submit_milestone.rs", accounts_hash = "40626f3d5b5b281e")]
 pub fn handler(ctx: Context<SubmitMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(

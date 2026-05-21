@@ -30,7 +30,7 @@ pub struct RequestChanges<'info> {
     pub milestone: Account<'info, MilestoneState>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "request_changes", hash = "a7523db448887109", spec_hash = "b61fe8933df325fa", accounts = "RequestChanges", accounts_file = "src/instructions/request_changes.rs", accounts_hash = "4a6f255c8b7a9793")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "request_changes", hash = "a7523db448887109", spec_hash = "fbcbc20059874865", accounts = "RequestChanges", accounts_file = "src/instructions/request_changes.rs", accounts_hash = "4a6f255c8b7a9793")]
 pub fn handler(ctx: Context<RequestChanges>, _milestone_index: u8) -> Result<()> {
     let rfp = &ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;

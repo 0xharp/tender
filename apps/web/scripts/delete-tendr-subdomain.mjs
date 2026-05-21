@@ -170,8 +170,8 @@ try {
   });
   console.log('\n✓ Deleted.');
   console.log(`  Tx: https://solscan.io/tx/${sig}?cluster=devnet`);
-  console.log(`\nNext steps:`);
-  console.log(`  1. Hard-refresh https://tendr.bid (Cmd-Shift-R / Ctrl-Shift-R)`);
+  console.log('\nNext steps:');
+  console.log('  1. Hard-refresh https://tendr.bid (Cmd-Shift-R / Ctrl-Shift-R)');
   console.log(`  2. Re-claim "${HANDLE}" via the identity modal on next sign-in`);
 } catch (e) {
   console.error('\n✗ Delete failed:', e.message);

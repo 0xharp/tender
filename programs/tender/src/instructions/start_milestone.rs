@@ -31,7 +31,7 @@ pub struct StartMilestone<'info> {
     pub milestone: Account<'info, MilestoneState>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "start_milestone", hash = "60b331c3a924f069", spec_hash = "2c44702434076cb8", accounts = "StartMilestone", accounts_file = "src/instructions/start_milestone.rs", accounts_hash = "68b838642de51219")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "start_milestone", hash = "60b331c3a924f069", spec_hash = "bb8deb36e26c7840", accounts = "StartMilestone", accounts_file = "src/instructions/start_milestone.rs", accounts_hash = "68b838642de51219")]
 pub fn handler(ctx: Context<StartMilestone>, milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(

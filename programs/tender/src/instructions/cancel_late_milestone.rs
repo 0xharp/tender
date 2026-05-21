@@ -83,7 +83,7 @@ pub struct CancelLateMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_late_milestone", hash = "b12168b1c86bf04b", spec_hash = "809d56fb4c6022cb", accounts = "CancelLateMilestone", accounts_file = "src/instructions/cancel_late_milestone.rs", accounts_hash = "291ec713f6579061")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_late_milestone", hash = "b12168b1c86bf04b", spec_hash = "3bb7f06d36c4dae9", accounts = "CancelLateMilestone", accounts_file = "src/instructions/cancel_late_milestone.rs", accounts_hash = "291ec713f6579061")]
 pub fn handler(ctx: Context<CancelLateMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;

@@ -27,7 +27,7 @@ pub struct RevealReserve<'info> {
     pub rfp: Account<'info, Rfp>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "reveal_reserve", hash = "a3bea4bbaa9e5acf", spec_hash = "3de927c5aa0f2e60", accounts = "RevealReserve", accounts_file = "src/instructions/reveal_reserve.rs", accounts_hash = "5d6630bf5f10eddd")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "reveal_reserve", hash = "a3bea4bbaa9e5acf", spec_hash = "6268134a8f6f1114", accounts = "RevealReserve", accounts_file = "src/instructions/reveal_reserve.rs", accounts_hash = "5d6630bf5f10eddd")]
 pub fn handler(ctx: Context<RevealReserve>, args: RevealReserveArgs) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(

@@ -128,7 +128,7 @@ pub struct AttestWin<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "attest_win", hash = "ba32e7fd4c3c7cd6", spec_hash = "506197613e557377", accounts = "AttestWin", accounts_file = "src/instructions/attest_win.rs", accounts_hash = "45385970ba6ca7d0")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "attest_win", hash = "ba32e7fd4c3c7cd6", spec_hash = "3e1e50389a086b94", accounts = "AttestWin", accounts_file = "src/instructions/attest_win.rs", accounts_hash = "45385970ba6ca7d0")]
 pub fn handler(ctx: Context<AttestWin>) -> Result<()> {
     let rfp = &ctx.accounts.rfp;
     let bid_pda = ctx.accounts.bid.key();

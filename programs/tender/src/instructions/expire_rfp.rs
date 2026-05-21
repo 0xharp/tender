@@ -34,7 +34,7 @@ pub struct ExpireRfp<'info> {
     pub rfp: Account<'info, Rfp>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "expire_rfp", hash = "ae061276835fdec0", spec_hash = "3e28b195a1c8fcb5", accounts = "ExpireRfp", accounts_file = "src/instructions/expire_rfp.rs", accounts_hash = "a349a36258a5dbfc")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "expire_rfp", hash = "ae061276835fdec0", spec_hash = "0dee8befac0a0a0c", accounts = "ExpireRfp", accounts_file = "src/instructions/expire_rfp.rs", accounts_hash = "a349a36258a5dbfc")]
 pub fn handler(ctx: Context<ExpireRfp>) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
 
