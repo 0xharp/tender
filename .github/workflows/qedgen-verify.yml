@@ -232,6 +232,9 @@ jobs:
             ~/.kani
           key: ${{ runner.os }}-cargo-kani-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install z3 (required by Kani for some arithmetic-heavy harnesses)
+        run: sudo apt-get update && sudo apt-get install -y z3
+
       - name: Install Kani
         run: |
           cargo install --locked kani-verifier
