@@ -102,7 +102,7 @@ pub struct SelectBid<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "select_bid", hash = "5dffc94eac1e1c17", spec_hash = "0d0bc512f83ce659", accounts = "SelectBid", accounts_file = "src/instructions/select_bid.rs", accounts_hash = "39e91c855c29029c")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "select_bid", hash = "06ece4c004b69722", spec_hash = "887a4f4503960293", accounts = "SelectBid", accounts_file = "src/instructions/select_bid.rs", accounts_hash = "39e91c855c29029c")]
 pub fn handler(ctx: Context<SelectBid>, args: SelectBidArgs) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     require!(
@@ -194,8 +194,8 @@ pub fn handler(ctx: Context<SelectBid>, args: SelectBidArgs) -> Result<()> {
         buyer_rep.buyer = ctx.accounts.buyer.key();
         buyer_rep.bump = ctx.bumps.buyer_reputation;
     }
-    buyer_rep.total_rfps = buyer_rep.total_rfps.checked_add(1).ok_or(TenderError::MathOverflow)?;
-    buyer_rep.total_locked_usdc = buyer_rep.total_locked_usdc.checked_add(args.contract_value).ok_or(TenderError::MathOverflow)?;
+    buyer_rep.total_rfps = buyer_rep.total_rfps.saturating_add(1);
+    buyer_rep.total_locked_usdc = buyer_rep.total_locked_usdc.saturating_add(args.contract_value);
     buyer_rep.last_updated = now;
     emit!(BuyerReputationUpdated { buyer: buyer_rep.buyer, field: 0, at: now });
 
@@ -204,8 +204,8 @@ pub fn handler(ctx: Context<SelectBid>, args: SelectBidArgs) -> Result<()> {
         provider_rep.provider = args.winner_provider;
         provider_rep.bump = ctx.bumps.provider_reputation;
     }
-    provider_rep.total_wins = provider_rep.total_wins.checked_add(1).ok_or(TenderError::MathOverflow)?;
-    provider_rep.total_won_usdc = provider_rep.total_won_usdc.checked_add(args.contract_value).ok_or(TenderError::MathOverflow)?;
+    provider_rep.total_wins = provider_rep.total_wins.saturating_add(1);
+    provider_rep.total_won_usdc = provider_rep.total_won_usdc.saturating_add(args.contract_value);
     provider_rep.last_updated = now;
     emit!(ProviderReputationUpdated { provider: provider_rep.provider, field: 0, at: now });
 

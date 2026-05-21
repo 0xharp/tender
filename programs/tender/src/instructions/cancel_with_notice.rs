@@ -69,7 +69,7 @@ pub struct CancelWithNotice<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_with_notice", hash = "f9d128cfa9673cd3", spec_hash = "fc618a36f186ea0a", accounts = "CancelWithNotice", accounts_file = "src/instructions/cancel_with_notice.rs", accounts_hash = "eb1dc94486e12def")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_with_notice", hash = "f48d73ef52c47ffa", spec_hash = "79471e3c509e0b00", accounts = "CancelWithNotice", accounts_file = "src/instructions/cancel_with_notice.rs", accounts_hash = "eb1dc94486e12def")]
 pub fn handler(ctx: Context<CancelWithNotice>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;
@@ -99,13 +99,13 @@ pub fn handler(ctx: Context<CancelWithNotice>, _milestone_index: u8) -> Result<(
 
     ms.status = MilestoneStatus::CancelledByBuyer;
     let escrow = &mut ctx.accounts.escrow;
-    escrow.total_refunded = escrow.total_refunded.checked_add(amount).ok_or(TenderError::MathOverflow)?;
+    escrow.total_refunded = escrow.total_refunded.saturating_add(amount);
 
     // No-op on the buyer rep COUNTERS (cancelled_milestones), but bump the
     // amount tracker so total_refunded_usdc reflects what was pulled back.
     // No `BuyerReputationUpdated` event since no counter changed.
     let buyer_rep = &mut ctx.accounts.buyer_reputation;
-    buyer_rep.total_refunded_usdc = buyer_rep.total_refunded_usdc.checked_add(amount).ok_or(TenderError::MathOverflow)?;
+    buyer_rep.total_refunded_usdc = buyer_rep.total_refunded_usdc.saturating_add(amount);
     buyer_rep.last_updated = now;
 
     // Project-level auto-flip. If nothing was ever released to the provider
@@ -113,7 +113,7 @@ pub fn handler(ctx: Context<CancelWithNotice>, _milestone_index: u8) -> Result<(
     // value-delivered case by setting Cancelled instead of Completed. Buyers
     // who serially cancel before any work shouldn't appear as having
     // "completed projects" in their on-chain reputation.
-    if escrow.total_released.checked_add(escrow.total_refunded).ok_or(TenderError::MathOverflow)? >= escrow.total_locked {
+    if escrow.total_released.saturating_add(escrow.total_refunded) >= escrow.total_locked {
         rfp.status = if escrow.total_released == 0 {
             RfpStatus::Cancelled
         } else {

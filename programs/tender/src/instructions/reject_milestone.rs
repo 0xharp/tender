@@ -54,7 +54,7 @@ pub struct RejectMilestone<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "reject_milestone", hash = "425b172c988a2384", spec_hash = "5e98c7b5c04edb58", accounts = "RejectMilestone", accounts_file = "src/instructions/reject_milestone.rs", accounts_hash = "c88aa7b0f3e3c118")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "reject_milestone", hash = "6048f384eab3b603", spec_hash = "14b9689c4ffa6f25", accounts = "RejectMilestone", accounts_file = "src/instructions/reject_milestone.rs", accounts_hash = "c88aa7b0f3e3c118")]
 pub fn handler(ctx: Context<RejectMilestone>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;
@@ -72,7 +72,7 @@ pub fn handler(ctx: Context<RejectMilestone>, _milestone_index: u8) -> Result<()
     rfp.status = RfpStatus::Disputed;
 
     let buyer_rep = &mut ctx.accounts.buyer_reputation;
-    buyer_rep.disputed_milestones = buyer_rep.disputed_milestones.checked_add(1).ok_or(TenderError::MathOverflow)?;
+    buyer_rep.disputed_milestones = buyer_rep.disputed_milestones.saturating_add(1);
     buyer_rep.last_updated = now;
     emit!(BuyerReputationUpdated { buyer: buyer_rep.buyer, field: 4, at: now });
 
@@ -82,13 +82,13 @@ pub fn handler(ctx: Context<RejectMilestone>, _milestone_index: u8) -> Result<()
         provider_rep.provider = main_wallet;
         provider_rep.bump = ctx.bumps.provider_reputation;
     }
-    provider_rep.disputed_milestones = provider_rep.disputed_milestones.checked_add(1).ok_or(TenderError::MathOverflow)?;
+    provider_rep.disputed_milestones = provider_rep.disputed_milestones.saturating_add(1);
     // total_disputed_usdc tracks "amounts that hit the dispute path" - bump it
     // here at dispute-OPEN time so the metric is correct regardless of how it
     // closes (resolve_dispute mutual-agree OR dispute_default_split lapse).
     // Was previously only set in resolve_dispute, leaving default-split closures
     // with a stale-zero amount.
-    provider_rep.total_disputed_usdc = provider_rep.total_disputed_usdc.checked_add(ms.amount).ok_or(TenderError::MathOverflow)?;
+    provider_rep.total_disputed_usdc = provider_rep.total_disputed_usdc.saturating_add(ms.amount);
     provider_rep.last_updated = now;
     emit!(ProviderReputationUpdated { provider: provider_rep.provider, field: 2, at: now });
 

@@ -93,7 +93,7 @@ pub struct AttestBuyerHistory<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "attest_buyer_history", hash = "07849d091d8fb78a", spec_hash = "a71a025580d3e5b3", accounts = "AttestBuyerHistory", accounts_file = "src/instructions/attest_buyer_history.rs", accounts_hash = "fa386906e274fd33")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "attest_buyer_history", hash = "b6c5edd6f9d904af", spec_hash = "61373b632239d644", accounts = "AttestBuyerHistory", accounts_file = "src/instructions/attest_buyer_history.rs", accounts_hash = "fa386906e274fd33")]
 pub fn handler(ctx: Context<AttestBuyerHistory>) -> Result<()> {
     require!(
         ctx.accounts.rfp.buyer_visibility == BuyerVisibility::Private,
@@ -133,23 +133,23 @@ pub fn handler(ctx: Context<AttestBuyerHistory>) -> Result<()> {
     // the main rep. saturating_add guards against absurd-but-harmless
     // overflow during demo-time stress (in practice u32 counters are
     // far from saturation).
-    main.total_rfps = main.total_rfps.checked_add(eph.total_rfps).ok_or(TenderError::MathOverflow)?;
-    main.funded_rfps = main.funded_rfps.checked_add(eph.funded_rfps).ok_or(TenderError::MathOverflow)?;
-    main.completed_rfps = main.completed_rfps.checked_add(eph.completed_rfps).ok_or(TenderError::MathOverflow)?;
-    main.ghosted_rfps = main.ghosted_rfps.checked_add(eph.ghosted_rfps).ok_or(TenderError::MathOverflow)?;
+    main.total_rfps = main.total_rfps.saturating_add(eph.total_rfps);
+    main.funded_rfps = main.funded_rfps.saturating_add(eph.funded_rfps);
+    main.completed_rfps = main.completed_rfps.saturating_add(eph.completed_rfps);
+    main.ghosted_rfps = main.ghosted_rfps.saturating_add(eph.ghosted_rfps);
     main.disputed_milestones = main
         .disputed_milestones
-        .checked_add(eph.disputed_milestones).ok_or(TenderError::MathOverflow)?;
+        .saturating_add(eph.disputed_milestones);
     main.cancelled_milestones = main
         .cancelled_milestones
-        .checked_add(eph.cancelled_milestones).ok_or(TenderError::MathOverflow)?;
-    main.total_locked_usdc = main.total_locked_usdc.checked_add(eph.total_locked_usdc).ok_or(TenderError::MathOverflow)?;
+        .saturating_add(eph.cancelled_milestones);
+    main.total_locked_usdc = main.total_locked_usdc.saturating_add(eph.total_locked_usdc);
     main.total_released_usdc = main
         .total_released_usdc
-        .checked_add(eph.total_released_usdc).ok_or(TenderError::MathOverflow)?;
+        .saturating_add(eph.total_released_usdc);
     main.total_refunded_usdc = main
         .total_refunded_usdc
-        .checked_add(eph.total_refunded_usdc).ok_or(TenderError::MathOverflow)?;
+        .saturating_add(eph.total_refunded_usdc);
     main.last_updated = now;
 
     // Idempotency flag: prevents a second attest call on this RFP from

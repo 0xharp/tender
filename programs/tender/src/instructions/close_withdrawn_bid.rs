@@ -40,7 +40,7 @@ pub struct CloseWithdrawnBid<'info> {
     pub permission_program: UncheckedAccount<'info>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "close_withdrawn_bid", hash = "95297cc743507d93", spec_hash = "d007016b3c3b6ef5", accounts = "CloseWithdrawnBid", accounts_file = "src/instructions/close_withdrawn_bid.rs", accounts_hash = "a8c597541dc8e407")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "close_withdrawn_bid", hash = "04548e2838819f8a", spec_hash = "b8feaa73a9c610af", accounts = "CloseWithdrawnBid", accounts_file = "src/instructions/close_withdrawn_bid.rs", accounts_hash = "a8c597541dc8e407")]
 pub fn handler(ctx: Context<CloseWithdrawnBid>) -> Result<()> {
     require_keys_eq!(
         ctx.accounts.provider.key(),
@@ -56,7 +56,7 @@ pub fn handler(ctx: Context<CloseWithdrawnBid>) -> Result<()> {
         .invoke()?;
 
     let rfp = &mut ctx.accounts.rfp;
-    rfp.bid_count = rfp.bid_count.checked_sub(1).ok_or(TenderError::MathOverflow)?;
+    rfp.bid_count = rfp.bid_count.saturating_sub(1);
 
     let now = Clock::get()?.unix_timestamp;
     emit!(BidClosed {

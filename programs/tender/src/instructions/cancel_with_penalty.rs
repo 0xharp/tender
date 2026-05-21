@@ -83,7 +83,7 @@ pub struct CancelWithPenalty<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_with_penalty", hash = "177bbcc92aa889b8", spec_hash = "bdc4bff5b22c2869", accounts = "CancelWithPenalty", accounts_file = "src/instructions/cancel_with_penalty.rs", accounts_hash = "79c439776c614cf5")]
+#[qedgen_macros::qed(verified, spec = "../../tender.qedspec", handler = "cancel_with_penalty", hash = "bb663a064498f72f", spec_hash = "47aec509679ef8f7", accounts = "CancelWithPenalty", accounts_file = "src/instructions/cancel_with_penalty.rs", accounts_hash = "79c439776c614cf5")]
 pub fn handler(ctx: Context<CancelWithPenalty>, _milestone_index: u8) -> Result<()> {
     let rfp = &mut ctx.accounts.rfp;
     let ms = &mut ctx.accounts.milestone;
@@ -94,7 +94,7 @@ pub fn handler(ctx: Context<CancelWithPenalty>, _milestone_index: u8) -> Result<
 
     let amount = ms.amount;
     let penalty = (amount as u128 * ABANDON_PENALTY_BPS as u128 / BPS_DENOMINATOR as u128) as u64;
-    let refund = amount.checked_sub(penalty).ok_or(TenderError::MathOverflow)?;
+    let refund = amount.saturating_sub(penalty);
     let now = Clock::get()?.unix_timestamp;
     let rfp_key = rfp.key();
     let escrow_seeds: &[&[u8]] = &[ESCROW_SEED, rfp_key.as_ref(), &[ctx.accounts.escrow.bump]];
@@ -136,13 +136,13 @@ pub fn handler(ctx: Context<CancelWithPenalty>, _milestone_index: u8) -> Result<
     // Free the active-milestone slot.
     rfp.active_milestone_index = NO_ACTIVE_MILESTONE;
     let escrow = &mut ctx.accounts.escrow;
-    escrow.total_released = escrow.total_released.checked_add(penalty).ok_or(TenderError::MathOverflow)?;
-    escrow.total_refunded = escrow.total_refunded.checked_add(refund).ok_or(TenderError::MathOverflow)?;
+    escrow.total_released = escrow.total_released.saturating_add(penalty);
+    escrow.total_refunded = escrow.total_refunded.saturating_add(refund);
 
     let buyer_rep = &mut ctx.accounts.buyer_reputation;
-    buyer_rep.cancelled_milestones = buyer_rep.cancelled_milestones.checked_add(1).ok_or(TenderError::MathOverflow)?;
-    buyer_rep.total_released_usdc = buyer_rep.total_released_usdc.checked_add(penalty).ok_or(TenderError::MathOverflow)?;
-    buyer_rep.total_refunded_usdc = buyer_rep.total_refunded_usdc.checked_add(refund).ok_or(TenderError::MathOverflow)?;
+    buyer_rep.cancelled_milestones = buyer_rep.cancelled_milestones.saturating_add(1);
+    buyer_rep.total_released_usdc = buyer_rep.total_released_usdc.saturating_add(penalty);
+    buyer_rep.total_refunded_usdc = buyer_rep.total_refunded_usdc.saturating_add(refund);
     buyer_rep.last_updated = now;
     emit!(BuyerReputationUpdated { buyer: buyer_rep.buyer, field: 5, at: now });
 
@@ -152,12 +152,12 @@ pub fn handler(ctx: Context<CancelWithPenalty>, _milestone_index: u8) -> Result<
         provider_rep.provider = main_wallet;
         provider_rep.bump = ctx.bumps.provider_reputation;
     }
-    provider_rep.total_earned_usdc = provider_rep.total_earned_usdc.checked_add(penalty).ok_or(TenderError::MathOverflow)?;
+    provider_rep.total_earned_usdc = provider_rep.total_earned_usdc.saturating_add(penalty);
     provider_rep.last_updated = now;
     // No counter event - counter not bumped (penalty payout is a value
     // accounting change, not a "win" or "completion").
 
-    if escrow.total_released.checked_add(escrow.total_refunded).ok_or(TenderError::MathOverflow)? >= escrow.total_locked {
+    if escrow.total_released.saturating_add(escrow.total_refunded) >= escrow.total_locked {
         // The penalty payout is included in total_released, so this branch
         // almost always lands on Completed. The Cancelled fallback is purely
         // defensive (penalty == 0 + everything else cancel-with-notice).

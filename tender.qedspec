@@ -529,11 +529,6 @@ handler commit_bid_init (commit_hash : U64) (buyer_envelope_len : U32) (provider
   requires state.rfp_status == RFP_OPEN                 else InvalidRfpStatus
   requires state.now >= state.rfp_bid_open_at        else BidWindowNotOpen
   requires state.now < state.rfp_bid_close_at        else BidWindowClosed
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
   requires state.rfp_bid_count + 1 <= U32_MAX             else MathOverflow
 
   effect {
@@ -555,7 +550,7 @@ handler commit_bid_init (commit_hash : U64) (buyer_envelope_len : U32) (provider
     bid_submitted_at           := state.now
     bid_status                 := 0  // BID_INITIALIZING
     bid_winner_attested        := 0
-    rfp_bid_count              += 1
+    rfp_bid_count +=! 1
   }
 
   emits BidInitialized
@@ -726,7 +721,7 @@ handler close_withdrawn_bid : State.Active -> State.Active {
   requires state.bid_status == BID_WITHDRAWN               else InvalidBidStatus
 
   effect {
-    rfp_bid_count -= 1
+    rfp_bid_count -=! 1
     // Bid account is closed (rent refunded to provider). Spec model
     // clears the bid record by marking status terminal — we leave it
     // as Withdrawn since downstream handlers gate on its absence via
@@ -803,11 +798,6 @@ handler select_bid (winner_provider : U64) (contract_value : U64) (milestone_cou
   // The semantic invariant: rfp_winner_provider after this handler is
   // either bid_provider (public mode) or a cryptographically-bound main
   // wallet (private mode, verified at runtime).
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
   requires state.buyer_rep_total_rfps + 1 <= U32_MAX             else MathOverflow
   requires state.provider_rep_total_wins + 1 <= U32_MAX             else MathOverflow
 
@@ -824,12 +814,12 @@ handler select_bid (winner_provider : U64) (contract_value : U64) (milestone_cou
 
     // Buyer rep: lazy init + counters (saturating).
     buyer_rep_initialized      := 1
-    buyer_rep_total_rfps       += 1
+    buyer_rep_total_rfps +=! 1
     buyer_rep_last_updated     := state.now
 
     // Provider rep: lazy init + counters (saturating).
     provider_rep_initialized    := 1
-    provider_rep_total_wins     += 1
+    provider_rep_total_wins +=! 1
     provider_rep_last_updated   := state.now
   }
 
@@ -877,11 +867,6 @@ handler fund_project : State.Active -> State.Active {
   // Ed25519 fund-authorization must verify with rfp_buyer's pubkey + canonical msg.
   // Idempotency: status check above prevents double-funding (Anchor
   // `init` on the escrow PDA fails on the second call too).
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
   requires state.buyer_rep_funded_rfps + 1 <= U32_MAX             else MathOverflow
 
   effect {
@@ -895,7 +880,7 @@ handler fund_project : State.Active -> State.Active {
 
     rfp_status              := 5  // RFP_FUNDED
 
-    buyer_rep_funded_rfps   += 1
+    buyer_rep_funded_rfps +=! 1
     buyer_rep_last_updated  := state.now
   }
 
@@ -1030,27 +1015,17 @@ handler accept_milestone (milestone_index : U8) : State.Active -> State.Active {
   let total = state.milestone_amount
   let fee   = mul_div_floor(total, state.rfp_fee_bps, BPS_DENOMINATOR)
   let to_provider = total - fee
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.escrow_total_released + total <= U64_MAX             else MathOverflow
-  requires state.treasury_total_collected + fee <= U64_MAX             else MathOverflow
-  requires state.provider_rep_total_earned_usdc + to_provider <= U64_MAX             else MathOverflow
-  requires state.buyer_rep_total_released_usdc + total <= U64_MAX             else MathOverflow
-
   effect {
     milestone_status              := 4  // MS_RELEASED
     rfp_active_milestone_index    := 255  // NO_ACTIVE_MILESTONE
-    escrow_total_released         += total
-    treasury_total_collected      += fee
+    escrow_total_released +=! total
+    treasury_total_collected +=! fee
     provider_rep_provider          := state.rfp_winner_provider
     provider_rep_initialized       := 1
-    provider_rep_total_earned_usdc += to_provider
+    provider_rep_total_earned_usdc +=! to_provider
     provider_rep_last_updated      := state.now
     buyer_rep_initialized          := 1
-    buyer_rep_total_released_usdc  += total
+    buyer_rep_total_released_usdc +=! total
     buyer_rep_last_updated         := state.now
   }
 
@@ -1111,24 +1086,14 @@ handler auto_release_milestone (milestone_index : U8) : State.Active -> State.Ac
   let total = state.milestone_amount
   let fee   = mul_div_floor(total, state.rfp_fee_bps, BPS_DENOMINATOR)
   let to_provider = total - fee
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.escrow_total_released + total <= U64_MAX             else MathOverflow
-  requires state.treasury_total_collected + fee <= U64_MAX             else MathOverflow
-  requires state.provider_rep_total_earned_usdc + to_provider <= U64_MAX             else MathOverflow
-  requires state.buyer_rep_total_released_usdc + total <= U64_MAX             else MathOverflow
-
   effect {
     milestone_status              := 4  // MS_RELEASED
     rfp_active_milestone_index    := 255  // NO_ACTIVE_MILESTONE
-    escrow_total_released         += total
-    treasury_total_collected      += fee
-    provider_rep_total_earned_usdc += to_provider
+    escrow_total_released +=! total
+    treasury_total_collected +=! fee
+    provider_rep_total_earned_usdc +=! to_provider
     provider_rep_last_updated      := state.now
-    buyer_rep_total_released_usdc  += total
+    buyer_rep_total_released_usdc +=! total
     buyer_rep_last_updated         := state.now
   }
 
@@ -1172,14 +1137,10 @@ handler request_changes (milestone_index : U8) : State.Active -> State.Active {
   // state transitions stay first-order; the escalation behavior is
   // covered by the litesvm dispute-path tests + a dedicated Lean
   // theorem in Phase 4 ("request_changes_escalates_when_iter_exhausted").
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
   requires state.milestone_iteration_count + 1 <= U64_MAX             else MathOverflow
 
   effect {
-    milestone_iteration_count += 1
+    milestone_iteration_count +=! 1
     milestone_status          := 1  // MS_STARTED
     milestone_review_deadline := 0
   }
@@ -1209,11 +1170,6 @@ handler reject_milestone (milestone_index : U8) : State.Active -> State.Active {
   // stays below i64::MAX. rfp_create's program guard enforces this at write
   // time; reflected here in the spec model.
   requires state.rfp_dispute_cooloff_secs <= MAX_WINDOW_SECS
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
   requires state.buyer_rep_disputed_milestones + 1 <= U32_MAX             else MathOverflow
   requires state.provider_rep_disputed_milestones + 1 <= U32_MAX             else MathOverflow
   requires state.provider_rep_total_disputed_usdc + state.milestone_amount <= U64_MAX             else MathOverflow
@@ -1226,11 +1182,11 @@ handler reject_milestone (milestone_index : U8) : State.Active -> State.Active {
     milestone_provider_proposed_split_bps  := 65535  // SPLIT_NOT_PROPOSED
     rfp_status                             := 10  // RFP_DISPUTED
 
-    buyer_rep_disputed_milestones          += 1
+    buyer_rep_disputed_milestones +=! 1
     buyer_rep_last_updated                 := state.now
 
-    provider_rep_disputed_milestones       += 1
-    provider_rep_total_disputed_usdc       += state.milestone_amount
+    provider_rep_disputed_milestones +=! 1
+    provider_rep_total_disputed_usdc +=! state.milestone_amount
     provider_rep_last_updated              := state.now
   }
 
@@ -1276,18 +1232,10 @@ handler cancel_with_notice (milestone_index : U8) : State.Active -> State.Active
     else InsufficientEscrowBalance
 
   let amount = state.milestone_amount
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.escrow_total_refunded + amount <= U64_MAX             else MathOverflow
-  requires state.buyer_rep_total_refunded_usdc + amount <= U64_MAX             else MathOverflow
-
   effect {
     milestone_status              := 8  // MS_CANCELLED_BY_BUYER
-    escrow_total_refunded         += amount
-    buyer_rep_total_refunded_usdc += amount
+    escrow_total_refunded +=! amount
+    buyer_rep_total_refunded_usdc +=! amount
     buyer_rep_last_updated        := state.now
   }
 
@@ -1343,30 +1291,19 @@ handler cancel_with_penalty (milestone_index : U8) : State.Active -> State.Activ
   let amount  = state.milestone_amount
   let penalty = mul_div_floor(amount, ABANDON_PENALTY_BPS, BPS_DENOMINATOR)
   let refund  = amount - penalty
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.escrow_total_released + penalty <= U64_MAX             else MathOverflow
-  requires state.escrow_total_refunded + refund <= U64_MAX             else MathOverflow
   requires state.buyer_rep_cancelled_milestones + 1 <= U32_MAX             else MathOverflow
-  requires state.buyer_rep_total_released_usdc + penalty <= U64_MAX             else MathOverflow
-  requires state.buyer_rep_total_refunded_usdc + refund <= U64_MAX             else MathOverflow
-  requires state.provider_rep_total_earned_usdc + penalty <= U64_MAX             else MathOverflow
-
   effect {
     milestone_status                  := 8  // MS_CANCELLED_BY_BUYER
     rfp_active_milestone_index        := 255  // NO_ACTIVE_MILESTONE
-    escrow_total_released             += penalty
-    escrow_total_refunded             += refund
+    escrow_total_released +=! penalty
+    escrow_total_refunded +=! refund
 
-    buyer_rep_cancelled_milestones    += 1
-    buyer_rep_total_released_usdc     += penalty
-    buyer_rep_total_refunded_usdc     += refund
+    buyer_rep_cancelled_milestones +=! 1
+    buyer_rep_total_released_usdc +=! penalty
+    buyer_rep_total_refunded_usdc +=! refund
     buyer_rep_last_updated            := state.now
 
-    provider_rep_total_earned_usdc    += penalty
+    provider_rep_total_earned_usdc +=! penalty
     provider_rep_last_updated         := state.now
   }
 
@@ -1418,22 +1355,15 @@ handler cancel_late_milestone (milestone_index : U8) : State.Active -> State.Act
   requires state.rfp_fee_bps == PLATFORM_FEE_BPS
 
   let amount = state.milestone_amount
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.escrow_total_refunded + amount <= U64_MAX             else MathOverflow
-  requires state.buyer_rep_total_refunded_usdc + amount <= U64_MAX             else MathOverflow
   requires state.provider_rep_late_milestones + 1 <= U32_MAX             else MathOverflow
 
   effect {
     milestone_status              := 8  // MS_CANCELLED_BY_BUYER
     rfp_active_milestone_index    := 255  // NO_ACTIVE_MILESTONE
-    escrow_total_refunded         += amount
-    buyer_rep_total_refunded_usdc += amount
+    escrow_total_refunded +=! amount
+    buyer_rep_total_refunded_usdc +=! amount
     buyer_rep_last_updated        := state.now
-    provider_rep_late_milestones  += 1
+    provider_rep_late_milestones +=! 1
     provider_rep_last_updated     := state.now
   }
 
@@ -1464,16 +1394,11 @@ handler mark_buyer_ghosted : State.Active -> State.Active {
 
   requires state.rfp_status == RFP_AWARDED                  else InvalidRfpStatus
   requires state.now > state.rfp_funding_deadline        else FundingWindowOpen
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
   requires state.buyer_rep_ghosted_rfps + 1 <= U32_MAX             else MathOverflow
 
   effect {
     rfp_status                := 9  // RFP_GHOSTED
-    buyer_rep_ghosted_rfps    += 1
+    buyer_rep_ghosted_rfps +=! 1
     buyer_rep_last_updated    := state.now
   }
 
@@ -1616,28 +1541,16 @@ handler dispute_default_split (milestone_index : U8) : State.Active -> State.Act
   let to_buyer_refund    = amount - split_to_provider
   let fee                = mul_div_floor(split_to_provider, state.rfp_fee_bps, BPS_DENOMINATOR)
   let to_provider_net    = split_to_provider - fee
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
-  requires state.escrow_total_released + split_to_provider <= U64_MAX             else MathOverflow
-  requires state.escrow_total_refunded + to_buyer_refund <= U64_MAX             else MathOverflow
-  requires state.treasury_total_collected + fee <= U64_MAX             else MathOverflow
-  requires state.buyer_rep_total_released_usdc + split_to_provider <= U64_MAX             else MathOverflow
-  requires state.buyer_rep_total_refunded_usdc + to_buyer_refund <= U64_MAX             else MathOverflow
-  requires state.provider_rep_total_earned_usdc + to_provider_net <= U64_MAX             else MathOverflow
-
   effect {
     milestone_status                  := 7  // MS_DISPUTE_DEFAULT
     rfp_active_milestone_index        := 255  // NO_ACTIVE_MILESTONE
-    escrow_total_released             += split_to_provider
-    escrow_total_refunded             += to_buyer_refund
-    treasury_total_collected          += fee
-    buyer_rep_total_released_usdc     += split_to_provider
-    buyer_rep_total_refunded_usdc     += to_buyer_refund
+    escrow_total_released +=! split_to_provider
+    escrow_total_refunded +=! to_buyer_refund
+    treasury_total_collected +=! fee
+    buyer_rep_total_released_usdc +=! split_to_provider
+    buyer_rep_total_refunded_usdc +=! to_buyer_refund
     buyer_rep_last_updated            := state.now
-    provider_rep_total_earned_usdc    += to_provider_net
+    provider_rep_total_earned_usdc +=! to_provider_net
     provider_rep_last_updated         := state.now
   }
 
@@ -1689,11 +1602,6 @@ handler attest_buyer_history : State.Active -> State.Active {
   requires state.rfp_buyer_attested == 0              else AlreadyAttested
   // Ed25519 binding must verify with main_wallet over canonical msg
   // referencing rfp_buyer (the ephemeral).
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
   requires state.main_buyer_rep_total_rfps + state.buyer_rep_total_rfps <= U32_MAX             else MathOverflow
   requires state.main_buyer_rep_funded_rfps + state.buyer_rep_funded_rfps <= U32_MAX             else MathOverflow
   requires state.main_buyer_rep_completed_rfps + state.buyer_rep_completed_rfps <= U32_MAX             else MathOverflow
@@ -1706,15 +1614,15 @@ handler attest_buyer_history : State.Active -> State.Active {
 
   effect {
     main_buyer_rep_initialized           := 1
-    main_buyer_rep_total_rfps            += state.buyer_rep_total_rfps
-    main_buyer_rep_funded_rfps           += state.buyer_rep_funded_rfps
-    main_buyer_rep_completed_rfps        += state.buyer_rep_completed_rfps
-    main_buyer_rep_ghosted_rfps          += state.buyer_rep_ghosted_rfps
-    main_buyer_rep_disputed_milestones   += state.buyer_rep_disputed_milestones
-    main_buyer_rep_cancelled_milestones  += state.buyer_rep_cancelled_milestones
-    main_buyer_rep_total_locked_usdc     += state.buyer_rep_total_locked_usdc
-    main_buyer_rep_total_released_usdc   += state.buyer_rep_total_released_usdc
-    main_buyer_rep_total_refunded_usdc   += state.buyer_rep_total_refunded_usdc
+    main_buyer_rep_total_rfps +=! state.buyer_rep_total_rfps
+    main_buyer_rep_funded_rfps +=! state.buyer_rep_funded_rfps
+    main_buyer_rep_completed_rfps +=! state.buyer_rep_completed_rfps
+    main_buyer_rep_ghosted_rfps +=! state.buyer_rep_ghosted_rfps
+    main_buyer_rep_disputed_milestones +=! state.buyer_rep_disputed_milestones
+    main_buyer_rep_cancelled_milestones +=! state.buyer_rep_cancelled_milestones
+    main_buyer_rep_total_locked_usdc +=! state.buyer_rep_total_locked_usdc
+    main_buyer_rep_total_released_usdc +=! state.buyer_rep_total_released_usdc
+    main_buyer_rep_total_refunded_usdc +=! state.buyer_rep_total_refunded_usdc
     main_buyer_rep_last_updated          := state.now
 
     rfp_buyer_attested              := 1
@@ -1771,11 +1679,6 @@ handler attest_win : State.Active -> State.Active {
   // at the account-allocation layer with AccountAlreadyInUse).
   requires state.win_receipt_claimed == 0              else AlreadyAttested
   // Ed25519 bid-binding must verify with main_wallet over canonical msg.
-
-
-  // Overflow guards for checked-arithmetic effects below — mirror the
-  // program's `.checked_*().ok_or(MathOverflow)?` and make the proof
-  // obligation explicit so qedgen's effect analyzer can discharge it.
   requires state.main_provider_rep_total_wins + state.provider_rep_total_wins <= U32_MAX             else MathOverflow
   requires state.main_provider_rep_completed_projects + state.provider_rep_completed_projects <= U32_MAX             else MathOverflow
   requires state.main_provider_rep_disputed_milestones + state.provider_rep_disputed_milestones <= U32_MAX             else MathOverflow
@@ -1787,14 +1690,14 @@ handler attest_win : State.Active -> State.Active {
 
   effect {
     main_provider_rep_initialized            := 1
-    main_provider_rep_total_wins             += state.provider_rep_total_wins
-    main_provider_rep_completed_projects     += state.provider_rep_completed_projects
-    main_provider_rep_disputed_milestones    += state.provider_rep_disputed_milestones
-    main_provider_rep_late_milestones        += state.provider_rep_late_milestones
-    main_provider_rep_abandoned_projects     += state.provider_rep_abandoned_projects
-    main_provider_rep_total_won_usdc         += state.provider_rep_total_won_usdc
-    main_provider_rep_total_earned_usdc      += state.provider_rep_total_earned_usdc
-    main_provider_rep_total_disputed_usdc    += state.provider_rep_total_disputed_usdc
+    main_provider_rep_total_wins +=! state.provider_rep_total_wins
+    main_provider_rep_completed_projects +=! state.provider_rep_completed_projects
+    main_provider_rep_disputed_milestones +=! state.provider_rep_disputed_milestones
+    main_provider_rep_late_milestones +=! state.provider_rep_late_milestones
+    main_provider_rep_abandoned_projects +=! state.provider_rep_abandoned_projects
+    main_provider_rep_total_won_usdc +=! state.provider_rep_total_won_usdc
+    main_provider_rep_total_earned_usdc +=! state.provider_rep_total_earned_usdc
+    main_provider_rep_total_disputed_usdc +=! state.provider_rep_total_disputed_usdc
     main_provider_rep_last_updated           := state.now
 
     // win_receipt_bid + win_receipt_main_wallet are Pubkey fields the
